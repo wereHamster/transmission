@@ -1245,7 +1245,7 @@ Transmission.prototype =
 			if ('' != $('#torrent_upload_url').val()) {
 				tr.remote.addTorrentByUrl($('#torrent_upload_url').val(), { paused: !this[Prefs._Autostart] });
 			} else {
-				args.url = '/transmission/upload?paused=' + (this[Prefs._AutoStart] ? 'false' : 'true');
+				args.url = './upload?paused=' + (this[Prefs._AutoStart] ? 'false' : 'true');
 				args.type = 'POST';
 				args.dataType = 'xml';
 				args.iframe = true;

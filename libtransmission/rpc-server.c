@@ -54,6 +54,7 @@ struct tr_rpc_server
     tr_bool            isWhitelistEnabled;
     tr_port            port;
     struct in_addr     bindAddress;
+    char *             url;
     struct evhttp *    httpd;
     tr_session *       session;
     char *             username;
@@ -341,8 +342,6 @@ handle_clutch( struct evhttp_request * req,
 {
     const char * clutchDir = tr_getClutchDir( server->session );
 
-    assert( !strncmp( req->uri, "/transmission/web/", 18 ) );
-
     if( !clutchDir || !*clutchDir )
     {
         send_simple_response( req, HTTP_NOTFOUND,
@@ -360,7 +359,7 @@ handle_clutch( struct evhttp_request * req,
         char * pch;
         char * subpath;
 
-        subpath = tr_strdup( req->uri + 18 );
+        subpath = tr_strdup( req->uri + strlen( server->url ) );
         if(( pch = strchr( subpath, '?' )))
             *pch = '\0';
 
@@ -493,33 +492,26 @@ handle_request( struct evhttp_request * req,
                                "Basic realm=\"" MY_REALM "\"" );
             send_simple_response( req, 401, "Unauthorized User" );
         }
-        else if( !strcmp( req->uri, "/transmission/web" )
-               || !strcmp( req->uri, "/transmission/clutch" )
-               || !strcmp( req->uri, "/" ) )
+        else if( strncmp( req->uri, server->url, strlen( server->url ) ) )
         {
             const char * protocol = "http";
             const char * host = evhttp_find_header( req->input_headers, "Host" );
-            const char * uri = "transmission/web/";
-            char * location = tr_strdup_printf( "%s://%s/%s", protocol, host, uri );
+            char * location = tr_strdup_printf( "%s://%s%s", protocol, host, server->url );
             evhttp_add_header( req->output_headers, "Location", location );
             send_simple_response( req, HTTP_MOVEPERM, NULL );
             tr_free( location );
         }
-        else if( !strncmp( req->uri, "/transmission/web/", 18 ) )
-        {
-            handle_clutch( req, server );
-        }
-        else if( !strncmp( req->uri, "/transmission/rpc", 17 ) )
+        else if( !strncmp( req->uri + strlen( server->url ), "rpc", 3 ) )
         {
             handle_rpc( req, server );
         }
-        else if( !strncmp( req->uri, "/transmission/upload", 20 ) )
+        else if( !strncmp( req->uri + strlen( server->url ), "upload", 6 ) )
         {
             handle_upload( req, server );
         }
         else
         {
-            send_simple_response( req, HTTP_NOTFOUND, req->uri );
+            handle_clutch( req, server );
         }
 
         tr_free( user );
@@ -738,6 +730,7 @@ closeServer( void * vserver )
 #ifdef HAVE_ZLIB
     deflateEnd( &s->stream );
 #endif
+    tr_free( s->url );
     tr_free( s->whitelistStr );
     tr_free( s->username );
     tr_free( s->password );
@@ -772,6 +765,10 @@ tr_rpcInit( tr_session  * session,
     found = tr_bencDictFindInt( settings, TR_PREFS_KEY_RPC_PORT, &i );
     assert( found );
     s->port = i;
+
+    found = tr_bencDictFindStr( settings, TR_PREFS_KEY_RPC_URL, &str );
+    assert( found );
+    s->url = tr_strdup( str );
 
     found = tr_bencDictFindBool( settings, TR_PREFS_KEY_RPC_WHITELIST_ENABLED, &boolVal );
     assert( found );
@@ -817,7 +814,7 @@ tr_rpcInit( tr_session  * session,
 
     if( s->isEnabled )
     {
-        tr_ninf( MY_NAME, _( "Serving RPC and Web requests on port %d" ), (int) s->port );
+        tr_ninf( MY_NAME, _( "Serving RPC and Web requests on http://127.0.0.1:%d%s" ), (int) s->port, s->url );
         tr_runInEventThread( session, startServer, s );
 
         if( s->isWhitelistEnabled )
