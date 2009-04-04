@@ -166,6 +166,7 @@ static TR_INLINE tr_bool tr_isEncryptionMode( tr_encryption_mode m )
 #define TR_PREFS_KEY_ALT_SPEED_TIME_BEGIN       "alt-speed-time-begin"
 #define TR_PREFS_KEY_ALT_SPEED_TIME_ENABLED     "alt-speed-time-enabled"
 #define TR_PREFS_KEY_ALT_SPEED_TIME_END         "alt-speed-time-end"
+#define TR_PREFS_KEY_ALT_SPEED_TIME_DAY         "alt-speed-time-day"
 #define TR_PREFS_KEY_BLOCKLIST_ENABLED          "blocklist-enabled"
 #define TR_PREFS_KEY_DOWNLOAD_DIR               "download-dir"
 #define TR_PREFS_KEY_DSPEED                     "download-limit"
@@ -601,6 +602,24 @@ int      tr_sessionGetAltSpeedBegin   ( const tr_session * );
 
 void     tr_sessionSetAltSpeedEnd     ( tr_session *, int minsSinceMidnight );
 int      tr_sessionGetAltSpeedEnd     ( const tr_session * );
+
+typedef enum
+{
+    TR_SCHED_SUN      = (1<<0),
+    TR_SCHED_MON      = (1<<1),
+    TR_SCHED_TUES     = (1<<2),
+    TR_SCHED_WED      = (1<<3),
+    TR_SCHED_THURS    = (1<<4),
+    TR_SCHED_FRI      = (1<<5),
+    TR_SCHED_SAT      = (1<<6),
+    TR_SCHED_WEEKDAY  = (TR_SCHED_MON|TR_SCHED_TUES|TR_SCHED_WED|TR_SCHED_THURS|TR_SCHED_FRI),
+    TR_SCHED_WEEKEND  = (TR_SCHED_SUN|TR_SCHED_SAT),
+    TR_SCHED_ALL      = (TR_SCHED_WEEKDAY|TR_SCHED_WEEKEND)
+}
+tr_sched_day;
+
+void     tr_sessionSetAltSpeedDay     ( tr_session *, tr_sched_day day );
+tr_sched_day tr_sessionGetAltSpeedDay ( const tr_session * );
 
 typedef void ( tr_altSpeedFunc )      ( tr_session *, tr_bool active, tr_bool userDriven, void * );
 void     tr_sessionClearAltSpeedFunc  ( tr_session * );

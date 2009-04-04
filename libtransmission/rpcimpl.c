@@ -14,6 +14,7 @@
 #include <ctype.h> /* isdigit */
 #include <stdlib.h> /* strtol */
 #include <string.h> /* strcmp */
+#include <unistd.h> /* unlink */
 
 #include <event.h> /* evbuffer */
 
@@ -27,6 +28,8 @@
 #include "completion.h"
 #include "utils.h"
 #include "web.h"
+
+#define RECENTLY_ACTIVE_SECONDS 60
 
 #define TR_N_ELEMENTS( ary ) ( sizeof( ary ) / sizeof( *ary ) )
 
@@ -147,7 +150,7 @@ getTorrents( tr_session * session,
         {
             tr_torrent * tor = NULL;
             const time_t now = time( NULL );
-            const time_t window = 60;
+            const time_t window = RECENTLY_ACTIVE_SECONDS;
             const int n = tr_sessionCountTorrents( session );
             torrents = tr_new0( tr_torrent *, n );
             while( ( tor = tr_torrentNext( session, tor ) ) )
@@ -589,8 +592,24 @@ torrentGet( tr_session               * session,
     tr_benc *     list = tr_bencDictAddList( args_out, "torrents", torrentCount );
     tr_benc *     fields;
     const char *  msg = NULL;
+    const char *  strVal;
 
     assert( idle_data == NULL );
+
+    if( tr_bencDictFindStr( args_in, "ids", &strVal ) && !strcmp( strVal, "recently-active" ) ) {
+        int n = 0;
+        tr_benc * d;
+        const time_t now = time( NULL );
+        const int interval = RECENTLY_ACTIVE_SECONDS;
+        tr_benc * removed_out = tr_bencDictAddList( args_out, "removed", 0 );
+        while(( d = tr_bencListChild( &session->removedTorrents, n++ ))) {
+            int64_t intVal;
+            if( tr_bencDictFindInt( d, "date", &intVal ) && ( intVal >= now - interval ) ) {
+                tr_bencDictFindInt( d, "id", &intVal );
+                tr_bencListAddInt( removed_out, intVal );
+            }
+        }
+    }
 
     if( !tr_bencDictFindList( args_in, "fields", &fields ) )
         msg = "no fields specified";
@@ -736,6 +755,64 @@ torrentSet( tr_session               * session,
 
     tr_free( torrents );
     return errmsg;
+}
+
+/***
+****
+***/
+
+static void
+gotNewBlocklist( tr_session       * session,
+                 long               response_code,
+                 const void       * response,
+                 size_t             response_byte_count,
+                 void             * user_data )
+{
+    char result[1024];
+    struct tr_rpc_idle_data * data = user_data;
+
+    if( response_code != 200 )
+    {
+        tr_snprintf( result, sizeof( result ), "http error %ld: %s",
+                     response_code, tr_webGetResponseStr( response_code ) );
+    }
+    else /* success */
+    {
+        int ruleCount;
+        char * filename = tr_buildPath( tr_sessionGetConfigDir( session ), "blocklist.tmp", NULL );
+        FILE * fp;
+
+        /* download a new blocklist */
+        fp = fopen( filename, "w+" );
+        fwrite( response, 1, response_byte_count, fp );
+        fclose( fp );
+
+        /* feed it to the session */
+        ruleCount = tr_blocklistSetContent( session, filename );
+
+        /* give the client a response */
+        tr_bencDictAddInt( data->args_out, "blocklist-size", ruleCount );
+        tr_snprintf( result, sizeof( result ), "success" );
+
+        /* cleanup */
+        unlink( filename );
+        tr_free( filename );
+    }
+
+    tr_idle_function_done( data, result );
+}
+
+static const char*
+blocklistUpdate( tr_session               * session,
+                 tr_benc                  * args_in UNUSED,
+                 tr_benc                  * args_out UNUSED,
+                 struct tr_rpc_idle_data  * idle_data )
+{
+    /* FIXME: use this url after the website's updated */
+    /* const char * url = "http://update.transmissionbt.com/level1"; */
+    const char * url = "http://download.m0k.org/transmission/files/level1";
+    tr_webRun( session, url, NULL, gotNewBlocklist, idle_data );
+    return NULL;
 }
 
 /***
@@ -958,6 +1035,8 @@ sessionSet( tr_session               * session,
         tr_sessionSetAltSpeedBegin( session, i );
     if( tr_bencDictFindInt( args_in, TR_PREFS_KEY_ALT_SPEED_TIME_END, &i ) )
         tr_sessionSetAltSpeedEnd( session, i );
+    if( tr_bencDictFindInt( args_in, TR_PREFS_KEY_ALT_SPEED_TIME_DAY, &i ) )
+        tr_sessionSetAltSpeedDay( session, i );
     if( tr_bencDictFindBool( args_in, TR_PREFS_KEY_ALT_SPEED_TIME_ENABLED, &boolVal ) )
         tr_sessionUseAltSpeedTime( session, boolVal );
     if( tr_bencDictFindBool( args_in, TR_PREFS_KEY_BLOCKLIST_ENABLED, &boolVal ) )
@@ -1068,6 +1147,7 @@ sessionGet( tr_session               * s,
     tr_bencDictAddBool( d, TR_PREFS_KEY_ALT_SPEED_ENABLED, tr_sessionUsesAltSpeed(s) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_ALT_SPEED_TIME_BEGIN, tr_sessionGetAltSpeedBegin(s) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_ALT_SPEED_TIME_END,tr_sessionGetAltSpeedEnd(s) );
+    tr_bencDictAddInt ( d, TR_PREFS_KEY_ALT_SPEED_TIME_DAY,tr_sessionGetAltSpeedDay(s) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_ALT_SPEED_TIME_ENABLED, tr_sessionUsesAltSpeedTime(s) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_BLOCKLIST_ENABLED, tr_blocklistIsEnabled( s ) );
     tr_bencDictAddInt ( d, "blocklist-size", tr_blocklistGetRuleCount( s ) );
@@ -1113,6 +1193,7 @@ static struct method
 }
 methods[] =
 {
+    { "blocklist-update",   FALSE, blocklistUpdate     },
     { "session-get",        TRUE,  sessionGet          },
     { "session-set",        TRUE,  sessionSet          },
     { "session-stats",      TRUE,  sessionStats        },

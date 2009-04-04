@@ -131,6 +131,9 @@
 
    (1) A "torrents" array of objects, each of which contains
        the key/value pairs matching the request's "fields" argument.
+   (2) If the request's "ids" field was "recently-active",
+       a "removed" array of torrent-id numbers of recently-removed
+       torrents.
 
    key                             | type                        | source 
    --------------------------------+-----------------------------+---------
@@ -360,6 +363,7 @@
    "alt-speed-time-begin"     | number     when to turn on alt speeds (units: minutes after midnight)
    "alt-speed-time-enabled"   | 'boolean'  true means the scheduled on/off times are used
    "alt-speed-time-end"       | number     when to turn off alt speeds (units: same)
+   "alt-speed-time-day"       | number     what day(s) to turn on alt speeds (look at tr_sched_day)
    "alt-speed-up"             | number     max global upload speed (in K/s)
    "blocklist-enabled"        | 'boolean'  true means enabled
    "blocklist-size"           | number     number of rules in the blocklist
@@ -431,6 +435,12 @@
                               | filesAdded       | number     | tr_session_stats
                               | sessionCount     | number     | tr_session_stats
                               | secondsActive    | number     | tr_session_stats
+
+4.3.  Blocklist
+
+   Method name: "blocklist-update"
+   Request arguments: none
+   Response arguments: "blocklist-size"
    
 
 5.0.  Protocol Versions
@@ -483,6 +493,7 @@
          |         | yes       | torrent-get    | new ids option "recently-active"
          |         | yes       | torrent-get    | new ids option "percentDone"
          |         | yes       |                | new method "torrent-reannounce"
+         |         | yes       |                | new method "blocklist-update"
          |         |        NO | torrent-get    | removed arg "downloadLimitMode"
          |         |        NO | torrent-get    | removed arg "uploadLimitMode"
          |         |        NO | session-get    | renamed "pex-allowed" to "pex-enabled"
