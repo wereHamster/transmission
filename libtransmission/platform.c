@@ -18,7 +18,7 @@
   #include <CoreFoundation/CoreFoundation.h>
  #endif
 
- #define _XOPEN_SOURCE 500  /* needed for recursive locks. */
+ #define _XOPEN_SOURCE 600  /* needed for recursive locks. */
  #ifndef __USE_UNIX98
   #define __USE_UNIX98 /* some older Linuxes need it spelt out for them */
  #endif
@@ -446,12 +446,53 @@ tr_getDefaultConfigDir( const char * appname )
 const char*
 tr_getDefaultDownloadDir( void )
 {
-    static char * s = NULL;
+    static char * user_dir = NULL;
 
-    if( s == NULL )
-        s = tr_buildPath( getHomeDir( ), "Downloads", NULL );
+    if( user_dir == NULL )
+    {
+        const char * config_home;
+        char * config_file;
+        char * content;
+        size_t content_len;
 
-    return s;
+        /* figure out where to look for user-dirs.dirs */
+        config_home = getenv( "XDG_CONFIG_HOME" );
+        if( config_home && *config_home )
+            config_file = tr_buildPath( config_home, "user-dirs.dirs", NULL );
+        else
+            config_file = tr_buildPath( getHomeDir( ), ".config", "user-dirs.dirs", NULL );
+
+        /* read in user-dirs.dirs and look for the download dir entry */
+        content = (char *) tr_loadFile( config_file, &content_len );
+        if( content && content_len>0 )
+        {
+            const char * key = "XDG_DOWNLOAD_DIR=\"";
+            char * line = strstr( content, key );
+            if( line != NULL )
+            {
+                char * value = line + strlen( key );
+                char * end = strchr( value, '"' );
+
+                if( end )
+                {
+                    *end = '\0';
+
+                    if( !memcmp( value, "$HOME/", 6 ) )
+                        user_dir = tr_buildPath( getHomeDir( ), value+6, NULL );
+                    else
+                        user_dir = tr_strdup( value );
+                }
+            }
+        }
+
+        if( user_dir == NULL )
+            user_dir = tr_buildPath( getHomeDir( ), "Downloads", NULL );
+
+        tr_free( content );
+        tr_free( config_file );
+    }
+
+    return user_dir;
 }
 
 /***

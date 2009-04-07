@@ -13,16 +13,22 @@
 #ifndef TR_BENCODE_H
 #define TR_BENCODE_H 1
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <inttypes.h> /* for int64_t */
 
 struct evbuffer;
 
 enum
 {
-    TYPE_INT  = 1,
-    TYPE_STR  = 2,
-    TYPE_LIST = 4,
-    TYPE_DICT = 8
+    TR_TYPE_INT  = 1,
+    TR_TYPE_STR  = 2,
+    TR_TYPE_LIST = 4,
+    TR_TYPE_DICT = 8,
+    TR_TYPE_BOOL = 16,
+    TR_TYPE_REAL = 32
 };
 
 typedef struct tr_benc
@@ -30,13 +36,19 @@ typedef struct tr_benc
     char    type;
     union
     {
-        int64_t i;
-        struct
+        uint8_t b; /* bool type */
+
+        double d;  /* double type */
+
+        int64_t i; /* int type */
+
+        struct /* string type */
         {
             size_t i;
             char * s;
         } s;
-        struct
+
+        struct /* list & dict types */
         {
             size_t alloc;
             size_t count;
@@ -44,10 +56,6 @@ typedef struct tr_benc
         } l;
     } val;
 } tr_benc;
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /***
 ****
@@ -95,6 +103,10 @@ void      tr_bencInitInt( tr_benc *, int64_t num );
 int       tr_bencInitDict( tr_benc *, size_t reserveCount );
 
 int       tr_bencInitList( tr_benc *, size_t reserveCount );
+
+void      tr_bencInitBool( tr_benc *, int value );
+
+void      tr_bencInitReal( tr_benc *, double value );
 
 /***
 ****
@@ -168,10 +180,12 @@ tr_bool   tr_bencGetBool( const tr_benc * val, tr_bool * setme );
 tr_bool   tr_bencGetReal( const tr_benc * val, double * setme );
 
 static TR_INLINE tr_bool tr_bencIsType  ( const tr_benc * b, int type ) { return ( b != NULL ) && ( b->type == type ); }
-static TR_INLINE tr_bool tr_bencIsInt   ( const tr_benc * b ) { return tr_bencIsType( b, TYPE_INT ); }
-static TR_INLINE tr_bool tr_bencIsDict  ( const tr_benc * b ) { return tr_bencIsType( b, TYPE_DICT ); }
-static TR_INLINE tr_bool tr_bencIsList  ( const tr_benc * b ) { return tr_bencIsType( b, TYPE_LIST ); }
-static TR_INLINE tr_bool tr_bencIsString( const tr_benc * b ) { return tr_bencIsType( b, TYPE_STR ); }
+static TR_INLINE tr_bool tr_bencIsInt   ( const tr_benc * b ) { return tr_bencIsType( b, TR_TYPE_INT ); }
+static TR_INLINE tr_bool tr_bencIsDict  ( const tr_benc * b ) { return tr_bencIsType( b, TR_TYPE_DICT ); }
+static TR_INLINE tr_bool tr_bencIsList  ( const tr_benc * b ) { return tr_bencIsType( b, TR_TYPE_LIST ); }
+static TR_INLINE tr_bool tr_bencIsString( const tr_benc * b ) { return tr_bencIsType( b, TR_TYPE_STR ); }
+static TR_INLINE tr_bool tr_bencIsBool  ( const tr_benc * b ) { return tr_bencIsType( b, TR_TYPE_BOOL ); }
+static TR_INLINE tr_bool tr_bencIsReal  ( const tr_benc * b ) { return tr_bencIsType( b, TR_TYPE_REAL ); }
 
 /**
 ***  Treat these as private -- they're only made public here

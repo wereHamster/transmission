@@ -529,6 +529,7 @@ startServer( void * vserver )
         server->httpd = evhttp_new( tr_eventGetBase( server->session ) );
         evhttp_bind_socket( server->httpd, "0.0.0.0", server->port );
         evhttp_set_gencb( server->httpd, handle_request, server );
+
     }
 }
 

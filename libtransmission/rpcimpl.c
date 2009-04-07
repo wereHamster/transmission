@@ -742,10 +742,6 @@ torrentSet( tr_session               * session,
             tr_torrentSetSpeedLimit( tor, TR_UP, tmp );
         if( tr_bencDictFindBool( args_in, "uploadLimited", &boolVal ) )
             tr_torrentUseSpeedLimit( tor, TR_UP, boolVal );
-        if( tr_bencDictFindReal( args_in, "ratio-limit", &d ) )
-            tr_torrentSetRatioLimit( tor, d );
-        if( tr_bencDictFindInt( args_in, "ratio-limit-mode", &tmp ) )
-            tr_torrentSetRatioMode( tor, tmp );
         if( tr_bencDictFindReal( args_in, "seedRatioLimit", &d ) )
             tr_torrentSetRatioLimit( tor, d );
         if( tr_bencDictFindInt( args_in, "seedRatioMode", &tmp ) )
@@ -755,6 +751,48 @@ torrentSet( tr_session               * session,
 
     tr_free( torrents );
     return errmsg;
+}
+
+/***
+****
+***/
+
+static void
+portTested( tr_session       * session UNUSED,
+            long               response_code,
+            const void       * response,
+            size_t             response_byte_count,
+            void             * user_data )
+{
+    char result[1024];
+    struct tr_rpc_idle_data * data = user_data;
+
+    if( response_code != 200 )
+    {
+        tr_snprintf( result, sizeof( result ), "http error %ld: %s",
+                     response_code, tr_webGetResponseStr( response_code ) );
+    }
+    else /* success */
+    {
+        const tr_bool isOpen = response_byte_count && *(char*)response == '1';
+        tr_bencDictAddBool( data->args_out, "port-is-open", isOpen );
+        tr_snprintf( result, sizeof( result ), "success" );
+    }
+
+    tr_idle_function_done( data, result );
+}
+
+static const char*
+portTest( tr_session               * session,
+          tr_benc                  * args_in UNUSED,
+          tr_benc                  * args_out UNUSED,
+          struct tr_rpc_idle_data  * idle_data )
+{
+    const int port = tr_sessionGetPeerPort( session );
+    char * url = tr_strdup_printf( "http://portcheck.transmissionbt.com/%d", port );
+    tr_webRun( session, url, NULL, portTested, idle_data );
+    tr_free( url );
+    return NULL;
 }
 
 /***
@@ -808,9 +846,7 @@ blocklistUpdate( tr_session               * session,
                  tr_benc                  * args_out UNUSED,
                  struct tr_rpc_idle_data  * idle_data )
 {
-    /* FIXME: use this url after the website's updated */
-    /* const char * url = "http://update.transmissionbt.com/level1"; */
-    const char * url = "http://download.m0k.org/transmission/files/level1";
+    const char * url = "http://update.transmissionbt.com/level1";
     tr_webRun( session, url, NULL, gotNewBlocklist, idle_data );
     return NULL;
 }
@@ -1067,10 +1103,6 @@ sessionSet( tr_session               * session,
         tr_sessionSetSpeedLimit( session, TR_UP, i );
     if( tr_bencDictFindBool( args_in, "speed-limit-up-enabled", &boolVal ) )
         tr_sessionLimitSpeed( session, TR_UP, boolVal );
-    if( tr_bencDictFindReal( args_in, "ratio-limit", &d ) )
-        tr_sessionSetRatioLimit( session, d );
-    if( tr_bencDictFindBool( args_in, "ratio-limit-enabled", &boolVal ) )
-        tr_sessionSetRatioLimited( session, boolVal );
     if( tr_bencDictFindStr( args_in, "encryption", &str ) ) {
         if( !strcmp( str, "required" ) )
             tr_sessionSetEncryption( session, TR_ENCRYPTION_REQUIRED );
@@ -1166,8 +1198,6 @@ sessionGet( tr_session               * s,
     tr_bencDictAddBool( d, "speed-limit-up-enabled", tr_sessionIsSpeedLimited( s, TR_UP ) );
     tr_bencDictAddInt ( d, "speed-limit-down", tr_sessionGetSpeedLimit( s, TR_DOWN ) );
     tr_bencDictAddBool( d, "speed-limit-down-enabled", tr_sessionIsSpeedLimited( s, TR_DOWN ) );
-    tr_bencDictAddReal( d, "ratio-limit", tr_sessionGetRatioLimit( s ) );
-    tr_bencDictAddBool( d, "ratio-limit-enabled", tr_sessionIsRatioLimited( s ) );
     tr_bencDictAddStr ( d, "version", LONG_VERSION_STRING );
     switch( tr_sessionGetEncryption( s ) ) {
         case TR_CLEAR_PREFERRED: str = "tolerated"; break;
@@ -1193,6 +1223,7 @@ static struct method
 }
 methods[] =
 {
+    { "port-test",          FALSE, portTest            },
     { "blocklist-update",   FALSE, blocklistUpdate     },
     { "session-get",        TRUE,  sessionGet          },
     { "session-set",        TRUE,  sessionSet          },

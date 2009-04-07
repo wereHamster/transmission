@@ -42,7 +42,6 @@
 
 #include "actions.h"
 #include "add-dialog.h"
-#include "blocklist.h"
 #include "conf.h"
 #include "details.h"
 #include "dialogs.h"
@@ -437,6 +436,7 @@ main( int     argc,
         /* initialize the libtransmission session */
         session = tr_sessionInit( "gtk", configDir, TRUE, pref_get_all( ) );
         pref_flag_set( TR_PREFS_KEY_ALT_SPEED_ENABLED, tr_sessionUsesAltSpeed( session ) );
+        pref_int_set( TR_PREFS_KEY_PEER_PORT, tr_sessionGetPeerPort( session ) );
         cbdata->core = tr_core_new( session );
 
         /* create main window now to be a parent to any error dialogs */
@@ -445,7 +445,11 @@ main( int     argc,
 
         appsetup( win, argfiles, cbdata, startpaused, startminimized );
         tr_sessionSetRPCCallback( session, onRPCChanged, cbdata );
-        gtr_blocklist_maybe_autoupdate( cbdata->core );
+
+        /* on startup, check & see if it's time to update the blocklist */
+        if( pref_flag_get( PREF_KEY_BLOCKLIST_UPDATES_ENABLED )
+            && ( time( NULL ) - pref_int_get( "blocklist-date" ) > ( 60 * 60 * 24 * 7 ) ) )
+                tr_core_blocklist_update( cbdata->core );
 
         gtk_main( );
     }
@@ -939,10 +943,6 @@ prefschanged( TrCore * core UNUSED,
     {
         tr_setMessageLevel( pref_int_get( key ) );
     }
-    else if( !strcmp( key, TR_PREFS_KEY_PEER_PORT_RANDOM_ON_START ) )
-    {
-        /* FIXME */
-    }
     else if( !strcmp( key, TR_PREFS_KEY_PEER_PORT ) )
     {
         tr_sessionSetPeerPort( tr, pref_int_get( key ) );
@@ -1072,6 +1072,14 @@ prefschanged( TrCore * core UNUSED,
     else if( !strcmp( key, TR_PREFS_KEY_ALT_SPEED_TIME_ENABLED ) )
     {
         tr_sessionUseAltSpeedTime( tr, pref_flag_get( key ) );
+    }
+    else if( !strcmp( key, TR_PREFS_KEY_ALT_SPEED_TIME_DAY ) )
+    {
+        tr_sessionSetAltSpeedDay( tr, pref_int_get( key ) );
+    }
+    else if( !strcmp( key, TR_PREFS_KEY_PEER_PORT_RANDOM_ON_START ) )
+    {
+        tr_sessionSetPeerPortRandomOnStart( tr, pref_flag_get( key ) );
     }
 }
 

@@ -36,17 +36,6 @@
 #define DOWNLOAD_FOLDER     0
 #define DOWNLOAD_TORRENT    2
 
-#define SCHED_ALL_TAG       0
-#define SCHED_WEEKDAY_TAG   1
-#define SCHED_WEEKEND_TAG   2
-#define SCHED_MON_TAG       3
-#define SCHED_TUES_TAG      4
-#define SCHED_WED_TAG       5
-#define SCHED_THURS_TAG     6
-#define SCHED_FRI_TAG       7
-#define SCHED_SAT_TAG       8
-#define SCHED_SUN_TAG       9
-
 #define PROXY_HTTP      0
 #define PROXY_SOCKS4    1
 #define PROXY_SOCKS5    2
@@ -110,9 +99,6 @@ tr_session * fHandle;
             
             [fDefaults removeObjectForKey: @"DownloadChoice"];
         }
-        
-        //set auto speed limit day
-        [self updateAutoSpeedLimitDay];
         
         //save a new random port
         if ([fDefaults boolForKey: @"RandomPort"])
@@ -200,42 +186,6 @@ tr_session * fHandle;
     //set speed limit
     [fSpeedLimitUploadField setIntValue: [fDefaults integerForKey: @"SpeedLimitUploadLimit"]];
     [fSpeedLimitDownloadField setIntValue: [fDefaults integerForKey: @"SpeedLimitDownloadLimit"]];
-    
-    int schedDay;
-    switch (tr_sessionGetAltSpeedDay(fHandle))
-    {
-        case TR_SCHED_ALL:
-            schedDay = SCHED_ALL_TAG;
-            break;
-        case TR_SCHED_WEEKDAY:
-            schedDay = SCHED_WEEKDAY_TAG;
-            break;
-        case TR_SCHED_WEEKEND:
-            schedDay = SCHED_WEEKEND_TAG;
-            break;
-        case TR_SCHED_MON:
-            schedDay = SCHED_MON_TAG;
-            break;
-        case TR_SCHED_TUES:
-            schedDay = SCHED_TUES_TAG;
-            break;
-        case TR_SCHED_WED:
-            schedDay = SCHED_WED_TAG;
-            break;
-        case TR_SCHED_THURS:
-            schedDay = SCHED_THURS_TAG;
-            break;
-        case TR_SCHED_FRI:
-            schedDay = SCHED_FRI_TAG;
-            break;
-        case TR_SCHED_SAT:
-            schedDay = SCHED_SAT_TAG;
-            break;
-        case TR_SCHED_SUN:
-            schedDay = SCHED_SUN_TAG;
-            break;
-    }
-    [fAutoSpeedDayTypePopUp selectItemWithTag: schedDay];
     
     //set port
     [fPortField setIntValue: [fDefaults integerForKey: @"BindPort"]];
@@ -387,7 +337,7 @@ tr_session * fHandle;
 
 - (void) setPort: (id) sender
 {
-    int port = [sender intValue];
+    const int port = [sender intValue];
     [fDefaults setInteger: port forKey: @"BindPort"];
     tr_sessionSetPeerPort(fHandle, port);
     
@@ -397,7 +347,7 @@ tr_session * fHandle;
 
 - (void) randomPort: (id) sender
 {
-    tr_port port = tr_sessionSetPeerPortRandom(fHandle);
+    const tr_port port = tr_sessionSetPeerPortRandom(fHandle);
     
     [fPortField setIntValue: port];
     [self setPort: fPortField];
@@ -542,7 +492,7 @@ tr_session * fHandle;
 
 - (void) updateBlocklistFields
 {
-    BOOL exists = tr_blocklistExists(fHandle);
+    const BOOL exists = tr_blocklistExists(fHandle);
     
     if (exists)
     {
@@ -661,79 +611,7 @@ tr_session * fHandle;
 
 - (void) setAutoSpeedLimitDay: (id) sender
 {
-    NSString * day;
-    switch ([[sender selectedItem] tag])
-    {
-        case SCHED_ALL_TAG:
-            day = @"ALL";
-            break;
-        case SCHED_WEEKDAY_TAG:
-            day = @"WEEKDAY";
-            break;
-        case SCHED_WEEKEND_TAG:
-            day = @"WEEKEND";
-            break;
-        case SCHED_MON_TAG:
-            day = @"MON";
-            break;
-        case SCHED_TUES_TAG:
-            day = @"TUES";
-            break;
-        case SCHED_WED_TAG:
-            day = @"WED";
-            break;
-        case SCHED_THURS_TAG:
-            day = @"THURS";
-            break;
-        case SCHED_FRI_TAG:
-            day = @"FRI";
-            break;
-        case SCHED_SAT_TAG:
-            day = @"SAT";
-            break;
-        case SCHED_SUN_TAG:
-            day = @"SUN";
-            break;
-    }
-    
-    [fDefaults setObject: day forKey: @"SpeedLimitAutoDay"];
-    [self updateAutoSpeedLimitDay];
-}
-
-- (void) updateAutoSpeedLimitDay
-{
-    NSString * dayString = [fDefaults stringForKey: @"SpeedLimitAutoDay"];
-    tr_sched_day day;
-    if ([dayString isEqualToString: @"WEEKDAY"])
-        day = TR_SCHED_WEEKDAY;
-    else if ([dayString isEqualToString: @"WEEKEND"])
-        day = TR_SCHED_WEEKEND;
-    else if ([dayString isEqualToString: @"MON"])
-        day = TR_SCHED_MON;
-    else if ([dayString isEqualToString: @"TUES"])
-        day = TR_SCHED_TUES;
-    else if ([dayString isEqualToString: @"WED"])
-        day = TR_SCHED_WED;
-    else if ([dayString isEqualToString: @"THURS"])
-        day = TR_SCHED_THURS;
-    else if ([dayString isEqualToString: @"FRI"])
-        day = TR_SCHED_FRI;
-    else if ([dayString isEqualToString: @"SAT"])
-        day = TR_SCHED_SAT;
-    else if ([dayString isEqualToString: @"SUN"])
-        day = TR_SCHED_SUN;
-    else
-    {
-        //safety
-        if (![dayString isEqualToString: @"ALL"])
-        {
-            dayString = @"ALL";
-            [fDefaults setObject: dayString forKey: @"SpeedLimitAutoDay"];
-        }
-        day = TR_SCHED_ALL;
-    }
-    
-    tr_sessionSetAltSpeedDay(fHandle, day);
+    tr_sessionSetAltSpeedDay(fHandle, [[sender selectedItem] tag]);
 }
 
 + (NSInteger) dateToTimeSum: (NSDate *) date
@@ -741,6 +619,15 @@ tr_session * fHandle;
     NSCalendar * calendar = [NSCalendar currentCalendar];
     NSDateComponents * components = [calendar components: NSHourCalendarUnit | NSMinuteCalendarUnit fromDate: date];
     return [components hour] * 60 + [components minute];
+}
+
++ (NSDate *) timeSumToDate: (NSInteger) sum
+{
+    NSDateComponents * comps = [[[NSDateComponents alloc] init] autorelease];
+    [comps setHour: sum / 60];
+    [comps setMinute: sum % 60];
+    
+    return [[NSCalendar currentCalendar] dateFromComponents: comps];
 }
 
 - (BOOL) control: (NSControl *) control textShouldBeginEditing: (NSText *) fieldEditor
@@ -1175,11 +1062,10 @@ tr_session * fHandle;
         inBook: [[NSBundle mainBundle] objectForInfoDictionaryKey: @"CFBundleHelpBookName"]];
 }
 
-#warning probably needs to be updated
 - (void) rpcUpdatePrefs
 {
     //encryption
-    tr_encryption_mode encryptionMode = tr_sessionGetEncryption(fHandle);
+    const tr_encryption_mode encryptionMode = tr_sessionGetEncryption(fHandle);
     [fDefaults setBool: encryptionMode != TR_CLEAR_PREFERRED forKey: @"EncryptionPrefer"];
     [fDefaults setBool: encryptionMode == TR_ENCRYPTION_REQUIRED forKey: @"EncryptionRequire"];
     
@@ -1188,39 +1074,79 @@ tr_session * fHandle;
     [fDefaults setObject: downloadLocation forKey: @"DownloadFolder"];
     
     //peers
-    uint16_t peersTotal = tr_sessionGetPeerLimit(fHandle);
+    const uint16_t peersTotal = tr_sessionGetPeerLimit(fHandle);
     [fDefaults setInteger: peersTotal forKey: @"PeersTotal"];
     
+    const uint16_t peersTorrent = tr_sessionGetPeerLimitPerTorrent(fHandle);
+    [fDefaults setInteger: peersTotal forKey: @"PeersTorrent"];
+    
     //pex
-    BOOL pex = tr_sessionIsPexEnabled(fHandle);
+    const BOOL pex = tr_sessionIsPexEnabled(fHandle);
     [fDefaults setBool: pex forKey: @"PEXGlobal"];
     
     //port
-    tr_port port = tr_sessionGetPeerPort(fHandle);
+    const tr_port port = tr_sessionGetPeerPort(fHandle);
     [fDefaults setInteger: port forKey: @"BindPort"];
     
-    BOOL nat = tr_sessionIsPortForwardingEnabled(fHandle);
+    const BOOL nat = tr_sessionIsPortForwardingEnabled(fHandle);
     [fDefaults setBool: nat forKey: @"NatTraversal"];
     
     fPeerPort = -1;
     fNatStatus = -1;
     [self updatePortStatus];
     
+    const BOOL randomPort = tr_sessionGetPeerPortRandomOnStart(fHandle);
+    [fDefaults setBool: randomPort forKey: @"RandomPort"];
+    
     //speed limit - down
-    BOOL downLimitEnabled = tr_sessionIsSpeedLimited(fHandle, TR_DOWN);
+    const BOOL downLimitEnabled = tr_sessionIsSpeedLimited(fHandle, TR_DOWN);
     [fDefaults setBool: downLimitEnabled forKey: @"CheckDownload"];
     
-    int downLimit = tr_sessionGetSpeedLimit(fHandle, TR_DOWN);
+    const int downLimit = tr_sessionGetSpeedLimit(fHandle, TR_DOWN);
     [fDefaults setInteger: downLimit forKey: @"DownloadLimit"];
     
     //speed limit - up
-    BOOL upLimitEnabled = tr_sessionIsSpeedLimited(fHandle, TR_UP);
+    const BOOL upLimitEnabled = tr_sessionIsSpeedLimited(fHandle, TR_UP);
     [fDefaults setBool: upLimitEnabled forKey: @"CheckUpload"];
     
-    int upLimit = tr_sessionGetSpeedLimit(fHandle, TR_UP);
+    const int upLimit = tr_sessionGetSpeedLimit(fHandle, TR_UP);
     [fDefaults setInteger: upLimit forKey: @"UploadLimit"];
     
-    [[NSNotificationCenter defaultCenter] postNotificationName: @"SpeedLimitUpdate" object: nil];
+    //alt speed limit enabled
+    const BOOL useAltSpeed = tr_sessionUsesAltSpeed(fHandle);
+    [fDefaults setBool: useAltSpeed forKey: @"SpeedLimit"];
+    
+    //alt speed limit - down
+    const int downLimitAlt = tr_sessionGetAltSpeed(fHandle, TR_DOWN);
+    [fDefaults setInteger: downLimit forKey: @"SpeedLimitDownloadLimit"];
+    
+    //alt speed limit - up
+    const int upLimitAlt = tr_sessionGetAltSpeed(fHandle, TR_UP);
+    [fDefaults setInteger: upLimitAlt forKey: @"SpeedLimitDownloadLimit"];
+    
+    //alt speed limit schedule
+    const BOOL useAltSpeedSched = tr_sessionUsesAltSpeedTime(fHandle);
+    [fDefaults setBool: useAltSpeedSched forKey: @"SpeedLimitAuto"];
+    
+    NSDate * limitStartDate = [PrefsController timeSumToDate: tr_sessionGetAltSpeedBegin(fHandle)];
+    [fDefaults setObject: limitStartDate forKey: @"SpeedLimitAutoOnDate"];
+    
+    NSDate * limitEndDate = [PrefsController timeSumToDate: tr_sessionGetAltSpeedEnd(fHandle)];
+    [fDefaults setObject: limitEndDate forKey: @"SpeedLimitAutoOffDate"];
+    
+    const int limitDay = tr_sessionGetAltSpeedDay(fHandle);
+    [fDefaults setInteger: limitDay forKey: @"SpeedLimitAutoDay"];
+    
+    //blocklist
+    const BOOL blocklist = tr_blocklistIsEnabled(fHandle);
+    [fDefaults setBool: blocklist forKey: @"Blocklist"];
+    
+    //seed ratio
+    const BOOL ratioLimited = tr_sessionIsRatioLimited(fHandle);
+    [fDefaults setBool: ratioLimited forKey: @"RatioCheck"];
+    
+    const float ratioLimit = tr_sessionGetRatioLimit(fHandle);
+    [fDefaults setFloat: ratioLimit forKey: @"RatioLimit"];
     
     //update gui if loaded
     if (fHasLoaded)
@@ -1230,18 +1156,35 @@ tr_session * fHandle;
         //download directory handled by bindings
         
         [fPeersGlobalField setIntValue: peersTotal];
+        [fPeersTorrentField setIntValue: peersTorrent];
         
         //pex handled by bindings
         
         [fPortField setIntValue: port];
         //port forwarding (nat) handled by bindings
+        //random port handled by bindings
         
         //limit check handled by bindings
         [fDownloadField setIntValue: downLimit];
         
         //limit check handled by bindings
         [fUploadField setIntValue: upLimit];
+        
+        [fSpeedLimitDownloadField setIntValue: downLimitAlt];
+        
+        [fSpeedLimitUploadField setIntValue: upLimitAlt];
+        
+        //speed limit schedule handled by bindings
+        
+        //speed limit schedule times and day handled by bindings
+        
+        [self updateBlocklistFields];
+        
+        //ratio limit enabled handled by bindings
+        [fRatioStopField setFloatValue: ratioLimit];
     }
+    
+    [[NSNotificationCenter defaultCenter] postNotificationName: @"SpeedLimitUpdate" object: nil];
 }
 
 @end
@@ -1315,8 +1258,12 @@ tr_session * fHandle;
     if (code == NSOKButton)
     {
         [fFolderPopUp selectItemAtIndex: DOWNLOAD_FOLDER];
-        [fDefaults setObject: [[openPanel filenames] objectAtIndex: 0] forKey: @"DownloadFolder"];
+        
+        NSString * folder = [[openPanel filenames] objectAtIndex: 0];
+        [fDefaults setObject: folder forKey: @"DownloadFolder"];
         [fDefaults setObject: @"Constant" forKey: @"DownloadChoice"];
+        
+        tr_sessionSetDownloadDir(fHandle, [folder UTF8String]);
     }
     else
     {
