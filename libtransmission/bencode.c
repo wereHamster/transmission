@@ -386,14 +386,10 @@ tr_bencDictFind( tr_benc * val, const char * key )
     return i < 0 ? NULL : &val->val.l.vals[i + 1];
 }
 
-static tr_benc*
-tr_bencDictFindType( tr_benc *    val,
-                     const char * key,
-                     int          type )
+static tr_bool
+tr_bencDictFindType( tr_benc * dict, const char * key, int type, tr_benc ** setme )
 {
-    tr_benc * ret = tr_bencDictFind( val, key );
-
-    return ( ret && ( ret->type == type ) ) ? ret : NULL;
+    return tr_bencIsType( *setme = tr_bencDictFind( dict, key ), type );
 }
 
 size_t
@@ -520,51 +516,21 @@ tr_bencDictFindReal( tr_benc * dict, const char * key, double * setme )
 }
 
 tr_bool
+tr_bencDictFindStr( tr_benc *  dict, const char *  key, const char ** setme )
+{
+    return tr_bencGetStr( tr_bencDictFind( dict, key ), setme );
+}
+
+tr_bool
 tr_bencDictFindList( tr_benc * dict, const char * key, tr_benc ** setme )
 {
-    tr_bool found = FALSE;
-    tr_benc * child = tr_bencDictFindType( dict, key, TR_TYPE_LIST );
-
-    if( child )
-    {
-        if( setme != NULL )
-            *setme = child;
-        found = TRUE;
-    }
-
-    return found;
+    return tr_bencDictFindType( dict, key, TR_TYPE_LIST, setme );
 }
 
 tr_bool
 tr_bencDictFindDict( tr_benc * dict, const char * key, tr_benc ** setme )
 {
-    tr_bool found = FALSE;
-    tr_benc * child = tr_bencDictFindType( dict, key, TR_TYPE_DICT );
-
-    if( child )
-    {
-        if( setme != NULL )
-            *setme = child;
-        found = TRUE;
-    }
-
-    return found;
-}
-
-tr_bool
-tr_bencDictFindStr( tr_benc *  dict, const char *  key, const char ** setme )
-{
-    tr_bool found = FALSE;
-    tr_benc * child = tr_bencDictFindType( dict, key, TR_TYPE_STR );
-
-    if( child )
-    {
-        if( setme )
-            *setme = child->val.s.s;
-        found = TRUE;
-    }
-
-    return found;
+    return tr_bencDictFindType( dict, key, TR_TYPE_DICT, setme );
 }
 
 tr_bool
@@ -573,14 +539,12 @@ tr_bencDictFindRaw( tr_benc         * dict,
                     const uint8_t  ** setme_raw,
                     size_t          * setme_len )
 {
-    tr_bool found = FALSE;
-    tr_benc * child = tr_bencDictFindType( dict, key, TR_TYPE_STR );
+    tr_benc * child;
+    const tr_bool found = tr_bencDictFindType( dict, key, TR_TYPE_STR, &child );
 
-    if( child )
-    {
+    if( found ) {
         *setme_raw = (uint8_t*) child->val.s.s;
         *setme_len = child->val.s.i;
-        found = TRUE;
     }
 
     return found;
@@ -815,25 +779,6 @@ tr_bencDictAddStr( tr_benc * dict, const char * key, const char * val )
 
     return child;
 }
-
-#if 0
-tr_benc*
-tr_bencDictAddReal( tr_benc * dict, const char * key, double d )
-{
-    ccc
-    char buf[128];
-    char * locale;
-
-    /* the json spec requires a '.' decimal point regardless of locale */
-    locale = tr_strdup( setlocale ( LC_NUMERIC, NULL ) );
-    setlocale( LC_NUMERIC, "POSIX" );
-    tr_snprintf( buf, sizeof( buf ), "%f", d );
-    setlocale( LC_NUMERIC, locale );
-    tr_free( locale );
-
-    return tr_bencDictAddStr( dict, key, buf );
-}
-#endif
 
 tr_benc*
 tr_bencDictAddList( tr_benc *    dict,
@@ -1108,7 +1053,10 @@ saveIntFunc( const tr_benc * val,
 static void
 saveBoolFunc( const tr_benc * val, void * evbuf )
 {
-    evbuffer_add_printf( evbuf, "i%de", val->val.b?1:0 );
+    if( val->val.b )
+        evbuffer_add( evbuf, "i1e", 3 );
+    else
+        evbuffer_add( evbuf, "i0e", 3 );
 }
 
 static void
@@ -1144,21 +1092,21 @@ static void
 saveDictBeginFunc( const tr_benc * val UNUSED,
                    void *              evbuf )
 {
-    evbuffer_add_printf( evbuf, "d" );
+    evbuffer_add( evbuf, "d", 1 );
 }
 
 static void
 saveListBeginFunc( const tr_benc * val UNUSED,
                    void *              evbuf )
 {
-    evbuffer_add_printf( evbuf, "l" );
+    evbuffer_add( evbuf, "l", 1 );
 }
 
 static void
 saveContainerEndFunc( const tr_benc * val UNUSED,
                       void *              evbuf )
 {
-    evbuffer_add_printf( evbuf, "e" );
+    evbuffer_add( evbuf, "e", 1 );
 }
 
 char*
@@ -1250,9 +1198,12 @@ struct jsonWalk
 static void
 jsonIndent( struct jsonWalk * data )
 {
+    char buf[1024];
     const int width = tr_list_size( data->parents ) * 4;
 
-    evbuffer_add_printf( data->out, "\n%*.*s", width, width, " " );
+    buf[0] = '\n';
+    memset( buf+1, ' ', width );
+    evbuffer_add( data->out, buf, 1+width );
 }
 
 static void
@@ -1268,10 +1219,10 @@ jsonChildFunc( struct jsonWalk * data )
             {
                 const int i = parentState->childIndex++;
                 if( !( i % 2 ) )
-                    evbuffer_add_printf( data->out, ": " );
+                    evbuffer_add( data->out, ": ", 2 );
                 else
                 {
-                    evbuffer_add_printf( data->out, ", " );
+                    evbuffer_add( data->out, ", ", 2 );
                     jsonIndent( data );
                 }
                 break;
@@ -1280,7 +1231,7 @@ jsonChildFunc( struct jsonWalk * data )
             case TR_TYPE_LIST:
             {
                 ++parentState->childIndex;
-                evbuffer_add_printf( data->out, ", " );
+                evbuffer_add( data->out, ", ", 2 );
                 jsonIndent( data );
                 break;
             }
@@ -1324,7 +1275,11 @@ jsonBoolFunc( const tr_benc * val, void * vdata )
 {
     struct jsonWalk * data = vdata;
 
-    evbuffer_add_printf( data->out, "%s", (val->val.b?"true":"false") );
+    if( val->val.b )
+        evbuffer_add( data->out, "true", 4 );
+    else
+        evbuffer_add( data->out, "false", 5 );
+
     jsonChildFunc( data );
 }
 
@@ -1345,50 +1300,32 @@ jsonRealFunc( const tr_benc * val, void * vdata )
 }
 
 static void
-jsonStringFunc( const tr_benc * val,
-                void *          vdata )
+jsonStringFunc( const tr_benc * val, void * vdata )
 {
-    struct jsonWalk *    data = vdata;
-    const unsigned char *it, *end;
+    struct jsonWalk * data = vdata;
+    const unsigned char * it = (const unsigned char *) val->val.s.s;
+    const unsigned char * end = it + val->val.s.i;
 
-    evbuffer_add_printf( data->out, "\"" );
-    for( it = (const unsigned char*)val->val.s.s, end = it + val->val.s.i;
-         it != end; ++it )
+    evbuffer_expand( data->out, val->val.s.i + 2 );
+    evbuffer_add( data->out, "\"", 1 );
+
+    for( ; it!=end; ++it )
     {
         switch( *it )
         {
-            case '/':
-                evbuffer_add_printf( data->out, "\\/" ); break;
-
-            case '\b':
-                evbuffer_add_printf( data->out, "\\b" ); break;
-
-            case '\f':
-                evbuffer_add_printf( data->out, "\\f" ); break;
-
-            case '\n':
-                evbuffer_add_printf( data->out, "\\n" ); break;
-
-            case '\r':
-                evbuffer_add_printf( data->out, "\\r" ); break;
-
-            case '\t':
-                evbuffer_add_printf( data->out, "\\t" ); break;
-
-            case '"':
-                evbuffer_add_printf( data->out, "\\\"" ); break;
-
-            case '\\':
-                evbuffer_add_printf( data->out, "\\\\" ); break;
+            case '/': evbuffer_add( data->out, "\\/", 2 ); break;
+            case '\b': evbuffer_add( data->out, "\\b", 2 ); break;
+            case '\f': evbuffer_add( data->out, "\\f", 2 ); break;
+            case '\n': evbuffer_add( data->out, "\\n", 2 ); break;
+            case '\r': evbuffer_add( data->out, "\\r", 2 ); break;
+            case '\t': evbuffer_add( data->out, "\\t", 2 ); break;
+            case '"': evbuffer_add( data->out, "\\\"", 2 ); break;
+            case '\\': evbuffer_add( data->out, "\\\\", 2 ); break;
 
             default:
                 if( isascii( *it ) )
-                {
-                    /*fprintf( stderr, "[%c]\n", *it );*/
-                    evbuffer_add_printf( data->out, "%c", *it );
-                }
-                else
-                {
+                    evbuffer_add( data->out, it, 1 );
+                else {
                     const UTF8 * tmp = it;
                     UTF32        buf = 0;
                     UTF32 *      u32 = &buf;
@@ -1399,11 +1336,10 @@ jsonStringFunc( const tr_benc * val,
                         evbuffer_add_printf( data->out, "\\u%04x", (unsigned int)buf );
                         it = tmp - 1;
                     }
-                    /*fprintf( stderr, "[\\u%04x]\n", buf );*/
                 }
         }
     }
-    evbuffer_add_printf( data->out, "\"" );
+    evbuffer_add( data->out, "\"", 1 );
     jsonChildFunc( data );
 }
 
@@ -1414,7 +1350,7 @@ jsonDictBeginFunc( const tr_benc * val,
     struct jsonWalk * data = vdata;
 
     jsonPushParent( data, val );
-    evbuffer_add_printf( data->out, "{" );
+    evbuffer_add( data->out, "{", 1 );
     if( val->val.l.count )
         jsonIndent( data );
 }
@@ -1427,7 +1363,7 @@ jsonListBeginFunc( const tr_benc * val,
     struct jsonWalk * data = vdata;
 
     jsonPushParent( data, val );
-    evbuffer_add_printf( data->out, "[" );
+    evbuffer_add( data->out, "[", 1 );
     if( nChildren )
         jsonIndent( data );
 }
@@ -1457,9 +1393,9 @@ jsonContainerEndFunc( const tr_benc * val,
     if( !emptyContainer )
         jsonIndent( data );
     if( tr_bencIsDict( val ) )
-        evbuffer_add_printf( data->out, "}" );
+        evbuffer_add( data->out, "}", 1 );
     else /* list */
-        evbuffer_add_printf( data->out, "]" );
+        evbuffer_add( data->out, "]", 1 );
     jsonChildFunc( data );
 }
 

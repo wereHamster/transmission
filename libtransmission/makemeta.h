@@ -13,6 +13,10 @@
 #ifndef TR_MAKEMETA_H
 #define TR_MAKEMETA_H 1
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct tr_metainfo_builder_file
 {
     char *      filename;
@@ -45,7 +49,6 @@ typedef struct tr_metainfo_builder
     uint32_t                    pieceSize;
     uint32_t                    pieceCount;
     int                         isSingleFile;
-    tr_session *                handle;
 
     /**
     ***  These are set inside tr_makeMetaInfo()
@@ -87,8 +90,7 @@ typedef struct tr_metainfo_builder
 tr_metainfo_builder;
 
 
-tr_metainfo_builder*tr_metaInfoBuilderCreate( tr_session * session,
-                                              const char * topFile );
+tr_metainfo_builder*tr_metaInfoBuilderCreate( const char * topFile );
 
 void                tr_metaInfoBuilderFree( tr_metainfo_builder* );
 
@@ -116,5 +118,9 @@ void tr_makeMetaInfo( tr_metainfo_builder *   builder,
                       const char *            comment,
                       int                     isPrivate );
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
