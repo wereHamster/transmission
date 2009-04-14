@@ -22,9 +22,13 @@
 #include <QUrl>
 
 #include <libtransmission/transmission.h>
-#include <libtransmission/json.h>
 
 #include "speed.h"
+
+extern "C"
+{
+    struct tr_benc;
+}
 
 class Prefs;
 
@@ -56,24 +60,26 @@ class Session: public QObject
         bool isServer( ) const;
 
     private:
-        void updateStats( tr_benc * args );
-        void updateInfo( tr_benc * args );
+        void updateStats( struct tr_benc * args );
+        void updateInfo( struct tr_benc * args );
         void parseResponse( const char * json, size_t len );
         static void localSessionCallback( tr_session *, const char *, size_t, void * );
 
     public:
         void exec( const char * request );
-        void exec( const tr_benc * request );
+        void exec( const struct tr_benc * request );
 
     private:
         void sessionSet( const char * key, const QVariant& variant );
         void pumpRequests( );
         void sendTorrentRequest( const char * request, const QSet<int>& torrentIds );
-        static void updateStats( tr_benc * d, struct tr_session_stats * stats );
+        static void updateStats( struct tr_benc * d, struct tr_session_stats * stats );
         void refreshTorrents( const QSet<int>& torrentIds );
 
     public:
         void torrentSet( int id, const QString& key, bool val );
+        void torrentSet( int id, const QString& key, int val );
+        void torrentSet( int id, const QString& key, double val );
         void torrentSet( int id, const QString& key, const QList<int>& val );
 
     public slots:
@@ -103,8 +109,8 @@ class Session: public QObject
         void statsUpdated( );
         void sessionUpdated( );
         void blocklistUpdated( int );
-        void torrentsUpdated( tr_benc * torrentList, bool completeList );
-        void torrentsRemoved( tr_benc * torrentList );
+        void torrentsUpdated( struct tr_benc * torrentList, bool completeList );
+        void torrentsRemoved( struct tr_benc * torrentList );
         void dataReadProgress( );
         void dataSendProgress( );
 

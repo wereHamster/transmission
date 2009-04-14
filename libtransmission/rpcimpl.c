@@ -20,13 +20,14 @@
 
 #include "transmission.h"
 #include "bencode.h"
-#include "rpcimpl.h"
+#include "completion.h"
 #include "json.h"
+#include "rpcimpl.h"
 #include "session.h"
 #include "stats.h"
 #include "torrent.h"
-#include "completion.h"
 #include "utils.h"
+#include "version.h"
 #include "web.h"
 
 #define RECENTLY_ACTIVE_SECONDS 60
@@ -1190,7 +1191,7 @@ sessionGet( tr_session               * s,
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_PORT, tr_sessionGetPeerPort( s ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_PORT_RANDOM_ON_START, tr_sessionGetPeerPortRandomOnStart( s ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_PORT_FORWARDING, tr_sessionIsPortForwardingEnabled( s ) );
-    tr_bencDictAddInt ( d, "rpc-version", 4 );
+    tr_bencDictAddInt ( d, "rpc-version", 5 );
     tr_bencDictAddInt ( d, "rpc-version-minimum", 1 );
     tr_bencDictAddReal( d, "seedRatioLimit", tr_sessionGetRatioLimit( s ) );
     tr_bencDictAddBool( d, "seedRatioLimited", tr_sessionIsRatioLimited( s ) );

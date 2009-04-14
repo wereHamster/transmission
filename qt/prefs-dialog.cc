@@ -171,7 +171,7 @@ void
 PrefsDialog :: textChanged( const QString& text )
 {
     const int key( sender()->property( PREF_KEY ).toInt( ) );
-    myPrefs.set( key, qPrintable(text) );
+    myPrefs.set( key, text );
 }
 
 QLineEdit*
@@ -435,7 +435,7 @@ PrefsDialog :: encryptionEdited( int i )
 }
 
 QWidget *
-PrefsDialog :: createPeersTab( const Session& session )
+PrefsDialog :: createPeersTab( )
 {
     HIG * hig = new HIG( this );
     hig->addSectionTitle( tr( "Blocklist" ) );
@@ -548,7 +548,7 @@ PrefsDialog :: createTorrentsTab( )
     hig->addSectionTitle( tr( "Limits" ) );
 
         l = checkBoxNew( tr( "&Stop seeding torrents at ratio:" ), Prefs::RATIO_ENABLED );
-        r = doubleSpinBoxNew( Prefs::RATIO, 0.5, INT_MAX, 0.5, 2 );
+        r = doubleSpinBoxNew( Prefs::RATIO, 0, INT_MAX, 0.5, 2 );
         hig->addRow( l, r );
         enableBuddyWhenChecked( qobject_cast<QCheckBox*>(l), r );
 
@@ -571,7 +571,7 @@ PrefsDialog :: PrefsDialog( Session& session, Prefs& prefs, QWidget * parent ):
 
     QTabWidget * t = new QTabWidget( this );
     t->addTab( createTorrentsTab( ),       tr( "Torrents" ) );
-    t->addTab( createPeersTab( session ),  tr( "Peers" ) );
+    t->addTab( createPeersTab( ),          tr( "Peers" ) );
     t->addTab( createBandwidthTab( ),      tr( "Speed" ) );
     t->addTab( createNetworkTab( ),        tr( "Network" ) );
     t->addTab( createWebTab( session ),    tr( "Web" ) );
