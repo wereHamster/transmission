@@ -42,6 +42,7 @@
 #include "trevent.h"
 #include "utils.h"
 #include "version.h"
+#include "verify.h"
 #include "web.h"
 
 #define dbgmsg( ... ) \
@@ -281,6 +282,7 @@ tr_sessionGetDefaultSettings( tr_benc * d )
     tr_bencDictAddReal( d, TR_PREFS_KEY_RATIO,                    2.0 );
     tr_bencDictAddBool( d, TR_PREFS_KEY_RATIO_ENABLED,            FALSE );
     tr_bencDictAddBool( d, TR_PREFS_KEY_RPC_AUTH_REQUIRED,        FALSE );
+    tr_bencDictAddStr ( d, TR_PREFS_KEY_RPC_BIND_ADDRESS,         "0.0.0.0" );
     tr_bencDictAddBool( d, TR_PREFS_KEY_RPC_ENABLED,              TRUE );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_RPC_PASSWORD,             "" );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_RPC_USERNAME,             "" );
@@ -297,14 +299,15 @@ tr_sessionGetDefaultSettings( tr_benc * d )
     tr_bencDictAddInt ( d, TR_PREFS_KEY_USPEED,                   100 );
     tr_bencDictAddBool( d, TR_PREFS_KEY_USPEED_ENABLED,           FALSE );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_UPLOAD_SLOTS_PER_TORRENT, 14 );
+    tr_bencDictAddStr ( d, TR_PREFS_KEY_BIND_ADDRESS_IPV4,        TR_DEFAULT_BIND_ADDRESS_IPV4 );
+    tr_bencDictAddStr ( d, TR_PREFS_KEY_BIND_ADDRESS_IPV6,        TR_DEFAULT_BIND_ADDRESS_IPV6 );
 }
+
+const tr_socketList * tr_getSessionBindSockets( const tr_session * session );
 
 void
 tr_sessionGetSettings( tr_session * s, struct tr_benc * d )
 {
-    int i, n=0;
-    char * freeme[16];
-
     assert( tr_bencIsDict( d ) );
 
     tr_bencDictReserve( d, 30 );
@@ -336,11 +339,12 @@ tr_sessionGetSettings( tr_session * s, struct tr_benc * d )
     tr_bencDictAddReal( d, TR_PREFS_KEY_RATIO,                    s->desiredRatio );
     tr_bencDictAddBool( d, TR_PREFS_KEY_RATIO_ENABLED,            s->isRatioLimited );
     tr_bencDictAddBool( d, TR_PREFS_KEY_RPC_AUTH_REQUIRED,        tr_sessionIsRPCPasswordEnabled( s ) );
+    tr_bencDictAddStr ( d, TR_PREFS_KEY_RPC_BIND_ADDRESS,         tr_sessionGetRPCBindAddress( s ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_RPC_ENABLED,              tr_sessionIsRPCEnabled( s ) );
-    tr_bencDictAddStr ( d, TR_PREFS_KEY_RPC_PASSWORD,             freeme[n++] = tr_sessionGetRPCPassword( s ) );
+    tr_bencDictAddStr ( d, TR_PREFS_KEY_RPC_PASSWORD,             tr_sessionGetRPCPassword( s ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_RPC_PORT,                 tr_sessionGetRPCPort( s ) );
-    tr_bencDictAddStr ( d, TR_PREFS_KEY_RPC_USERNAME,             freeme[n++] = tr_sessionGetRPCUsername( s ) );
-    tr_bencDictAddStr ( d, TR_PREFS_KEY_RPC_WHITELIST,            freeme[n++] = tr_sessionGetRPCWhitelist( s ) );
+    tr_bencDictAddStr ( d, TR_PREFS_KEY_RPC_USERNAME,             tr_sessionGetRPCUsername( s ) );
+    tr_bencDictAddStr ( d, TR_PREFS_KEY_RPC_WHITELIST,            tr_sessionGetRPCWhitelist( s ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_RPC_WHITELIST_ENABLED,    tr_sessionGetRPCWhitelistEnabled( s ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_ALT_SPEED_ENABLED,        tr_sessionUsesAltSpeed( s ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_ALT_SPEED_UP,             tr_sessionGetAltSpeed( s, TR_UP ) );
@@ -352,9 +356,10 @@ tr_sessionGetSettings( tr_session * s, struct tr_benc * d )
     tr_bencDictAddInt ( d, TR_PREFS_KEY_USPEED,                   tr_sessionGetSpeedLimit( s, TR_UP ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_USPEED_ENABLED,           tr_sessionIsSpeedLimited( s, TR_UP ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_UPLOAD_SLOTS_PER_TORRENT, s->uploadSlotsPerTorrent );
-
-    for( i=0; i<n; ++i )
-        tr_free( freeme[i] );
+    tr_bencDictAddStr ( d, TR_PREFS_KEY_BIND_ADDRESS_IPV4,
+                        tr_ntop_non_ts( tr_socketListGetType( tr_getSessionBindSockets( s ), TR_AF_INET ) ) );
+    tr_bencDictAddStr ( d, TR_PREFS_KEY_BIND_ADDRESS_IPV6,
+                        tr_ntop_non_ts( tr_socketListGetType( tr_getSessionBindSockets( s ), TR_AF_INET6 ) ) );
 }
 
 void
@@ -500,6 +505,8 @@ tr_sessionInitImpl( void * vdata )
     struct init_data * data = vdata;
     tr_benc * clientSettings = data->clientSettings;
     tr_session * session = data->session;
+    tr_address address;
+    tr_socketList * socketList;
 
     assert( tr_amInEventThread( session ) );
     assert( tr_bencIsDict( clientSettings ) );
@@ -618,7 +625,39 @@ tr_sessionInitImpl( void * vdata )
          && tr_bencDictFindInt( &settings, TR_PREFS_KEY_PEER_PORT, &j );
     assert( found );
     session->peerPort = session->isPortRandom ? getRandomPort( session ) : j;
-    session->shared = tr_sharedInit( session, boolVal, session->peerPort );
+
+    /* bind addresses */
+
+    found = tr_bencDictFindStr( &settings, TR_PREFS_KEY_BIND_ADDRESS_IPV4,
+                                &str );
+    assert( found );
+    if( tr_pton( str, &address ) == NULL ) {
+        tr_err( _( "%s is not a valid address" ), str );
+        socketList = tr_socketListNew( &tr_inaddr_any );
+    } else if( address.type != TR_AF_INET ) {
+        tr_err( _( "%s is not an IPv4 address" ), str );
+        socketList = tr_socketListNew( &tr_inaddr_any );
+    } else
+        socketList = tr_socketListNew( &address );
+
+    found = tr_bencDictFindStr( &settings, TR_PREFS_KEY_BIND_ADDRESS_IPV6,
+                                &str );
+    assert( found );
+    if( tr_pton( str, &address ) == NULL ) {
+        tr_err( _( "%s is not a valid address" ), str );
+        address = tr_in6addr_any;
+    } else if( address.type != TR_AF_INET6 ) {
+        tr_err( _( "%s is not an IPv6 address" ), str );
+        address = tr_in6addr_any;
+    }
+    if( tr_net_hasIPv6( session->peerPort ) )
+        tr_socketListAppend( socketList, &address );
+    else
+        tr_inf( _( "System does not seem to support IPv6. Not listening on"
+                   "an IPv6 address" ) );
+
+    session->shared = tr_sharedInit( session, boolVal, session->peerPort,
+                                     socketList );
     session->isPortSet = session->peerPort > 0;
 
     /**
@@ -1306,6 +1345,7 @@ tr_closeAllConnections( void * vsession )
     tr_free( session->altTimer );
     session->altTimer = NULL;
 
+    tr_verifyClose( session );
     tr_statsClose( session );
     tr_sharedShuttingDown( session->shared );
     tr_rpcClose( &session->rpcServer );
@@ -1812,7 +1852,7 @@ tr_sessionSetRPCWhitelist( tr_session * session,
     tr_rpcSetWhitelist( session->rpcServer, whitelist );
 }
 
-char*
+const char*
 tr_sessionGetRPCWhitelist( const tr_session * session )
 {
     assert( tr_isSession( session ) );
@@ -1847,7 +1887,7 @@ tr_sessionSetRPCPassword( tr_session * session,
     tr_rpcSetPassword( session->rpcServer, password );
 }
 
-char*
+const char*
 tr_sessionGetRPCPassword( const tr_session * session )
 {
     assert( tr_isSession( session ) );
@@ -1864,7 +1904,7 @@ tr_sessionSetRPCUsername( tr_session * session,
     tr_rpcSetUsername( session->rpcServer, username );
 }
 
-char*
+const char*
 tr_sessionGetRPCUsername( const tr_session * session )
 {
     assert( tr_isSession( session ) );
@@ -1887,6 +1927,14 @@ tr_sessionIsRPCPasswordEnabled( const tr_session * session )
     assert( tr_isSession( session ) );
 
     return tr_rpcIsPasswordEnabled( session->rpcServer );
+}
+
+const char *
+tr_sessionGetRPCBindAddress( const tr_session * session )
+{
+    assert( tr_isSession( session ) );
+
+    return tr_rpcGetBindAddress( session->rpcServer );
 }
 
 /***
@@ -2037,4 +2085,10 @@ tr_sessionGetActiveTorrentCount( tr_session * session )
             ++ret;
 
     return ret;
+}
+
+const tr_socketList *
+tr_getSessionBindSockets( const tr_session * session )
+{
+    return tr_sharedGetBindSockets( session->shared );
 }

@@ -16,8 +16,10 @@
 #include <ctime>
 #include <QCheckBox>
 #include <QFileDialog>
+#include <QLineEdit>
 #include <QIcon>
 #include <QMainWindow>
+#include <QMap>
 #include <QSet>
 #include <QSystemTrayIcon>
 #include <QTimer>
@@ -27,6 +29,7 @@ extern "C" {
     struct tr_benc;
 };
 
+#include "filters.h"
 #include "torrent-filter.h"
 #include "ui_mainwin.h"
 
@@ -36,6 +39,9 @@ class Session;
 class TorrentDelegate;
 class TorrentDelegateMin;
 class TorrentModel;
+class QAction;
+class QLabel;
+class QMenu;
 class QModelIndex;
 class QSortFilterProxyModel;
 
@@ -63,6 +69,12 @@ class TrMainWindow: public QMainWindow
         time_t myLastSendTime;
         time_t myLastReadTime;
         QTimer myNetworkTimer;
+        QAction * myDlimitOffAction;
+        QAction * myDlimitOnAction;
+        QAction * myUlimitOffAction;
+        QAction * myUlimitOnAction;
+        QAction * myRatioOffAction;
+        QAction * myRatioOnAction;
 
     private:
         QIcon getStockIcon( const QString&, int fallback=-1 );
@@ -74,6 +86,7 @@ class TrMainWindow: public QMainWindow
         QWidgetList myHidden;
 
     private slots:
+        void onShowModeClicked( );
         void showAll( );
         void showActive( );
         void showDownloading( );
@@ -100,22 +113,43 @@ class TrMainWindow: public QMainWindow
         void dataReadProgress( );
         void dataSendProgress( );
         void toggleWindows( );
+        void onSetPrefs( );
+        void onSetPrefs( bool );
 
-     private slots:
-        void setSortPref( int );
-        void setSortAscendingPref( bool );
-        void onSortByActivityToggled ( bool b );
-        void onSortByAgeToggled      ( bool b );
-        void onSortByETAToggled      ( bool b );
-        void onSortByNameToggled     ( bool b );
-        void onSortByProgressToggled ( bool b );
-        void onSortByRatioToggled    ( bool b );
-        void onSortBySizeToggled     ( bool b );
-        void onSortByStateToggled    ( bool b );
-        void onSortByTrackerToggled  ( bool b );
+    private slots:
+        void setSortPref             ( int );
+        void setSortAscendingPref    ( bool );
+        void onSortByActivityToggled ( bool );
+        void onSortByAgeToggled      ( bool );
+        void onSortByETAToggled      ( bool );
+        void onSortByNameToggled     ( bool );
+        void onSortByProgressToggled ( bool );
+        void onSortByRatioToggled    ( bool );
+        void onSortBySizeToggled     ( bool );
+        void onSortByStateToggled    ( bool );
+        void onSortByTrackerToggled  ( bool );
 
+    private:
+        QWidget * createFilterBar( void );
+        QWidget * myFilterBar;
+        QPushButton * myFilterButtons[FilterMode::NUM_MODES];
+        QPushButton * myFilterTextButton;
+        QLineEdit * myFilterTextLineEdit;
 
-     public slots:
+    private:
+        QMenu * createOptionsMenu( void );
+        QWidget * createStatusBar( void );
+        QWidget * myStatusBar;
+        QPushButton * myAltSpeedButton;
+        QPushButton * myOptionsButton;
+        QLabel * myVisibleCountLabel;
+        QPushButton * myStatsModeButton;
+        QLabel * myStatsLabel;
+        QLabel * myDownloadSpeedLabel;
+        QLabel * myUploadSpeedLabel;
+        QLabel * myNetworkLabel;
+
+    public slots:
         void startAll( );
         void startSelected( );
         void pauseAll( );

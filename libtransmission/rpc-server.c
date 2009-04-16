@@ -37,6 +37,7 @@
 #include "trevent.h"
 #include "utils.h"
 #include "web.h"
+#include "net.h"
 
 #define MY_NAME "RPC Server"
 #define MY_REALM "Transmission"
@@ -52,6 +53,7 @@ struct tr_rpc_server
     tr_bool            isPasswordEnabled;
     tr_bool            isWhitelistEnabled;
     tr_port            port;
+    struct in_addr     bindAddress;
     struct evhttp *    httpd;
     tr_session *       session;
     char *             username;
@@ -528,11 +530,15 @@ static void
 startServer( void * vserver )
 {
     tr_rpc_server * server  = vserver;
+    tr_address addr;
 
     if( !server->httpd )
     {
+        addr.type = TR_AF_INET;
+        addr.addr.addr4 = server->bindAddress;
         server->httpd = evhttp_new( tr_eventGetBase( server->session ) );
-        evhttp_bind_socket( server->httpd, "0.0.0.0", server->port );
+        evhttp_bind_socket( server->httpd, tr_ntop_non_ts( &addr ),
+                            server->port );
         evhttp_set_gencb( server->httpd, handle_request, server );
 
     }
@@ -637,10 +643,10 @@ tr_rpcSetWhitelist( tr_rpc_server * server,
     }
 }
 
-char*
+const char*
 tr_rpcGetWhitelist( const tr_rpc_server * server )
 {
-    return tr_strdup( server->whitelistStr ? server->whitelistStr : "" );
+    return server->whitelistStr ? server->whitelistStr : "";
 }
 
 void
@@ -669,10 +675,10 @@ tr_rpcSetUsername( tr_rpc_server * server,
     dbgmsg( "setting our Username to [%s]", server->username );
 }
 
-char*
+const char*
 tr_rpcGetUsername( const tr_rpc_server * server )
 {
-    return tr_strdup( server->username ? server->username : "" );
+    return server->username ? server->username : "";
 }
 
 void
@@ -687,10 +693,10 @@ tr_rpcSetPassword( tr_rpc_server * server,
     dbgmsg( "setting our Password to [%s]", server->password );
 }
 
-char*
+const char*
 tr_rpcGetPassword( const tr_rpc_server * server )
 {
-    return tr_strdup( server->password ? server->password : "" );
+    return server->password ? server->password : "" ;
 }
 
 void
@@ -705,6 +711,15 @@ tr_bool
 tr_rpcIsPasswordEnabled( const tr_rpc_server * server )
 {
     return server->isPasswordEnabled;
+}
+
+const char *
+tr_rpcGetBindAddress( const tr_rpc_server * server )
+{
+    tr_address addr;
+    addr.type = TR_AF_INET;
+    addr.addr.addr4 = server->bindAddress;
+    return tr_ntop_non_ts( &addr );
 }
 
 /****
@@ -745,6 +760,7 @@ tr_rpcInit( tr_session  * session,
     tr_bool boolVal;
     int64_t i;
     const char *str;
+    tr_address address;
 
     s = tr_new0( tr_rpc_server, 1 );
     s->session = session;
@@ -779,6 +795,18 @@ tr_rpcInit( tr_session  * session,
         s->password = tr_ssha1( str );
     else
         s->password = strdup( str );
+
+    found = tr_bencDictFindStr( settings, TR_PREFS_KEY_RPC_BIND_ADDRESS, &str );
+    assert( found );
+    if( tr_pton( str, &address ) == NULL ) {
+        tr_err( _( "%s is not a valid address" ), str );
+        address = tr_inaddr_any;
+    } else if( address.type != TR_AF_INET ) {
+        tr_err( _( "%s is not an IPv4 address. RPC listeners must be IPv4" ),
+                   str );
+        address = tr_inaddr_any;
+    }
+    s->bindAddress = address.addr.addr4;
 
 #ifdef HAVE_ZLIB
     s->stream.zalloc = (alloc_func) Z_NULL;
