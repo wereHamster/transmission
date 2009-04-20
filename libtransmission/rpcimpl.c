@@ -409,6 +409,8 @@ addField( const tr_torrent * tor,
         tr_bencDictAddStr( d, key, st->announceResponse );
     else if( !strcmp( key, "announceURL" ) )
         tr_bencDictAddStr( d, key, st->announceURL );
+    else if( !strcmp( key, "bandwidthPriority" ) )
+        tr_bencDictAddInt( d, key, tr_torrentGetPriority( tor ) );
     else if( !strcmp( key, "comment" ) )
         tr_bencDictAddStr( d, key, inf->comment ? inf->comment : "" );
     else if( !strcmp( key, "corruptEver" ) )
@@ -515,8 +517,6 @@ addField( const tr_torrent * tor,
         tr_bencDictAddInt( d, key, (int)( st->pieceDownloadSpeed * 1024 ) );
     else if( !strcmp( key, "rateUpload" ) )
         tr_bencDictAddInt( d, key, (int)( st->pieceUploadSpeed * 1024 ) );
-    else if( !strcmp( key, "ratio" ) )
-        tr_bencDictAddReal( d, key, st->ratio );
     else if( !strcmp( key, "recheckProgress" ) )
         tr_bencDictAddReal( d, key, st->recheckProgress );
     else if( !strcmp( key, "scrapeResponse" ) )
@@ -547,12 +547,12 @@ addField( const tr_torrent * tor,
         tr_bencDictAddInt( d, key, inf->totalSize );
     else if( !strcmp( key, "uploadedEver" ) )
         tr_bencDictAddInt( d, key, st->uploadedEver );
-    else if( !strcmp( key, "uploadRatio" ) )
-        tr_bencDictAddReal( d, key, tr_getRatio( st->uploadedEver, st->downloadedEver ) );
     else if( !strcmp( key, "uploadLimit" ) )
         tr_bencDictAddInt( d, key, tr_torrentGetSpeedLimit( tor, TR_UP ) );
     else if( !strcmp( key, "uploadLimited" ) )
         tr_bencDictAddBool( d, key, tr_torrentUsesSpeedLimit( tor, TR_UP ) );
+    else if( !strcmp( key, "uploadRatio" ) )
+        tr_bencDictAddReal( d, key, st->ratio );
     else if( !strcmp( key, "wanted" ) )
     {
         tr_file_index_t i;
@@ -721,6 +721,9 @@ torrentSet( tr_session               * session,
         tr_bool      boolVal;
         tr_torrent * tor = torrents[i];
 
+        if( tr_bencDictFindInt( args_in, "bandwidthPriority", &tmp ) )
+            if( tr_isPriority( tmp ) )
+                tr_torrentSetPriority( tor, tmp );
         if( tr_bencDictFindList( args_in, "files-unwanted", &files ) )
             setFileDLs( tor, FALSE, files );
         if( tr_bencDictFindList( args_in, "files-wanted", &files ) )
