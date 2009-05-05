@@ -201,8 +201,8 @@ preallocateFileFull( const char * filename, uint64_t length )
     return success;
 }
 
-FILE*
-tr_open_file_for_reading( const char * filename, tr_bool sequential )
+int
+tr_open_file_for_scanning( const char * filename )
 {
     int fd;
     int flags;
@@ -224,14 +224,27 @@ tr_open_file_for_reading( const char * filename, tr_bool sequential )
 
     /* open the file */
     fd = open( filename, flags, 0666 );
-    if( fd < 0 )
-        return NULL;
-
+    if( fd >= 0 )
+    {
 #ifdef HAVE_POSIX_FADVISE
-    posix_fadvise( fd, 0, 0, sequential ? POSIX_FADV_SEQUENTIAL : POSIX_FADV_RANDOM );
+        posix_fadvise( fd, 0, 0, POSIX_FADV_SEQUENTIAL );
 #endif
+#ifdef SYS_DARWIN
+        fcntl( fd, F_NOCACHE, 1 );
+        fcntl( fd, F_RDAHEAD, 1 );
+#endif
+    }
 
-    return fdopen( fd, "r" );
+    return fd;
+}
+
+void
+tr_close_file( int fd )
+{
+#if defined(HAVE_POSIX_FADVISE)
+    posix_fadvise( fd, 0, 0, POSIX_FADV_DONTNEED );
+#endif
+    close( fd );
 }
 
 /**
@@ -327,7 +340,7 @@ TrCloseFile( int i )
     assert( i < gFd->openFileLimit );
     assert( fileIsOpen( o ) );
 
-    close( o->fd );
+    tr_close_file( o->fd );
     o->fd = -1;
     o->isCheckedOut = 0;
 }

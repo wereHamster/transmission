@@ -23,6 +23,7 @@
 #include <QSystemTrayIcon>
 #include <QUrl>
 #include <QSignalMapper>
+#include <QTabBar>
 
 #include <libtransmission/version.h>
 
@@ -36,6 +37,7 @@
 #include "prefs.h"
 #include "prefs-dialog.h"
 #include "session.h"
+#include "session-dialog.h"
 #include "speed.h"
 #include "stats-dialog.h"
 #include "torrent-delegate.h"
@@ -60,24 +62,9 @@ TrMainWindow :: getStockIcon( const QString& freedesktop_name, int fallback )
     return QtIconLoader::icon( freedesktop_name, fallbackIcon );
 }
 
-namespace
-{
-    QSize calculateTextButtonSizeHint( QPushButton * button )
-    {
-        QStyleOptionButton opt;
-        opt.initFrom( button );
-        QString s( button->text( ) );
-        if( s.isEmpty( ) )
-            s = QString::fromLatin1( "XXXX" );
-        QFontMetrics fm = button->fontMetrics( );
-        QSize sz = fm.size( Qt::TextShowMnemonic, s );
-        return button->style()->sizeFromContents( QStyle::CT_PushButton, &opt, sz, button ).expandedTo( QApplication::globalStrut( ) );
-    }
-}
-
-
 TrMainWindow :: TrMainWindow( Session& session, Prefs& prefs, TorrentModel& model, bool minimized ):
     myLastFullUpdateTime( 0 ),
+    mySessionDialog( new SessionDialog( session, prefs, this ) ),
     myPrefsDialog( new PrefsDialog( session, prefs, this ) ),
     myAboutDialog( new AboutDialog( this ) ),
     myStatsDialog( new StatsDialog( session, this ) ),
@@ -99,12 +86,6 @@ TrMainWindow :: TrMainWindow( Session& session, Prefs& prefs, TorrentModel& mode
     sep->setSeparator( true );
 
     ui.setupUi( this );
-
-    QString title( "Transmission" );
-    const QUrl remoteUrl( session.getRemoteUrl( ) );
-    if( !remoteUrl.isEmpty( ) )
-        title += tr( " - %1" ).arg( remoteUrl.toString() );
-    setWindowTitle( title );
 
     QStyle * style = this->style();
 
@@ -162,6 +143,7 @@ TrMainWindow :: TrMainWindow( Session& session, Prefs& prefs, TorrentModel& mode
     connect( ui.action_Contents, SIGNAL(triggered()), this, SLOT(openHelp()));
     connect( ui.action_OpenFolder, SIGNAL(triggered()), this, SLOT(openFolder()));
     connect( ui.action_Properties, SIGNAL(triggered()), this, SLOT(openProperties()));
+    connect( ui.action_SessionDialog, SIGNAL(triggered()), mySessionDialog, SLOT(show()));
     connect( ui.listView, SIGNAL(activated(const QModelIndex&)), ui.action_Properties, SLOT(trigger()));
 
     // context menu
@@ -192,6 +174,9 @@ TrMainWindow :: TrMainWindow( Session& session, Prefs& prefs, TorrentModel& mode
 
     // torrent view
     myFilterModel.setSourceModel( &myModel );
+    connect( &myModel, SIGNAL(modelReset()), this, SLOT(onModelReset()));
+    connect( &myModel, SIGNAL(rowsRemoved(const QModelIndex&,int,int)), this, SLOT(onModelReset()));
+    connect( &myModel, SIGNAL(rowsInserted(const QModelIndex&,int,int)), this, SLOT(onModelReset()));
     ui.listView->setModel( &myFilterModel );
     connect( ui.listView->selectionModel(), SIGNAL(selectionChanged(const QItemSelection&,const QItemSelection&)), this, SLOT(refreshActionSensitivity()));
 
@@ -252,9 +237,11 @@ TrMainWindow :: TrMainWindow( Session& session, Prefs& prefs, TorrentModel& mode
     foreach( int key, initKeys )
         refreshPref( key );
 
+    connect( &mySession, SIGNAL(sourceChanged()), this, SLOT(onSessionSourceChanged()) );
     connect( &mySession, SIGNAL(statsUpdated()), this, SLOT(refreshStatusBar()) );
     connect( &mySession, SIGNAL(dataReadProgress()), this, SLOT(dataReadProgress()) );
     connect( &mySession, SIGNAL(dataSendProgress()), this, SLOT(dataSendProgress()) );
+    connect( &mySession, SIGNAL(httpAuthenticationRequired()), this, SLOT(wrongAuthentication()) );
 
     if( mySession.isServer( ) )
         myNetworkLabel->hide( );
@@ -265,11 +252,31 @@ TrMainWindow :: TrMainWindow( Session& session, Prefs& prefs, TorrentModel& mode
 
     refreshActionSensitivity( );
     refreshStatusBar( );
+    refreshTitle( );
     refreshVisibleCount( );
 }
 
 TrMainWindow :: ~TrMainWindow( )
 {
+}
+
+/****
+*****
+****/
+
+void
+TrMainWindow :: onSessionSourceChanged( )
+{
+    myModel.clear( );
+}
+
+void
+TrMainWindow :: onModelReset( )
+{
+    refreshTitle( );
+    refreshVisibleCount( );
+    refreshActionSensitivity( );
+    refreshStatusBar( );
 }
 
 /****
@@ -294,18 +301,9 @@ TrMainWindow :: onSetPrefs( bool isChecked )
         onSetPrefs( );
 }
 
-#define SHOW_KEY "show-mode"
-
-void
-TrMainWindow :: onShowModeClicked( )
-{
-    setShowMode( sender()->property(SHOW_KEY).toInt() );
-}
-
 QWidget *
 TrMainWindow :: createFilterBar( )
 {
-    int i;
     QMenu * m;
     QLineEdit * e;
     QPushButton * p;
@@ -315,22 +313,21 @@ TrMainWindow :: createFilterBar( )
     const QSize smallIconSize( smallSize, smallSize );
 
     QWidget * top = myFilterBar = new QWidget;
+    
     h = new QHBoxLayout( top );
-    h->setContentsMargins( HIG::PAD_SMALL, HIG::PAD_SMALL, HIG::PAD_SMALL, HIG::PAD_SMALL );
+    h->setContentsMargins( HIG::PAD_SMALL, HIG::PAD_SMALL, HIG::PAD_SMALL, 0 );
     h->setSpacing( HIG::PAD_SMALL );
 
-        QList<QString> titles;
-        titles << tr( "A&ll" ) << tr( "&Active" ) << tr( "&Downloading" ) << tr( "&Seeding" ) << tr( "&Paused" );
-        for( i=0; i<titles.size(); ++i ) {
-            p = myFilterButtons[i] = new QPushButton( titles[i] );
-            p->setProperty( SHOW_KEY, i );
-            p->setFlat( true );
-            p->setCheckable( true );
-            p->setMaximumSize( calculateTextButtonSizeHint( p ) );
-            connect( p, SIGNAL(clicked()), this, SLOT(onShowModeClicked()));
-            h->addWidget( p );
-        }
+        QTabBar * tabBar = myFilterTabs = new QTabBar( this );
+        tabBar->addTab( tr( "A&ll" ) );
+        tabBar->addTab( tr( "&Active" ) );
+        tabBar->addTab( tr( "&Downloading" ) );
+        tabBar->addTab( tr( "&Seeding" ) );
+        tabBar->addTab( tr( "&Paused" ) );
+        connect( tabBar, SIGNAL(currentChanged(int)), this, SLOT(setShowMode(int)));
+        h->addWidget( tabBar );
 
+    h->addSpacing( HIG::PAD_BIG );
     h->addStretch( 1 );
 
         a = new QActionGroup( this );
@@ -368,7 +365,8 @@ QWidget *
 TrMainWindow :: createStatusBar( )
 {
     QMenu * m;
-    QLabel * l;
+    QLabel *l, *l2;
+    QWidget *w;
     QHBoxLayout * h;
     QPushButton * p;
     QActionGroup * a;
@@ -378,6 +376,7 @@ TrMainWindow :: createStatusBar( )
     QWidget * top = myStatusBar = new QWidget;
     h = new QHBoxLayout( top );
     h->setContentsMargins( HIG::PAD_SMALL, HIG::PAD_SMALL, HIG::PAD_SMALL, HIG::PAD_SMALL );
+    h->setSpacing( HIG::PAD_SMALL );
 
         p = myOptionsButton = new TrIconPushButton( this );
         p->setIcon( QIcon( ":/icons/options.png" ) );
@@ -420,25 +419,30 @@ TrMainWindow :: createStatusBar( )
         p->setFlat( true );
         p->setMenu( m );
         h->addWidget( p );  
-        h->addSpacing( HIG :: PAD_SMALL );
         l = myStatsLabel = new QLabel( this );
         h->addWidget( l );  
    
-    h->addStretch( 1 );
-
+        w = new QWidget( this );
+        w->setMinimumSize( HIG::PAD_BIG, 1 );
+        w->setMaximumSize( HIG::PAD_BIG, 1 );
+        h->addWidget( w );
         l = new QLabel( this );
         l->setPixmap( getStockIcon( "go-down", QStyle::SP_ArrowDown ).pixmap( smallIconSize ) );
         h->addWidget( l );
-        l = myDownloadSpeedLabel = new QLabel( this );
-        h->addWidget( l );
+        l2 = myDownloadSpeedLabel = new QLabel( this );
+        h->addWidget( l2 );
+        myDownStatusWidgets << w << l << l2;
 
-    h->addSpacing( HIG :: PAD_BIG );
-
+        w = new QWidget( this );
+        w->setMinimumSize( HIG::PAD_BIG, 1 );
+        w->setMaximumSize( HIG::PAD_BIG, 1 );
+        h->addWidget( w );
         l = new QLabel;
         l->setPixmap( getStockIcon( "go-up", QStyle::SP_ArrowUp ).pixmap( smallIconSize ) );
         h->addWidget( l );
-        l = myUploadSpeedLabel = new QLabel;
-        h->addWidget( l );
+        l2 = myUploadSpeedLabel = new QLabel;
+        h->addWidget( l2 );
+        myUpStatusWidgets << w << l << l2;
 
     return top;
 }
@@ -590,6 +594,16 @@ TrMainWindow :: openHelp( )
 }
 
 void
+TrMainWindow :: refreshTitle( )
+{
+    QString title( "Transmission" );
+    const QUrl url( mySession.getRemoteUrl( ) );
+    if( !url.isEmpty() )
+        title += tr( " - %1" ).arg( url.toString(QUrl::RemoveUserInfo) );
+    setWindowTitle( title );
+}
+
+void
 TrMainWindow :: refreshVisibleCount( )
 {
     const int visibleCount( myFilterModel.rowCount( ) );
@@ -600,6 +614,7 @@ TrMainWindow :: refreshVisibleCount( )
     else
         str = tr( "%L1 of %Ln Torrent(s)", 0, totalCount ).arg( visibleCount );
     myVisibleCountLabel->setText( str );
+    myVisibleCountLabel->setVisible( totalCount > 0 );
 }
 
 void
@@ -609,6 +624,9 @@ TrMainWindow :: refreshStatusBar( )
     const Speed down( myModel.getDownloadSpeed( ) );
     myUploadSpeedLabel->setText( Utils :: speedToString( up ) );
     myDownloadSpeedLabel->setText( Utils :: speedToString( down ) );
+    foreach( QWidget * w, myUpStatusWidgets ) w->setVisible( !up.isZero( ) );
+    foreach( QWidget * w, myDownStatusWidgets ) w->setVisible( !down.isZero( ) );
+
     const QString mode( myPrefs.getString( Prefs::STATUSBAR_STATS ) );
     QString str;
 
@@ -712,22 +730,22 @@ TrMainWindow :: getSelectedTorrents( ) const
 void
 TrMainWindow :: startSelected( )
 {
-    mySession.start( getSelectedTorrents( ) );
+    mySession.startTorrents( getSelectedTorrents( ) );
 }
 void
 TrMainWindow :: pauseSelected( )
 {
-    mySession.pause( getSelectedTorrents( ) );
+    mySession.pauseTorrents( getSelectedTorrents( ) );
 }
 void
 TrMainWindow :: startAll( )
 {
-    mySession.start( );
+    mySession.startTorrents( );
 }
 void
 TrMainWindow :: pauseAll( )
 {
-    mySession.pause( );
+    mySession.pauseTorrents( );
 }
 void
 TrMainWindow :: removeSelected( )
@@ -755,11 +773,6 @@ TrMainWindow :: reannounceSelected( )
 **/
 
 void TrMainWindow :: setShowMode     ( int i ) { myPrefs.set( Prefs::FILTER_MODE, FilterMode( i ) ); }
-void TrMainWindow :: showAll         ( ) { setShowMode( FilterMode :: SHOW_ALL ); }
-void TrMainWindow :: showActive      ( ) { setShowMode( FilterMode :: SHOW_ACTIVE ); }
-void TrMainWindow :: showDownloading ( ) { setShowMode( FilterMode :: SHOW_DOWNLOADING ); }
-void TrMainWindow :: showSeeding     ( ) { setShowMode( FilterMode :: SHOW_SEEDING ); }
-void TrMainWindow :: showPaused      ( ) { setShowMode( FilterMode :: SHOW_PAUSED ); }
 
 void TrMainWindow :: filterByName    ( ) { myFilterModel.setTextMode( TorrentFilter :: FILTER_BY_NAME ); }
 void TrMainWindow :: filterByTracker ( ) { myFilterModel.setTextMode( TorrentFilter :: FILTER_BY_TRACKER ); }
@@ -883,9 +896,7 @@ TrMainWindow :: refreshPref( int key )
             break;
 
         case Prefs::FILTER_MODE:
-            i = myPrefs.get<FilterMode>(key).mode( );
-            for( int j=0; j<FilterMode::NUM_MODES; ++j )
-                myFilterButtons[j]->setChecked( i==j );
+            myFilterTabs->setCurrentIndex( myPrefs.get<FilterMode>(key).mode( ) );
             break;
 
         case Prefs::FILTERBAR:
@@ -1045,4 +1056,11 @@ TrMainWindow :: dataSendProgress( )
 {
     myLastSendTime = time( NULL );
     updateNetworkIcon( );
+}
+
+void
+TrMainWindow :: wrongAuthentication( )
+{
+    mySession.stop( );
+    mySessionDialog->show( );
 }

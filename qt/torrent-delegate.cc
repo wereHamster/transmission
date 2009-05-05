@@ -332,6 +332,10 @@ TorrentDelegate :: drawTorrent( QPainter * painter, const QStyleOptionViewItem& 
     if( option.state & QStyle::State_Selected ) cr = QPalette::HighlightedText;
     else cr = QPalette::Text;
 
+    QStyle::State progressBarState( option.state );
+    if( isPaused ) progressBarState = QStyle::State_None;
+    progressBarState |= QStyle::State_Small;
+
     // layout
     const QSize m( margin( *style ) );
     QRect fillArea( option.rect );
@@ -363,8 +367,8 @@ TorrentDelegate :: drawTorrent( QPainter * painter, const QStyleOptionViewItem& 
     myProgressBarStyle->rect = barArea;
     myProgressBarStyle->direction = option.direction;
     myProgressBarStyle->palette = option.palette;
-    myProgressBarStyle->palette.setCurrentColorGroup( QPalette::Disabled );
-    myProgressBarStyle->state = QStyle::State_Off;
+    myProgressBarStyle->palette.setCurrentColorGroup( cg );
+    myProgressBarStyle->state = progressBarState;
     myProgressBarStyle->progress = int(myProgressBarStyle->minimum + ((tor.percentDone() * (myProgressBarStyle->maximum - myProgressBarStyle->minimum))));
     style->drawControl( QStyle::CE_ProgressBar, myProgressBarStyle, painter );
 

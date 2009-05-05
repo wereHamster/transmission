@@ -42,8 +42,8 @@ static tr_bool
 verifyTorrent( tr_torrent * tor, tr_bool * stopFlag )
 {
     SHA_CTX sha;
-    FILE * fp = NULL;
-    size_t filePos = 0;
+    int fd = -1;
+    int64_t filePos = 0;
     tr_bool changed = 0;
     tr_bool hadPiece = 0;
     uint32_t piecePos = 0;
@@ -72,11 +72,11 @@ verifyTorrent( tr_torrent * tor, tr_bool * stopFlag )
         }
 
         /* if we're starting a new file... */
-        if( !filePos && !fp )
+        if( !filePos && (fd<0) )
         {
             char * filename = tr_buildPath( tor->downloadDir, file->name, NULL );
-            fp = tr_open_file_for_reading( filename, TRUE );
-            /* fprintf( stderr, "opening file #%d (%s) -- %p\n", fileIndex, filename, fp ); */
+            fd = tr_open_file_for_scanning( filename );
+            /* fprintf( stderr, "opening file #%d (%s) -- %d\n", fileIndex, filename, fd ); */
             tr_free( filename );
         }
 
@@ -88,8 +88,8 @@ verifyTorrent( tr_torrent * tor, tr_bool * stopFlag )
         /* fprintf( stderr, "reading this pass: %d\n", (int)bytesThisPass ); */
 
         /* read a bit */
-        if( fp && !fseek( fp, filePos, SEEK_SET ) ) {
-            const int64_t numRead = fread( buffer, 1, bytesThisPass, fp );
+        if( (fd>=0) && tr_lseek( fd, filePos, SEEK_SET ) != -1 ) {
+            const int64_t numRead = read( fd, buffer, bytesThisPass );
             if( numRead == bytesThisPass )
                 SHA1_Update( &sha, buffer, numRead );
         }
@@ -129,15 +129,15 @@ verifyTorrent( tr_torrent * tor, tr_bool * stopFlag )
         if( leftInFile == 0 )
         {
             /* fprintf( stderr, "closing file\n" ); */
-            if( fp != NULL ) { fclose( fp ); fp = NULL; }
+            if( fd >= 0 ) { tr_close_file( fd ); fd = -1; }
             ++fileIndex;
             filePos = 0;
         }
     }
 
     /* cleanup */
-    if( fp != NULL )
-        fclose( fp );
+    if( fd >= 0 )
+        tr_close_file( fd );
     tr_free( buffer );
 
 #ifdef STOPWATCH

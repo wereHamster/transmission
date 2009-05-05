@@ -86,33 +86,30 @@ class PeerItem: public QTreeWidgetItem
         QString status;
 
     public:
-        PeerItem( ) { }
         virtual ~PeerItem( ) { }
-
-    public:
-        void setStatus( const QString& s ) {
-            status = s;
-        }
-        void setPeer( const Peer& p ) {
+        PeerItem( const Peer& p ) {
             peer = p;
-            int quads[4];
-            if( sscanf( p.address.toUtf8().constData(), "%d.%d.%d.%d", quads+0, quads+1, quads+2, quads+3 ) == 4 )
-                collatedAddress.sprintf( "%03d.%03d.%03d.%03d", quads[0], quads[1], quads[2], quads[3] );
+            int q[4];
+            if( sscanf( p.address.toUtf8().constData(), "%d.%d.%d.%d", q+0, q+1, q+2, q+3 ) == 4 )
+                collatedAddress.sprintf( "%03d.%03d.%03d.%03d", q[0], q[1], q[2], q[3] );
             else
                 collatedAddress = p.address;
         }
+    public:
+        void refresh( const Peer& p ) { peer = p; }
+        void setStatus( const QString& s ) { status = s; }
         virtual bool operator< ( const QTreeWidgetItem & other ) const {
-            const PeerItem * that = dynamic_cast<const PeerItem*>(&other);
+            const PeerItem * i = dynamic_cast<const PeerItem*>(&other);
             QTreeWidget * tw( treeWidget( ) );
             const int column = tw ? tw->sortColumn() : 0;
             switch( column ) {
-                case COL_UP: return peer.rateToPeer < that->peer.rateToPeer;
-                case COL_DOWN: return peer.rateToClient < that->peer.rateToClient;
-                case COL_PERCENT: return peer.progress < that->peer.progress;
-                case COL_STATUS: return status < that->status;
-                case COL_ADDRESS: return collatedAddress < that->collatedAddress;
-                case COL_CLIENT: return peer.clientName < that->peer.clientName;
-                default: /*COL_LOCK*/ return peer.isEncrypted && !that->peer.isEncrypted;
+                case COL_UP: return peer.rateToPeer < i->peer.rateToPeer;
+                case COL_DOWN: return peer.rateToClient < i->peer.rateToClient;
+                case COL_PERCENT: return peer.progress < i->peer.progress;
+                case COL_STATUS: return status < i->status;
+                case COL_CLIENT: return peer.clientName < i->peer.clientName;
+                case COL_LOCK: return peer.isEncrypted && !i->peer.isEncrypted;
+                default: return collatedAddress < i->collatedAddress;
             }
         }
 };
@@ -148,10 +145,10 @@ Details :: Details( Session& session, TorrentModel& model, QWidget * parent ):
     layout->addWidget( t );
 
     QDialogButtonBox * buttons = new QDialogButtonBox( QDialogButtonBox::Close, Qt::Horizontal, this );
-    connect( buttons, SIGNAL(rejected()), this, SLOT(deleteLater()) ); // "close" triggers rejected
+    connect( buttons, SIGNAL(rejected()), this, SLOT(deleteLater()));
     layout->addWidget( buttons );
 
-    connect( &myTimer, SIGNAL(timeout()), this, SLOT(onTimer()) );
+    connect( &myTimer, SIGNAL(timeout()), this, SLOT(onTimer()));
 
     onTimer( );
     myTimer.setSingleShot( false );
@@ -174,6 +171,8 @@ Details :: setIds( const QSet<int>& ids )
         if( tor )
             disconnect( tor, SIGNAL(torrentChanged(int)), this, SLOT(onTorrentChanged()) );
     }
+
+    myFileTreeView->clear( );
 
     myIds = ids;
 
@@ -220,10 +219,11 @@ Details :: refresh( )
     const bool single = n == 1;
     const QString blank;
     const QFontMetrics fm( fontMetrics( ) );
-    QSet<const Torrent*> torrents;
-    const Torrent * tor;
-    QSet<QString> strings;
+    QList<const Torrent*> torrents;
     QString string;
+    const QString none = tr( "None" );
+    const QString mixed = tr( "Mixed" );
+    const QString unknown = tr( "Unknown" );
 
     // build a list of torrents
     foreach( int id, myIds ) {
@@ -238,11 +238,15 @@ Details :: refresh( )
 
     // myStateLabel
     if( torrents.empty( ) )
-        string = tr( "None" );
+        string = none;
     else {
-        strings.clear( );
-        foreach( tor, torrents ) strings.insert( tor->activityString( ) );
-        string = strings.size()==1 ? *strings.begin() : blank;
+        string = torrents[0]->activityString( );
+        foreach( const Torrent* t, torrents ) {
+            if( string != t->activityString( ) ) {
+                string = mixed;
+                break;
+            }
+        }
     }
     myStateLabel->setText( string );
 
@@ -252,9 +256,9 @@ Details :: refresh( )
     else {
         double sizeWhenDone = 0;
         double leftUntilDone = 0;
-        foreach( tor, torrents ) {
-            sizeWhenDone += tor->sizeWhenDone( );
-            leftUntilDone += tor->leftUntilDone( );
+        foreach( const Torrent * t, torrents ) {
+            sizeWhenDone += t->sizeWhenDone( );
+            leftUntilDone += t->leftUntilDone( );
         }
         string = locale.toString( 100.0*((sizeWhenDone-leftUntilDone)/sizeWhenDone), 'f', 2 );
     }
@@ -264,114 +268,200 @@ Details :: refresh( )
     int64_t haveTotal = 0;
     int64_t haveVerified = 0;
     int64_t verifiedPieces = 0;
-    foreach( tor, torrents ) {
-        haveTotal += tor->haveTotal( );
-        haveVerified += tor->haveVerified( );
-        verifiedPieces += tor->haveVerified( ) / tor->pieceSize( );
+    foreach( const Torrent * t, torrents ) {
+        haveTotal += t->haveTotal( );
+        const uint64_t v = t->haveVerified( );
+        haveVerified += v;
+        verifiedPieces += v / t->pieceSize( );
     }
     myHaveLabel->setText( tr( "%1 (%2 verified in %L3 pieces)" )
                             .arg( Utils::sizeToString( haveTotal ) )
                             .arg( Utils::sizeToString( haveVerified ) )
                             .arg( verifiedPieces ) );
 
-    int64_t num = 0;
-    foreach( tor, torrents ) num += tor->downloadedEver( );
-    myDownloadedLabel->setText( Utils::sizeToString( num ) );
+    int64_t sum = 0;
+    foreach( const Torrent * t, torrents ) sum += t->downloadedEver( );
+    myDownloadedLabel->setText( Utils::sizeToString( sum ) );
 
-    num = 0;
-    foreach( tor, torrents ) num += tor->uploadedEver( );
-    myUploadedLabel->setText( Utils::sizeToString( num ) );
+    sum = 0;
+    foreach( const Torrent * t, torrents ) sum += t->uploadedEver( );
+    myUploadedLabel->setText( Utils::sizeToString( sum ) );
 
-    num = 0;
-    foreach( tor, torrents ) num += tor->failedEver( );
-    myFailedLabel->setText( Utils::sizeToString( num ) );
+    sum = 0;
+    foreach( const Torrent *t, torrents ) sum += t->failedEver( );
+    myFailedLabel->setText( Utils::sizeToString( sum ) );
 
     double d = 0;
-    foreach( tor, torrents ) d += tor->ratio( );
+    foreach( const Torrent *t, torrents ) d += t->ratio( );
     myRatioLabel->setText( Utils :: ratioToString( d / n ) );
 
     Speed speed;
-    foreach( tor, torrents ) speed += tor->swarmSpeed( );
+    foreach( const Torrent *t, torrents ) speed += t->swarmSpeed( );
     mySwarmSpeedLabel->setText( Utils::speedToString( speed ) );
 
-    strings.clear( );
-    foreach( tor, torrents ) strings.insert( tor->dateAdded().toString() );
-    string = strings.size()==1 ? *strings.begin() : blank;
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        string = torrents[0]->dateAdded().toString();
+        foreach( const Torrent * t, torrents ) {
+            if( string != t->dateAdded().toString() ) {
+                string = mixed;
+                break;
+            }
+        }
+    }
     myAddedDateLabel->setText( string );
 
-    strings.clear( );
-    foreach( tor, torrents ) {
-        QDateTime dt = tor->lastActivity( );
-        strings.insert( dt.isNull() ? tr("Never") : dt.toString() );
-    }
-    string = strings.size()==1 ? *strings.begin() : blank;
-    myActivityLabel->setText( string );
 
     if( torrents.empty( ) )
-        string = tr( "None" );
+        string = none;
     else {
-        strings.clear( );
-        foreach( tor, torrents ) strings.insert( tor->getError( ) );
-        string = strings.size()==1 ? *strings.begin() : blank;
+        QDateTime latest = torrents[0]->lastActivity( );
+        foreach( const Torrent * t, torrents ) {
+            const QDateTime dt = t->lastActivity( );
+            if( latest < dt )
+                latest = dt;
+        }
+        string = latest.toString( );
+    }
+    myActivityLabel->setText( string );
+
+
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        string = torrents[0]->getError( );
+        foreach( const Torrent * t, torrents ) {
+            if( string != t->getError( ) ) {
+                string = mixed;
+                break;
+            }
+        }
     }
     myErrorLabel->setText( string );
+
 
     ///
     /// information tab
     ///
 
     // myPiecesLabel
-    int64_t pieceCount = 0;
-    int64_t pieceSize = 0;
-    foreach( tor, torrents ) {
-        pieceCount += tor->pieceCount( );
-        pieceSize += tor->pieceSize( );
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        int64_t pieceCount = 0;
+        uint64_t baseSize = torrents[0]->pieceSize( );
+        foreach( const Torrent * t, torrents ) {
+            pieceCount += t->pieceCount( );
+            if( baseSize != t->pieceSize( ) )
+                baseSize = 0;
+        }
+        if( !baseSize ) // mixed piece size
+            string = tr( "%L1 Pieces" ).arg( pieceCount );
+        else
+            string = tr( "%L1 Pieces @ %2" ).arg( pieceCount )
+                                            .arg( Utils::sizeToString( baseSize ) );
     }
-    myPiecesLabel->setText( tr( "%L1 Pieces @ %2" ).arg( pieceCount )
-                                                   .arg( Utils::sizeToString( pieceSize ) ) );
+    myPiecesLabel->setText( string );
 
     // myHashLabel
-    strings.clear( );
-    foreach( tor, torrents ) strings.insert( tor->hashString( ) );
-    string = strings.size()==1 ? *strings.begin() : blank;
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        string = torrents[0]->hashString( );
+        foreach( const Torrent * t, torrents ) {
+            if( string != t->hashString( ) ) {
+                string = mixed;
+                break;
+            }
+        }
+    }
     myHashLabel->setText( string );
 
     // myPrivacyLabel
-    strings.clear( );
-    foreach( tor, torrents )
-        strings.insert( tor->isPrivate( ) ? tr( "Private to this tracker -- PEX disabled" )
-                                          : tr( "Public torrent" ) );
-    string = strings.size()==1 ? *strings.begin() : blank;
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        bool b = torrents[0]->isPrivate( );
+        string = b ? tr( "Private to this tracker -- PEX disabled" )
+                   : tr( "Public torrent" );
+        foreach( const Torrent * t, torrents ) {
+            if( b != t->isPrivate( ) ) {
+                string = mixed;
+                break;
+            }
+        }
+    }
     myPrivacyLabel->setText( string );
 
     // myCommentBrowser
-    strings.clear( );
-    foreach( tor, torrents ) strings.insert( tor->comment( ) );
-    string = strings.size()==1 ? *strings.begin() : blank;
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        string = torrents[0]->comment( );
+        foreach( const Torrent * t, torrents ) {
+            if( string != t->comment( ) ) {
+                string = mixed;
+                break;
+            }
+        }
+    }
     myCommentBrowser->setText( string );
 
     // myCreatorLabel
-    strings.clear( );
-    foreach( tor, torrents ) strings.insert( tor->creator().isEmpty() ? tr( "Unknown" ) : tor->creator() );
-    string = strings.size()==1 ? *strings.begin() : blank;
-    myCreatorLabel->setText( string );
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        string = torrents[0]->creator( );
+        foreach( const Torrent * t, torrents ) {
+            if( string != t->creator( ) ) {
+                string = mixed;
+                break;
+            }
+        }
+    }
+    myCreatorLabel->setText( string.isEmpty() ? unknown : string );
 
     // myDateCreatedLabel
-    strings.clear( );
-    foreach( tor, torrents ) strings.insert( tor->dateCreated().toString() );
-    string = strings.size()==1 ? *strings.begin() : blank;
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        string = torrents[0]->dateCreated().toString();
+        foreach( const Torrent * t, torrents ) {
+            if( string != t->dateCreated().toString() ) {
+                string = mixed;
+                break;
+            }
+        }
+    }
     myDateCreatedLabel->setText( string );
 
     // myDestinationLabel
-    strings.clear( );
-    foreach( tor, torrents ) strings.insert( tor->getPath( ) );
-    string = strings.size()==1 ? *strings.begin() : blank;
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        string = torrents[0]->getPath( );
+        foreach( const Torrent * t, torrents ) {
+            if( string != t->getPath( ) ) {
+                string = mixed;
+                break;
+            }
+        }
+    }
     myDestinationLabel->setText( string );
 
     // myTorrentFileLabel
-    strings.clear( );
-    foreach( tor, torrents ) strings.insert( tor->torrentFile( ) );
-    string = strings.size()==1 ? *strings.begin() : blank;
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        string = torrents[0]->torrentFile( );
+        foreach( const Torrent * t, torrents ) {
+            if( string != t->torrentFile( ) ) {
+                string = mixed;
+                break;
+            }
+        }
+    }
     myTorrentFileLabel->setText( string );
 
     ///
@@ -382,6 +472,7 @@ Details :: refresh( )
     {
         int i;
         const Torrent * baseline = *torrents.begin();
+        const Torrent * tor;
         bool uniform;
         bool baselineFlag;
         int baselineInt;
@@ -417,11 +508,11 @@ Details :: refresh( )
         myBandwidthPriorityCombo->blockSignals( false );
 
         mySingleDownSpin->blockSignals( true );
-        mySingleDownSpin->setValue( tor->downloadLimit().kbps() );
+        mySingleDownSpin->setValue( int(tor->downloadLimit().kbps()) );
         mySingleDownSpin->blockSignals( false );
 
         mySingleUpSpin->blockSignals( true );
-        mySingleUpSpin->setValue( tor->uploadLimit().kbps() );
+        mySingleUpSpin->setValue( int(tor->uploadLimit().kbps()) );
         mySingleUpSpin->blockSignals( false );
 
         myPeerLimitSpin->blockSignals( true );
@@ -452,19 +543,122 @@ Details :: refresh( )
     }
 
     // tracker tab
+    //
     const time_t now( time( 0 ) );
-    myScrapeTimePrevLabel->setText( tor ? tor->lastScrapeTime().toString() : blank );
-    myScrapeResponseLabel->setText( tor ? tor->scrapeResponse() : blank );
-    myScrapeTimeNextLabel->setText( Utils :: timeToString( tor ? tor->nextScrapeTime().toTime_t() - now : 0 ) );
-    myAnnounceTimePrevLabel->setText( tor ? tor->lastScrapeTime().toString() : blank );
-    myAnnounceTimeNextLabel->setText( Utils :: timeToString( tor ? tor->nextAnnounceTime().toTime_t() - now : 0  ) );
-    myAnnounceManualLabel->setText( Utils :: timeToString( tor ? tor->manualAnnounceTime().toTime_t() - now : 0 ) );
-    myAnnounceResponseLabel->setText( tor ? tor->announceResponse( ) : blank );
+
+    // myScrapeTimePrevLabel
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        QDateTime latest = torrents[0]->lastScrapeTime();
+        foreach( const Torrent * t, torrents ) {
+            const QDateTime e = t->lastScrapeTime();
+            if( latest < e )
+                latest = e;
+        }
+        string = latest.toString();
+    }
+    myScrapeTimePrevLabel->setText( string );
+
+    // myScrapeResponseLabel
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        string = torrents[0]->scrapeResponse( );
+        foreach( const Torrent * t, torrents ) {
+           if( string != t->scrapeResponse( ) ) {
+               string = mixed;
+               break;
+           }
+        }
+    }
+    myScrapeResponseLabel->setText( string );
+
+    // myScrapeTimeNextLabel
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        QDateTime soonest = torrents[0]->nextScrapeTime( );
+        foreach( const Torrent * t, torrents ) {
+            const QDateTime e = t->nextScrapeTime( );
+            if( soonest > e )
+                soonest = e;
+        }
+        string = Utils::timeToString( soonest.toTime_t() - now );
+    }
+    myScrapeTimeNextLabel->setText( string );
+
+    // myAnnounceTimePrevLabel
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        QDateTime latest = torrents[0]->lastAnnounceTime();
+        foreach( const Torrent * t, torrents ) {
+            const QDateTime e = t->lastAnnounceTime();
+            if( latest < e )
+                latest = e;
+        }
+        string = latest.toString();
+    }
+    myAnnounceTimePrevLabel->setText( string );
+
+    // myAnnounceTimeNextLabel
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        QDateTime soonest = torrents[0]->nextAnnounceTime( );
+        foreach( const Torrent * t, torrents ) {
+            const QDateTime e = t->nextAnnounceTime( );
+            if( soonest > e )
+                soonest = e;
+        }
+        string = Utils::timeToString( soonest.toTime_t() - now );
+    }
+    myAnnounceTimeNextLabel->setText( string );
+
+    // myAnnounceManualLabel
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        QDateTime soonest = torrents[0]->nextAnnounceTime( );
+        foreach( const Torrent * t, torrents ) {
+            const QDateTime e = t->nextAnnounceTime( );
+            if( soonest > e )
+                soonest = e;
+        }
+        if( soonest <= QDateTime::currentDateTime( ) )
+            string = tr( "Now" );
+        else
+            string = Utils::timeToString( soonest.toTime_t() - now );
+    }
+    myAnnounceManualLabel->setText( string );
+
+    // myAnnounceResponseLabel
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        string = torrents[0]->announceResponse( );
+        foreach( const Torrent * t, torrents ) {
+           if( string != t->announceResponse( ) ) {
+               string = mixed;
+               break;
+           }
+        }
+    }
+    myAnnounceResponseLabel->setText( string );
 
     // myTrackerLabel
-    strings.clear( );
-    foreach( tor, torrents ) strings.insert( QUrl(tor->announceUrl()).host() );
-    string = strings.size()==1 ? *strings.begin() : blank;
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        string = QUrl(torrents[0]->announceUrl()).host();
+        foreach( const Torrent * t, torrents ) {
+            if( string != QUrl(t->announceUrl()).host() ) {
+                string = mixed;
+                break;
+            }
+        }
+    }
     myTrackerLabel->setText( string );
 
     ///
@@ -472,78 +666,86 @@ Details :: refresh( )
     ///
 
     i = 0;
-    foreach( tor, torrents ) i += tor->seeders( );
+    foreach( const Torrent * t, torrents ) i += t->seeders( );
     mySeedersLabel->setText( locale.toString( i ) );
 
     i = 0;
-    foreach( tor, torrents ) i += tor->leechers( );
+    foreach( const Torrent * t, torrents ) i += t->leechers( );
     myLeechersLabel->setText( locale.toString( i ) );
 
     i = 0;
-    foreach( tor, torrents ) i += tor->timesCompleted( );
+    foreach( const Torrent * t, torrents ) i += t->timesCompleted( );
     myTimesCompletedLabel->setText( locale.toString( i ) );
 
-    PeerList peers;
-    foreach( tor, torrents ) peers << tor->peers( );
     QMap<QString,QTreeWidgetItem*> peers2;
     QList<QTreeWidgetItem*> newItems;
-    static const QIcon myEncryptionIcon( ":/icons/encrypted.png" );
-    static const QIcon myEmptyIcon;
-    foreach( const Peer& peer, peers )
+    foreach( const Torrent * t, torrents )
     {
-        PeerItem * item = (PeerItem*) myPeers.value( peer.address, 0 );
-        if( item == 0 ) { // new peer has connected
-            item = new PeerItem;
-            item->setTextAlignment( COL_UP, Qt::AlignRight );
-            item->setTextAlignment( COL_DOWN, Qt::AlignRight );
-            item->setTextAlignment( COL_PERCENT, Qt::AlignRight );
-            newItems << item;
-        }
+        const QString idStr( QString::number( t->id( ) ) );
+        PeerList peers = t->peers( );
 
-        QString code;
-        if( peer.isDownloadingFrom )                           { code += 'D'; }
-        else if( peer.clientIsInterested )                     { code += 'd'; }
-        if( peer.isUploadingTo )                               { code += 'U'; }
-        else if( peer.peerIsInterested )                       { code += 'u'; }
-        if( !peer.clientIsChoked && !peer.clientIsInterested ) { code += 'K'; }
-        if( !peer.peerIsChoked && !peer.peerIsInterested )     { code += '?'; }
-        if( peer.isEncrypted )                                 { code += 'E'; }
-        if( peer.isIncoming )                                  { code += 'I'; }
+        foreach( const Peer& peer, peers )
+        {
+            const QString key = idStr + ":" + peer.address;
+            PeerItem * item = (PeerItem*) myPeers.value( key, 0 );
 
-        item->setPeer( peer );
-        item->setStatus( code );
-
-        QString codeTip;
-        foreach( QChar ch, code ) {
-            QString txt;
-            switch( ch.toAscii() ) {
-                case 'O': txt = tr( "Optimistic unchoke" ); break;
-                case 'D': txt = tr( "Downloading from this peer" ); break;
-                case 'd': txt = tr( "We would download from this peer if they would let us" ); break;
-                case 'U': txt = tr( "Uploading to peer" ); break;
-                case 'u': txt = tr( "We would upload to this peer if they asked" ); break;
-                case 'K': txt = tr( "Peer has unchoked us, but we're not interested" ); break;
-                case '?': txt = tr( "We unchoked this peer, but they're not interested" ); break;
-                case 'E': txt = tr( "Encrypted connection" ); break;
-                case 'X': txt = tr( "Peer was discovered through Peer Exchange (PEX)" ); break;
-                case 'I': txt = tr( "Peer is an incoming connection" ); break;
+            if( item == 0 ) // new peer has connected
+            {
+                static const QIcon myEncryptionIcon( ":/icons/encrypted.png" );
+                static const QIcon myEmptyIcon;
+                item = new PeerItem( peer );
+                item->setTextAlignment( COL_UP, Qt::AlignRight );
+                item->setTextAlignment( COL_DOWN, Qt::AlignRight );
+                item->setTextAlignment( COL_PERCENT, Qt::AlignRight );
+                item->setIcon( COL_LOCK, peer.isEncrypted ? myEncryptionIcon : myEmptyIcon );
+                item->setToolTip( COL_LOCK, peer.isEncrypted ? tr( "Encrypted connection" ) : "" );
+                item->setText( COL_ADDRESS, peer.address );
+                item->setText( COL_CLIENT, peer.clientName );
+                newItems << item;
             }
-            if( !txt.isEmpty( ) )
-                codeTip += QString("%1: %2\n").arg(ch).arg(txt);
-        }
-        if( !codeTip.isEmpty() )
-            codeTip.resize( codeTip.size()-1 ); // eat the trailing linefeed
 
-        item->setIcon( COL_LOCK, peer.isEncrypted ? myEncryptionIcon : myEmptyIcon );
-        item->setToolTip( COL_LOCK, peer.isEncrypted ? tr( "Encrypted connection" ) : "" );
-        item->setText( COL_UP, peer.rateToPeer.isZero() ? "" : Utils::speedToString( peer.rateToPeer ) );
-        item->setText( COL_DOWN, peer.rateToClient.isZero() ? "" : Utils::speedToString( peer.rateToClient ) );
-        item->setText( COL_PERCENT, peer.progress > 0 ? QString( "%1%" ).arg( locale.toString((int)(peer.progress*100.0))) : "" );
-        item->setText( COL_STATUS, code );
-        item->setToolTip( COL_STATUS, codeTip );
-        item->setText( COL_ADDRESS, peer.address );
-        item->setText( COL_CLIENT, peer.clientName );
-        peers2.insert( peer.address, item );
+            QString code;
+            if( peer.isDownloadingFrom )                           { code += 'D'; }
+            else if( peer.clientIsInterested )                     { code += 'd'; }
+            if( peer.isUploadingTo )                               { code += 'U'; }
+            else if( peer.peerIsInterested )                       { code += 'u'; }
+            if( !peer.clientIsChoked && !peer.clientIsInterested ) { code += 'K'; }
+            if( !peer.peerIsChoked && !peer.peerIsInterested )     { code += '?'; }
+            if( peer.isEncrypted )                                 { code += 'E'; }
+            if( peer.isIncoming )                                  { code += 'I'; }
+            item->setStatus( code );
+            item->refresh( peer );
+
+            QString codeTip;
+            foreach( QChar ch, code ) {
+                QString txt;
+                switch( ch.toAscii() ) {
+                    case 'O': txt = tr( "Optimistic unchoke" ); break;
+                    case 'D': txt = tr( "Downloading from this peer" ); break;
+                    case 'd': txt = tr( "We would download from this peer if they would let us" ); break;
+                    case 'U': txt = tr( "Uploading to peer" ); break;
+                    case 'u': txt = tr( "We would upload to this peer if they asked" ); break;
+                    case 'K': txt = tr( "Peer has unchoked us, but we're not interested" ); break;
+                    case '?': txt = tr( "We unchoked this peer, but they're not interested" ); break;
+                    case 'E': txt = tr( "Encrypted connection" ); break;
+                    case 'X': txt = tr( "Peer was discovered through Peer Exchange (PEX)" ); break;
+                    case 'I': txt = tr( "Peer is an incoming connection" ); break;
+                }
+                if( !txt.isEmpty( ) )
+                    codeTip += QString("%1: %2\n").arg(ch).arg(txt);
+            }
+
+            if( !codeTip.isEmpty() )
+                codeTip.resize( codeTip.size()-1 ); // eat the trailing linefeed
+
+            item->setText( COL_UP, peer.rateToPeer.isZero() ? "" : Utils::speedToString( peer.rateToPeer ) );
+            item->setText( COL_DOWN, peer.rateToClient.isZero() ? "" : Utils::speedToString( peer.rateToClient ) );
+            item->setText( COL_PERCENT, peer.progress > 0 ? QString( "%1%" ).arg( locale.toString((int)(peer.progress*100.0))) : "" );
+            item->setText( COL_STATUS, code );
+            item->setToolTip( COL_STATUS, codeTip );
+
+            peers2.insert( key, item );
+        }
     }
     myPeerTree->addTopLevelItems( newItems );
     foreach( QString key, myPeers.keys() ) {
@@ -555,12 +757,10 @@ Details :: refresh( )
     }
     myPeers = peers2;
 
-    if( single ) {
-        tor = *torrents.begin();
-        myFileTreeView->update( tor->files( ) );
-    } else { 
+    if( single )
+        myFileTreeView->update( torrents[0]->files( ) );
+    else 
         myFileTreeView->clear( );
-    }
 
     myHavePendingRefresh = false;
     foreach( QWidget * w, myWidgets )
@@ -611,7 +811,6 @@ Details :: createActivityTab( )
 void
 Details :: onHonorsSessionLimitsToggled( bool val )
 {
-std::cerr << " honorsSessionLimits clicked to " << val << std::endl;
     mySession.torrentSet( myIds, "honorsSessionLimits", val );
 }
 void
@@ -860,7 +1059,6 @@ Details :: createPeersTab( )
     myPeerTree->setColumnWidth( COL_ADDRESS, size.width( ) );
     size = m.size( 0, "Some BitTorrent Client" );
     myPeerTree->setColumnWidth( COL_CLIENT, size.width( ) );
-    //myPeerTree->sortItems( myTorrent.isDone() ? COL_UP : COL_DOWN, Qt::DescendingOrder );
     myPeerTree->setAlternatingRowColors( true );
 
     QHBoxLayout * h = new QHBoxLayout;

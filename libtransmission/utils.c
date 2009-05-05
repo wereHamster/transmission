@@ -32,6 +32,7 @@
 #endif
 
 #include "transmission.h"
+#include "fdlimit.h"
 #include "ConvertUTF.h"
 #include "list.h"
 #include "utils.h"
@@ -465,9 +466,9 @@ uint8_t *
 tr_loadFile( const char * path,
              size_t *     size )
 {
-    uint8_t *    buf;
+    uint8_t * buf;
     struct stat  sb;
-    FILE *       file;
+    int fd;
     const char * err_fmt = _( "Couldn't read \"%1$s\": %2$s" );
 
     /* try to stat the file */
@@ -488,34 +489,35 @@ tr_loadFile( const char * path,
     }
 
     /* Load the torrent file into our buffer */
-    file = fopen( path, "rb" );
-    if( !file )
+    fd = tr_open_file_for_scanning( path );
+    if( fd < 0 )
     {
         const int err = errno;
         tr_err( err_fmt, path, tr_strerror( errno ) );
         errno = err;
         return NULL;
     }
-    buf = malloc( sb.st_size );
+    buf = malloc( sb.st_size + 1 );
     if( !buf )
     {
         const int err = errno;
         tr_err( err_fmt, path, _( "Memory allocation failed" ) );
-        fclose( file );
+        tr_close_file( fd );
         errno = err;
         return NULL;
     }
-    if( fread( buf, sb.st_size, 1, file ) != 1 )
+    if( read( fd, buf, sb.st_size ) != sb.st_size )
     {
         const int err = errno;
         tr_err( err_fmt, path, tr_strerror( errno ) );
-        fclose( file );
+        tr_close_file( fd );
         free( buf );
         errno = err;
         return NULL;
     }
 
-    fclose( file );
+    tr_close_file( fd );
+    buf[ sb.st_size ] = '\0';
     *size = sb.st_size;
     return buf;
 }
