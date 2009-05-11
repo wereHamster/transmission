@@ -39,6 +39,13 @@
 #include "web.h"
 #include "net.h"
 
+/* session-id is used to make cross-site request forgery attacks difficult.
+ * Don't disable this feature unless you really know what you're doing!
+ * http://en.wikipedia.org/wiki/Cross-site_request_forgery
+ * http://shiflett.org/articles/cross-site-request-forgeries
+ * http://www.webappsec.org/lists/websecurity/archive/2008-04/msg00037.html */
+#define REQUIRE_SESSION_ID
+
 #define MY_NAME "RPC Server"
 #define MY_REALM "Transmission"
 #define TR_N_ELEMENTS( ary ) ( sizeof( ary ) / sizeof( *ary ) )
@@ -60,6 +67,9 @@ struct tr_rpc_server
     char *             password;
     char *             whitelistStr;
     tr_list *          whitelist;
+
+    char *             sessionId;
+    time_t             sessionIdExpiresAt;
 
 #ifdef HAVE_ZLIB
     z_stream           stream;
@@ -295,6 +305,17 @@ add_response( struct evhttp_request * req,
 }
 
 static void
+add_time_header( struct evkeyvalq * headers, const char * key, time_t value )
+{
+    /* According to RFC 2616 this must follow RFC 1123's date format,
+       so use gmtime instead of localtime... */
+    char buf[128];
+    struct tm tm = *gmtime( &value );
+    strftime( buf, sizeof( buf ), "%a, %d %b %Y %H:%M:%S GMT", &tm );
+    evhttp_add_header( headers, key, buf );
+}
+
+static void
 serve_file( struct evhttp_request * req,
             struct tr_rpc_server *  server,
             const char *            filename )
@@ -316,16 +337,20 @@ serve_file( struct evhttp_request * req,
 
         if( errno )
         {
-            send_simple_response( req, HTTP_NOTFOUND, filename );
+            char * tmp = tr_strdup_printf( "%s (%s)", filename, tr_strerror( errno ) );
+            send_simple_response( req, HTTP_NOTFOUND, tmp );
+            tr_free( tmp );
         }
         else
         {
             struct evbuffer * out;
+            const time_t now = time( NULL );
 
             errno = error;
             out = tr_getBuffer( );
-            evhttp_add_header( req->output_headers, "Content-Type",
-                               mimetype_guess( filename ) );
+            evhttp_add_header( req->output_headers, "Content-Type", mimetype_guess( filename ) );
+            add_time_header( req->output_headers, "Date", now );
+            add_time_header( req->output_headers, "Expires", now+(24*60*60) );
             add_response( req, server, out, content, content_len );
             evhttp_send_reply( req, HTTP_OK, "OK", out );
 
@@ -448,22 +473,55 @@ isAddressAllowed( const tr_rpc_server * server,
     return FALSE;
 }
 
+static char*
+get_current_session_id( struct tr_rpc_server * server )
+{
+    const time_t now = time( NULL );
+
+    if( !server->sessionId || ( now >= server->sessionIdExpiresAt ) )
+    {
+        int i;
+        const int n = 48;
+        const char * pool = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        const size_t pool_size = strlen( pool );
+        char * buf = tr_new( char, n+1 );
+
+        for( i=0; i<n; ++i )
+            buf[i] = pool[ tr_cryptoRandInt( pool_size ) ];
+        buf[n] = '\0';
+
+        tr_free( server->sessionId );
+        server->sessionId = buf;
+        server->sessionIdExpiresAt = now + (60*60); /* expire in an hour */
+    }
+
+    return server->sessionId;
+}
+
+
+static tr_bool
+test_session_id( struct tr_rpc_server * server, struct evhttp_request * req )
+{
+    const char * ours = get_current_session_id( server );
+    const char * theirs = evhttp_find_header( req->input_headers, TR_RPC_SESSION_ID_HEADER );
+    const tr_bool success =  theirs && !strcmp( theirs, ours );
+    return success;
+}
+
 static void
-handle_request( struct evhttp_request * req,
-                void *                  arg )
+handle_request( struct evhttp_request * req, void * arg )
 {
     struct tr_rpc_server * server = arg;
 
     if( req && req->evcon )
     {
         const char * auth;
-        char *       user = NULL;
-        char *       pass = NULL;
+        char * user = NULL;
+        char * pass = NULL;
 
         evhttp_add_header( req->output_headers, "Server", MY_REALM );
 
         auth = evhttp_find_header( req->input_headers, "Authorization" );
-
         if( auth && !strncasecmp( auth, "basic ", 6 ) )
         {
             int    plen;
@@ -477,7 +535,7 @@ handle_request( struct evhttp_request * req,
 
         if( !isAddressAllowed( server, req->remote_host ) )
         {
-            send_simple_response( req, 401,
+            send_simple_response( req, 403,
                 "<p>Unauthorized IP Address.</p>"
                 "<p>Either disable the IP address whitelist or add your address to it.</p>"
                 "<p>If you're editing settings.json, see the 'rpc-whitelist' and 'rpc-whitelist-enabled' entries.</p>"
@@ -509,6 +567,28 @@ handle_request( struct evhttp_request * req,
         {
             handle_clutch( req, server );
         }
+#ifdef REQUIRE_SESSION_ID
+        else if( !test_session_id( server, req ) )
+        {
+            const char * sessionId = get_current_session_id( server );
+            char * tmp = tr_strdup_printf(
+                "<p>Please add this header to your HTTP requests:</p>"
+                "<p style=\"padding-left: 20pt;\"><code>%s: %s</code></p>"
+                "<p><b>RPC Application Developers:</b></p>"
+                "<p style=\"padding-left: 20pt;\">As of Transmission 1.53 and 1.61, RPC clients "
+                "need to look for this 409 response containing the phrase \"invalid session-id\".  "
+                "It occurs when the request's "TR_RPC_SESSION_ID_HEADER" header was missing "
+                "(such as during bootstrapping) or expired. "
+                "Either way, you can parse this response's headers for the new session-id.</p>"
+                "<p style=\"padding-left: 20pt;\">This requirement has been added to make "
+                "<a href=\"http://en.wikipedia.org/wiki/Cross-site_request_forgery\">CSRF</a>"
+                " attacks more difficult.</p>",
+                TR_RPC_SESSION_ID_HEADER, sessionId );
+            evhttp_add_header( req->output_headers, TR_RPC_SESSION_ID_HEADER, sessionId );
+            send_simple_response( req, 409, tmp );
+            tr_free( tmp );
+        }
+#endif
         else if( !strncmp( req->uri, "/transmission/rpc", 17 ) )
         {
             handle_rpc( req, server );

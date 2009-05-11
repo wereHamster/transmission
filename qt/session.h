@@ -62,9 +62,12 @@ class Session: public QObject
         void portTest( );
 
     public:
-        bool isRemote( ) const { return !isLocal( ); }
-        bool isLocal( ) const;
+
+        /** returns true if the transmission session is being run inside this client */
         bool isServer( ) const;
+
+        /** returns true if isServer() is true or if the remote address is the localhost */
+        bool isLocal( ) const;
 
     private:
         void updateStats( struct tr_benc * args );
@@ -129,6 +132,7 @@ class Session: public QObject
         Prefs& myPrefs;
         tr_session * mySession;
         QString myConfigDir;
+        QString mySessionId;
         QUrl myUrl;
         QBuffer myBuffer;
         QHttp myHttp;

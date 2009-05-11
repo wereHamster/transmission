@@ -541,6 +541,9 @@ Session :: exec( const char * request )
         QHttpRequestHeader header( "POST", path );
         header.setValue( "User-Agent", QCoreApplication::instance()->applicationName() + "/" + LONG_VERSION_STRING );
         header.setValue( "Content-Type", "application/json; charset=UTF-8" );
+        if( !mySessionId.isEmpty( ) )
+            header.setValue( TR_RPC_SESSION_ID_HEADER, mySessionId );
+        myHttp.setProperty( "current-request", data );
         myHttp.request( header, data, &myBuffer );
 #ifdef DEBUG_HTTP
         std::cerr << "sending " << qPrintable(header.toString()) << "\nBody:\n" << request << std::endl;
@@ -561,6 +564,8 @@ Session :: onRequestFinished( int id, bool error )
 {
     Q_UNUSED( id );
 
+    QHttpResponseHeader response = myHttp.lastResponse();
+
 #ifdef DEBUG_HTTP
     std::cerr << "http request " << id << " ended.. response header: "
               << qPrintable( myHttp.lastResponse().toString() )
@@ -569,14 +574,23 @@ Session :: onRequestFinished( int id, bool error )
               << std::endl;
 #endif
 
-    if( error )
+    if( ( response.statusCode() == 409 ) && ( myBuffer.buffer().indexOf("invalid session-id") != -1 ) )
+    {
+        // we got a 409 telling us our session id has expired.
+        // update it and resubmit the request.
+        mySessionId = response.value( TR_RPC_SESSION_ID_HEADER );
+        exec( myHttp.property("current-request").toByteArray().constData() );
+    }
+    else if( error )
+    {
         std::cerr << "http error: " << qPrintable(myHttp.errorString()) << std::endl;
-    else {
+    }
+    else
+    {
         const QByteArray& response( myBuffer.buffer( ) );
         const char * json( response.constData( ) );
         int jsonLength( response.size( ) );
         if( jsonLength>0 && json[jsonLength-1] == '\n' ) --jsonLength;
-
         parseResponse( json, jsonLength );
     }
 
@@ -856,9 +870,10 @@ void
 Session :: launchWebInterface( )
 {
     QUrl url;
-    if( !mySession) // remote session
+    if( !mySession ) // remote session
         url = myUrl;
     else { // local session
+        url.setScheme( "http" );
         url.setHost( "localhost" );
         url.setPort( myPrefs.getInt( Prefs::RPC_PORT ) );
     }

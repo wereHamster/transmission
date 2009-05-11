@@ -210,10 +210,7 @@ tr_open_file_for_scanning( const char * filename )
     /* build the flags */
     flags = O_RDONLY;
 #ifdef O_SEQUENTIAL
-    if( sequential ) flags |= O_SEQUENTIAL;
-#endif
-#ifdef O_RANDOM
-    if( !sequential ) flags |= O_RANDOM
+    flags |= O_SEQUENTIAL;
 #endif
 #ifdef O_BINARY
     flags |= O_BINARY;
@@ -226,6 +223,9 @@ tr_open_file_for_scanning( const char * filename )
     fd = open( filename, flags, 0666 );
     if( fd >= 0 )
     {
+        /* Set hints about the lookahead buffer and caching. It's okay
+           for these to fail silently, so don't let them affect errno */
+        const int err = errno;
 #ifdef HAVE_POSIX_FADVISE
         posix_fadvise( fd, 0, 0, POSIX_FADV_SEQUENTIAL );
 #endif
@@ -233,6 +233,7 @@ tr_open_file_for_scanning( const char * filename )
         fcntl( fd, F_NOCACHE, 1 );
         fcntl( fd, F_RDAHEAD, 1 );
 #endif
+        errno = err;
     }
 
     return fd;
@@ -242,7 +243,11 @@ void
 tr_close_file( int fd )
 {
 #if defined(HAVE_POSIX_FADVISE)
+    /* Set hint about not caching this file.
+       It's okay for this to fail silently, so don't let it affect errno */
+    const int err = errno;
     posix_fadvise( fd, 0, 0, POSIX_FADV_DONTNEED );
+    errno = err;
 #endif
     close( fd );
 }

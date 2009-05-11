@@ -1690,6 +1690,10 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         if (![fWindow isMainWindow])
             [fBadger incrementCompleted];
         
+        //bounce download stack
+        [[NSDistributedNotificationCenter defaultCenter] postNotificationName: @"com.apple.DownloadFileFinished"
+            object: [[torrent downloadFolder] stringByAppendingPathComponent: [torrent name]]];
+        
         if ([fDefaults boolForKey: @"QueueSeed"] && [self numToStartFromQueue: NO] <= 0)
         {
             [torrent stopTransfer];
@@ -3713,7 +3717,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
                 if ([torrent isActive])
                 {
                     //stop all transfers (since some are active) before going to sleep and remember to resume when we wake up
-                    [fTorrents makeObjectsPerformSelector: @selector(sleep)];
+                    for (Torrent * torrent in fTorrents)
+                        [torrent sleep];
                     sleep(15);
                     break;
                 }
@@ -3738,7 +3743,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
 
         case kIOMessageSystemHasPoweredOn:
             //resume sleeping transfers after we wake up
-            [fTorrents makeObjectsPerformSelector: @selector(wakeUp)];
+            for (Torrent * torrent in fTorrents)
+                [torrent wakeUp];
             #warning check speed limit timer?
             //[self autoSpeedLimitChange: nil];
             break;
