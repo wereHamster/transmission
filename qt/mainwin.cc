@@ -35,6 +35,7 @@
 #include "options.h"
 #include "prefs.h"
 #include "prefs-dialog.h"
+#include "relocate.h"
 #include "session.h"
 #include "session-dialog.h"
 #include "speed.h"
@@ -157,15 +158,20 @@ TrMainWindow :: TrMainWindow( Session& session, Prefs& prefs, TorrentModel& mode
     connect( ui.action_About, SIGNAL(triggered()), myAboutDialog, SLOT(show()));
     connect( ui.action_Contents, SIGNAL(triggered()), this, SLOT(openHelp()));
     connect( ui.action_OpenFolder, SIGNAL(triggered()), this, SLOT(openFolder()));
+    connect( ui.action_SetLocation, SIGNAL(triggered()), this, SLOT(setLocation()));
     connect( ui.action_Properties, SIGNAL(triggered()), this, SLOT(openProperties()));
     connect( ui.action_SessionDialog, SIGNAL(triggered()), mySessionDialog, SLOT(show()));
     connect( ui.listView, SIGNAL(activated(const QModelIndex&)), ui.action_Properties, SLOT(trigger()));
+
+    QAction * sep2 = new QAction( this );
+    sep2->setSeparator( true );
 
     // context menu
     QList<QAction*> actions;
     actions << ui.action_Properties
             << ui.action_OpenFolder
-            << sep
+            << ui.action_SetLocation
+            << sep2
             << ui.action_Start
             << ui.action_Pause
             << ui.action_Verify
@@ -614,6 +620,13 @@ TrMainWindow :: openProperties( )
 }
 
 void
+TrMainWindow :: setLocation( )
+{
+    QDialog * d = new RelocateDialog( mySession, getSelectedTorrents(), this );
+    d->show( );
+}
+
+void
 TrMainWindow :: openFolder( )
 {
     const int torrentId( *getSelectedTorrents().begin() );
@@ -730,6 +743,7 @@ TrMainWindow :: refreshActionSensitivity( )
     ui.action_Delete->setEnabled( haveSelection );
     ui.action_Properties->setEnabled( haveSelection );
     ui.action_DeselectAll->setEnabled( haveSelection );
+    ui.action_SetLocation->setEnabled( haveSelection );
 
     const bool oneSelection( selected == 1 );
     ui.action_OpenFolder->setEnabled( oneSelection && mySession.isLocal( ) );

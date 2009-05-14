@@ -121,8 +121,6 @@ Session :: updatePref( int key )
         case Prefs :: DOWNLOAD_DIR:
         case Prefs :: PEER_LIMIT_GLOBAL:
         case Prefs :: PEER_LIMIT_TORRENT:
-        case Prefs :: SEED_RATIO_LIMIT:
-        case Prefs :: SEED_RATIO_LIMITED:
         case Prefs :: USPEED_ENABLED:
         case Prefs :: USPEED:
         case Prefs :: DSPEED_ENABLED:
@@ -131,9 +129,14 @@ Session :: updatePref( int key )
         case Prefs :: PORT_FORWARDING:
         case Prefs :: PEER_PORT:
         case Prefs :: PEER_PORT_RANDOM_ON_START:
-        case Prefs :: RATIO:
-        case Prefs :: RATIO_ENABLED:
             sessionSet( myPrefs.keyStr(key), myPrefs.variant(key) );
+            break;
+
+        case Prefs :: RATIO:
+            sessionSet( "seedRatioLimit", myPrefs.variant(key) );           
+            break;           
+        case Prefs :: RATIO_ENABLED:
+            sessionSet( "seedRatioLimited", myPrefs.variant(key) );
             break;
 
         case Prefs :: RPC_AUTH_REQUIRED:
@@ -375,6 +378,19 @@ Session :: torrentSet( const QSet<int>& ids, const QString& key, const QList<int
     tr_bencFree( &top );
 }
 
+void
+Session :: torrentSetLocation( const QSet<int>& ids, const QString& location, bool doMove )
+{
+    tr_benc top;
+    tr_bencInitDict( &top, 2 );
+    tr_bencDictAddStr( &top, "method", "torrent-set-location" );
+    tr_benc * args( tr_bencDictAddDict( &top, "arguments", 3 ) );
+    addOptionalIds( args, ids );
+    tr_bencDictAddStr( args, "location", location.toUtf8().constData() );
+    tr_bencDictAddBool( args, "move", doMove );
+    exec( &top );
+    tr_bencFree( &top );
+}
 
 void
 Session :: refreshTorrents( const QSet<int>& ids )
@@ -536,15 +552,15 @@ Session :: exec( const char * request )
     }
     else if( !myUrl.isEmpty( ) )
     {
-        const QByteArray data( request, strlen( request ) );
         static const QString path( "/transmission/rpc" );
         QHttpRequestHeader header( "POST", path );
         header.setValue( "User-Agent", QCoreApplication::instance()->applicationName() + "/" + LONG_VERSION_STRING );
         header.setValue( "Content-Type", "application/json; charset=UTF-8" );
         if( !mySessionId.isEmpty( ) )
             header.setValue( TR_RPC_SESSION_ID_HEADER, mySessionId );
-        myHttp.setProperty( "current-request", data );
-        myHttp.request( header, data, &myBuffer );
+        QBuffer * reqbuf = new QBuffer;
+        reqbuf->setData( QByteArray( request ) );
+        myHttp.request( header, reqbuf, &myBuffer );
 #ifdef DEBUG_HTTP
         std::cerr << "sending " << qPrintable(header.toString()) << "\nBody:\n" << request << std::endl;
 #endif
@@ -563,6 +579,7 @@ void
 Session :: onRequestFinished( int id, bool error )
 {
     Q_UNUSED( id );
+    QIODevice * sourceDevice = myHttp.currentSourceDevice( );
 
     QHttpResponseHeader response = myHttp.lastResponse();
 
@@ -579,7 +596,7 @@ Session :: onRequestFinished( int id, bool error )
         // we got a 409 telling us our session id has expired.
         // update it and resubmit the request.
         mySessionId = response.value( TR_RPC_SESSION_ID_HEADER );
-        exec( myHttp.property("current-request").toByteArray().constData() );
+        exec( qobject_cast<QBuffer*>(sourceDevice)->buffer().constData() );
     }
     else if( error )
     {
