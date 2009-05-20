@@ -78,9 +78,9 @@ Torrent :: myProperties[] =
     { DATE_CREATED, "dateCreated", QVariant::DateTime, INFO },
     { PEERS_CONNECTED, "peersConnected", QVariant::Int, STAT },
     { ETA, "eta", QVariant::Int, STAT },
-    { RATIO, "ratio", QVariant::Double, STAT },
-    { DOWNLOADED_EVER, "downloadedEver", QVariant::ULongLong, STAT_EXTRA },
-    { UPLOADED_EVER, "uploadedEver", QVariant::ULongLong, STAT_EXTRA },
+    { RATIO, "uploadRatio", QVariant::Double, STAT },
+    { DOWNLOADED_EVER, "downloadedEver", QVariant::ULongLong, STAT },
+    { UPLOADED_EVER, "uploadedEver", QVariant::ULongLong, STAT },
     { FAILED_EVER, "corruptEver", QVariant::ULongLong, STAT_EXTRA },
     { TRACKERS, "trackers", QVariant::StringList, INFO },
     { MIME_ICON, "ccc", QVariant::Icon, DERIVED },
@@ -108,7 +108,8 @@ Torrent :: myProperties[] =
     { LEECHERS, "leechers", QVariant::Int, STAT_EXTRA },
     { TIMES_COMPLETED, "timesCompleted", QVariant::Int, STAT_EXTRA },
     { PEERS, "peers", TrTypes::PeerList, STAT_EXTRA },
-    { TORRENT_FILE, "torrentFile", QVariant::String, STAT_EXTRA }
+    { TORRENT_FILE, "torrentFile", QVariant::String, STAT_EXTRA },
+    { BANDWIDTH_PRIORITY, "bandwidthPriority", QVariant::Int, STAT_EXTRA }
 };
 
 Torrent :: KeyList
@@ -339,8 +340,8 @@ Torrent :: getSeedRatio( double& ratio ) const
             break;
 
         case TR_RATIOLIMIT_GLOBAL:
-            if(( isLimited = myPrefs.getBool( Prefs :: SEED_RATIO_LIMITED )))
-                ratio = myPrefs.getDouble( Prefs :: SEED_RATIO_LIMIT );
+            if(( isLimited = myPrefs.getBool( Prefs :: RATIO_ENABLED )))
+                ratio = myPrefs.getDouble( Prefs :: RATIO );
             break;
 
         case TR_RATIOLIMIT_UNLIMITED:

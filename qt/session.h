@@ -37,10 +37,17 @@ class Session: public QObject
         Q_OBJECT
 
     public:
-        Session( const char * configDir, Prefs& prefs, const char * remoteUrl, bool paused );
+        Session( const char * configDir, Prefs& prefs );
         ~Session( );
 
         static const int ADD_TORRENT_TAG;
+
+    public:
+        void stop( );
+        void restart( );
+
+    private:
+        void start( );
 
     public:
         const QUrl& getRemoteUrl( ) const { return myUrl; }
@@ -55,9 +62,12 @@ class Session: public QObject
         void portTest( );
 
     public:
-        bool isRemote( ) const { return !isLocal( ); }
-        bool isLocal( ) const;
+
+        /** returns true if the transmission session is being run inside this client */
         bool isServer( ) const;
+
+        /** returns true if isServer() is true or if the remote address is the localhost */
+        bool isLocal( ) const;
 
     private:
         void updateStats( struct tr_benc * args );
@@ -77,14 +87,16 @@ class Session: public QObject
         void refreshTorrents( const QSet<int>& torrentIds );
 
     public:
-        void torrentSet( int id, const QString& key, bool val );
-        void torrentSet( int id, const QString& key, int val );
-        void torrentSet( int id, const QString& key, double val );
-        void torrentSet( int id, const QString& key, const QList<int>& val );
+        void torrentSet( const QSet<int>& ids, const QString& key, bool val );
+        void torrentSet( const QSet<int>& ids, const QString& key, int val );
+        void torrentSet( const QSet<int>& ids, const QString& key, double val );
+        void torrentSet( const QSet<int>& ids, const QString& key, const QList<int>& val );
+        void torrentSetLocation( const QSet<int>& ids, const QString& path, bool doMove );
+
 
     public slots:
-        void pause( const QSet<int>& torrentIds = QSet<int>() );
-        void start( const QSet<int>& torrentIds = QSet<int>() );
+        void pauseTorrents( const QSet<int>& torrentIds = QSet<int>() );
+        void startTorrents( const QSet<int>& torrentIds = QSet<int>() );
         void refreshSessionInfo( );
         void refreshSessionStats( );
         void refreshActiveTorrents( );
@@ -98,13 +110,14 @@ class Session: public QObject
         void updatePref( int key );
 
         /** request a refresh for statistics, including the ones only used by the properties dialog, for a specific torrent */
-        void refreshExtraStats( int torrent );
+        void refreshExtraStats( const QSet<int>& ids );
 
     private slots:
         void onRequestStarted( int id );
         void onRequestFinished( int id, bool error );
 
     signals:
+        void sourceChanged( );
         void portTested( bool isOpen );
         void statsUpdated( );
         void sessionUpdated( );
@@ -113,11 +126,14 @@ class Session: public QObject
         void torrentsRemoved( struct tr_benc * torrentList );
         void dataReadProgress( );
         void dataSendProgress( );
+        void httpAuthenticationRequired( );
 
     private:
         int64_t myBlocklistSize;
         Prefs& myPrefs;
         tr_session * mySession;
+        QString myConfigDir;
+        QString mySessionId;
         QUrl myUrl;
         QBuffer myBuffer;
         QHttp myHttp;

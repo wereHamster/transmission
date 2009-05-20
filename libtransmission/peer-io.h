@@ -69,6 +69,8 @@ typedef struct tr_peerIo
      * for reading or writing */
     tr_bool               hasFinishedConnecting;
 
+    tr_priority_t         priority;
+
     int                   pendingEvents;
 
     int                   magicNumber;
@@ -377,6 +379,8 @@ void      tr_peerIoSetEnabled( tr_peerIo    * io,
 int       tr_peerIoFlush( tr_peerIo     * io,
                           tr_direction    dir,
                           size_t          byteLimit );
+
+int       tr_peerIoFlushOutgoingProtocolMsgs( tr_peerIo * io );
 
 /**
 ***

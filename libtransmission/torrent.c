@@ -239,7 +239,7 @@ tr_torrentGetSeedRatio( const tr_torrent * tor, double * ratio )
                 *ratio = tr_sessionGetRatioLimit( tor->session );
             break;
 
-        case TR_RATIOLIMIT_UNLIMITED:
+        default: /* TR_RATIOLIMIT_UNLIMITED */
             isLimited = FALSE;
             break;
     }
@@ -596,7 +596,6 @@ torrentRealInit( tr_torrent * tor, const tr_ctor * ctor )
 
     tr_peerMgrAddTorrent( session->peerMgr, tor );
 
-    assert( session->isPortSet );
     assert( !tor->downloadedCur );
     assert( !tor->uploadedCur );
 
@@ -734,8 +733,7 @@ tr_torrentNew( const tr_ctor  * ctor,
 **/
 
 void
-tr_torrentSetDownloadDir( tr_torrent * tor,
-                          const char * path )
+tr_torrentSetDownloadDir( tr_torrent * tor, const char * path )
 {
     assert( tr_isTorrent( tor  ) );
 
@@ -1235,8 +1233,7 @@ checkAndStartCB( tr_torrent * tor )
 }
 
 static void
-torrentStart( tr_torrent * tor,
-              int          reloadProgress )
+torrentStart( tr_torrent * tor, int reloadProgress )
 {
     assert( tr_isTorrent( tor ) );
 
@@ -1272,6 +1269,12 @@ torrentRecheckDoneImpl( void * vtor )
 
     assert( tr_isTorrent( tor ) );
     tr_torrentRecheckCompleteness( tor );
+
+    if( tor->startAfterVerify )
+    {
+        tor->startAfterVerify = FALSE;
+        tr_torrentStart( tor );
+    }
 }
 
 static void
@@ -1286,11 +1289,18 @@ void
 tr_torrentVerify( tr_torrent * tor )
 {
     assert( tr_isTorrent( tor ) );
-
-    tr_verifyRemove( tor );
-
     tr_globalLock( tor->session );
 
+    /* if the torrent's already being verified, stop it */
+    tr_verifyRemove( tor );
+
+    /* if the torrent's running, stop it & set the restart-after-verify flag */
+    if( tor->isRunning ) {
+        tr_torrentStop( tor );
+        tor->startAfterVerify = TRUE;
+    }
+
+    /* add the torrent to the recheck queue */
     tr_torrentUncheck( tor );
     tr_verifyAdd( tor, torrentRecheckDoneCB );
 
@@ -1316,7 +1326,6 @@ tr_torrentCloseLocalFiles( const tr_torrent * tor )
     evbuffer_free( buf );
 }
 
-
 static void
 stopTorrent( void * vtor )
 {
@@ -1334,6 +1343,8 @@ stopTorrent( void * vtor )
 void
 tr_torrentStop( tr_torrent * tor )
 {
+    assert( tr_isTorrent( tor ) );
+
     if( tr_isTorrent( tor ) )
     {
         tr_globalLock( tor->session );
@@ -1521,7 +1532,7 @@ tr_torrentInitFilePriority( tr_torrent *    tor,
 
     assert( tr_isTorrent( tor ) );
     assert( fileIndex < tor->info.fileCount );
-    assert( priority == TR_PRI_LOW || priority == TR_PRI_NORMAL || priority == TR_PRI_HIGH );
+    assert( tr_isPriority( priority ) );
 
     file = &tor->info.files[fileIndex];
     file->priority = priority;
@@ -1690,6 +1701,27 @@ tr_torrentSetFileDLs( tr_torrent *      tor,
     tr_torrentInitFileDLs( tor, files, fileCount, doDownload );
     tr_torrentSaveResume( tor );
     tr_torrentUnlock( tor );
+}
+
+/***
+****
+***/
+
+tr_priority_t
+tr_torrentGetPriority( const tr_torrent * tor )
+{
+    assert( tr_isTorrent( tor ) );
+
+    return tor->bandwidth->priority;
+}
+
+void
+tr_torrentSetPriority( tr_torrent * tor, tr_priority_t priority )
+{
+    assert( tr_isTorrent( tor ) );
+    assert( tr_isPriority( priority ) );
+
+    tor->bandwidth->priority = priority;
 }
 
 /***
@@ -2169,6 +2201,105 @@ tr_torrentDeleteLocalData( tr_torrent * tor, tr_fileFunc fileFunc )
         fileFunc( path );
         tr_free( path );
     }
+}
+
+/***
+****
+***/
+
+struct LocationData
+{
+    tr_bool move_from_old_location;
+    tr_bool * setme_done;
+    char * location;
+    tr_torrent * tor;
+};
+
+static void
+setLocation( void * vdata )
+{
+    struct LocationData * data = vdata;
+    tr_torrent * tor = data->tor;
+    const tr_bool do_move = data->move_from_old_location;
+    const char * location = data->location;
+
+    assert( tr_isTorrent( tor ) );
+
+    if( strcmp( location, tor->downloadDir ) )
+    {
+        tr_file_index_t i;
+
+        /* bad idea to move files while they're being verified... */
+        tr_verifyRemove( tor );
+
+        /* if the torrent is running, stop it and set a flag to
+         * restart after we're done */
+        if( tor->isRunning )
+        {
+            tr_torrentStop( tor );
+            tor->startAfterVerify = TRUE;
+        }
+
+        /* try to move the files.
+         * FIXME: there are still all kinds of nasty cases, like what
+         * if the target directory runs out of space halfway through... */
+        for( i=0; i<tor->info.fileCount; ++i )
+        {
+            struct stat sb;
+            char * oldpath = tr_buildPath( tor->downloadDir, tor->info.files[i].name, NULL );
+            char * newpath = tr_buildPath( location, tor->info.files[i].name, NULL );
+
+            
+            if( do_move && !stat( oldpath, &sb ) )
+            {
+                tr_moveFile( oldpath, newpath );
+                tr_torinf( tor, "moving \"%s\" to \"%s\"", oldpath, newpath );
+            }
+            else if( !stat( newpath, &sb ) )
+            {
+                tr_torinf( tor, "found \"%s\"", newpath );
+            }
+
+            tr_free( newpath );
+            tr_free( oldpath );
+        }
+
+        /* blow away the leftover subdirectories in the old location */
+        tr_torrentDeleteLocalData( tor, unlink );
+
+        /* set the new location and reverify */
+        tr_torrentSetDownloadDir( tor, location );
+        tr_torrentVerify( tor );
+    }
+
+    if( data->setme_done )
+        *data->setme_done = TRUE;
+
+    /* cleanup */
+    tr_free( data->location );
+    tr_free( data );
+}
+
+void
+tr_torrentSetLocation( tr_torrent * tor,
+                       const char * location,
+                       tr_bool      move_from_old_location,
+                       tr_bool    * setme_done )
+{
+    struct LocationData * data;
+
+    assert( tr_isTorrent( tor ) );
+
+    if( setme_done )
+        *setme_done = FALSE;
+
+    /* run this in the libtransmission thread */
+    data = tr_new( struct LocationData, 1 );
+    data->tor = tor;
+    data->location = tr_strdup( location );
+    data->move_from_old_location = move_from_old_location;
+    data->setme_done = setme_done;
+    tr_runInEventThread( tor->session, setLocation, data );
 }
 
 /***

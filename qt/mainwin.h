@@ -35,6 +35,7 @@ extern "C" {
 
 class ActionDelegator;
 class Prefs;
+class Details;
 class Session;
 class TorrentDelegate;
 class TorrentDelegateMin;
@@ -51,9 +52,11 @@ class TrMainWindow: public QMainWindow
 
     private:
         time_t myLastFullUpdateTime;
+        QDialog * mySessionDialog;
         QDialog * myPrefsDialog;
         QDialog * myAboutDialog;
         QDialog * myStatsDialog;
+        Details * myDetailsDialog;
         QFileDialog * myFileDialog;
         QCheckBox * myFileDialogOptionsCheck;
         QSystemTrayIcon myTrayIcon;
@@ -86,6 +89,7 @@ class TrMainWindow: public QMainWindow
         QWidgetList myHidden;
 
     private slots:
+        void onDetailsDestroyed( );
         void onShowModeClicked( );
         void showAll( );
         void showActive( );
@@ -100,6 +104,7 @@ class TrMainWindow: public QMainWindow
         void showSessionRatio( );
         void showSessionTransfer( );
         void refreshVisibleCount( );
+        void refreshTitle( );
         void refreshStatusBar( );
         void openTorrent( );
         void newTorrent( );
@@ -108,6 +113,7 @@ class TrMainWindow: public QMainWindow
         void addTorrents( const QStringList& filenames );
         void openHelp( );
         void openFolder( );
+        void setLocation( );
         void openProperties( );
         void toggleSpeedMode( );
         void dataReadProgress( );
@@ -115,6 +121,8 @@ class TrMainWindow: public QMainWindow
         void toggleWindows( );
         void onSetPrefs( );
         void onSetPrefs( bool );
+        void onSessionSourceChanged( );
+        void onModelReset( );
 
     private slots:
         void setSortPref             ( int );
@@ -140,6 +148,8 @@ class TrMainWindow: public QMainWindow
         QMenu * createOptionsMenu( void );
         QWidget * createStatusBar( void );
         QWidget * myStatusBar;
+        QWidgetList myUpStatusWidgets;
+        QWidgetList myDownStatusWidgets;
         QPushButton * myAltSpeedButton;
         QPushButton * myOptionsButton;
         QLabel * myVisibleCountLabel;
@@ -171,6 +181,7 @@ class TrMainWindow: public QMainWindow
         void setTrayIconVisible( bool );
         void setMinimalView( bool );
         void refreshActionSensitivity( );
+        void wrongAuthentication( );
 
     public:
         TrMainWindow( Session&, Prefs&, TorrentModel&, bool minized );

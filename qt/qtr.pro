@@ -20,14 +20,14 @@ LIBS += $${TRANSMISSION_TOP}/third-party/libevent/.libs/libevent.a
 
 TRANSLATIONS += transmission_en.ts
 
-FORMS += mainwin.ui about.ui
+FORMS += mainwin.ui
 RESOURCES += application.qrc
 SOURCES += about.cc app.cc details.cc file-tree.cc filters.cc hig.cc \
-           mainwin.cc make-dialog.cc options.cc prefs.cc prefs-dialog.cc \
-           qticonloader.cc session.cc squeezelabel.cc stats-dialog.cc \
-           torrent.cc torrent-delegate.cc torrent-delegate-min.cc \
-           torrent-filter.cc torrent-model.cc triconpushbutton.cc \
-           utils.cc watchdir.cc
+           license.cc mainwin.cc make-dialog.cc options.cc prefs.cc \
+           prefs-dialog.cc qticonloader.cc relocate.cc session.cc \
+           session-dialog.cc squeezelabel.cc stats-dialog.cc torrent.cc \
+           torrent-delegate.cc torrent-delegate-min.cc torrent-filter.cc \
+           torrent-model.cc triconpushbutton.cc utils.cc watchdir.cc
 HEADERS += $$replace(SOURCES, .cc, .h)
 HEADERS += speed.h types.h
 

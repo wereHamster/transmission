@@ -57,6 +57,8 @@ extern "C" {
 #define SHA_DIGEST_LENGTH 20
 #define TR_INET6_ADDRSTRLEN 46
 
+#define TR_RPC_SESSION_ID_HEADER "X-Transmission-Session-Id"
+
 typedef uint32_t tr_file_index_t;
 typedef uint32_t tr_piece_index_t;
 typedef uint64_t tr_block_index_t;
@@ -71,6 +73,13 @@ enum
 };
 
 typedef int8_t tr_priority_t;
+
+static TR_INLINE tr_bool tr_isPriority( tr_priority_t p )
+{
+    return ( p == TR_PRI_LOW )
+        || ( p == TR_PRI_NORMAL )
+        || ( p == TR_PRI_HIGH );
+}
 
 /**
  * @brief returns Transmission's default configuration file directory.
@@ -652,6 +661,9 @@ uint16_t   tr_sessionGetPeerLimit( const tr_session * );
 void       tr_sessionSetPeerLimitPerTorrent( tr_session *, uint16_t maxGlobalPeers );
 uint16_t   tr_sessionGetPeerLimitPerTorrent( const tr_session * );
 
+tr_priority_t   tr_torrentGetPriority( const tr_torrent * );
+void            tr_torrentSetPriority( tr_torrent *, tr_priority_t );
+
 
 /**
  *  Load all the torrents in tr_getTorrentDir().
@@ -925,6 +937,12 @@ void tr_torrentStop( tr_torrent * torrent );
 
 typedef int tr_fileFunc( const char * filename );
 
+/** @brief Tell transmsision where to find this torrent's local data */
+void tr_torrentSetLocation( tr_torrent  * torrent,
+                            const char  * location,
+                            tr_bool       move_from_previous_location,
+                            tr_bool     * setme_done );
+
 /**
  * @brief Deletes the torrent's local data.
  * @param torrent
@@ -944,6 +962,9 @@ uint64_t tr_torrentGetBytesLeftToAllocate( const tr_torrent * torrent );
  * tr_info.hashString.
  */
 int tr_torrentId( const tr_torrent * torrent );
+
+tr_torrent* tr_torrentFindFromId( tr_session * session, int id );
+
 
 /***
 ****  Torrent speed limits
@@ -1041,8 +1062,10 @@ void            tr_torrentSetFileDLs( tr_torrent       * torrent,
 
 const tr_info * tr_torrentInfo( const tr_torrent * torrent );
 
-void tr_torrentSetDownloadDir( tr_torrent  * torrent,
-                               const char  * path );
+/* Raw function to change the torrent's downloadDir field.
+   This should only be used by libtransmission or to bootstrap
+   a newly-instantiated tr_torrent object. */
+void tr_torrentSetDownloadDir( tr_torrent  * torrent, const char * path );
 
 const char * tr_torrentGetDownloadDir( const tr_torrent * torrent );
 
@@ -1309,8 +1332,6 @@ typedef enum
 tr_torrent_activity;
 
 tr_torrent_activity tr_torrentGetActivity( tr_torrent * );
-
-#define TR_STATUS_IS_ACTIVE( s ) ( ( s ) != TR_STATUS_STOPPED )
 
 typedef enum
 {

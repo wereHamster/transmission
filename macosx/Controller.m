@@ -24,6 +24,7 @@
 
 #import <IOKit/IOMessage.h>
 #import <IOKit/pwr_mgt/IOPMLib.h>
+#import <Carbon/Carbon.h>
 
 #import "Controller.h"
 #import "Torrent.h"
@@ -306,6 +307,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         
         [[SUUpdater sharedUpdater] setDelegate: self];
         fUpdateInProgress = NO;
+        
+        fPauseOnLaunch = (GetCurrentKeyModifiers() & (optionKey | rightOptionKey)) != 0;
     }
     return self;
 }
@@ -401,7 +404,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         for (NSDictionary * historyItem in history)
         {
             Torrent * torrent;
-            if ((torrent = [[Torrent alloc] initWithHistory: historyItem lib: fLib]))
+            if ((torrent = [[Torrent alloc] initWithHistory: historyItem lib: fLib forcePause: fPauseOnLaunch]))
             {
                 [fTorrents addObject: torrent];
                 [torrent release];
@@ -1689,6 +1692,10 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         
         if (![fWindow isMainWindow])
             [fBadger incrementCompleted];
+        
+        //bounce download stack
+        [[NSDistributedNotificationCenter defaultCenter] postNotificationName: @"com.apple.DownloadFileFinished"
+            object: [[torrent downloadFolder] stringByAppendingPathComponent: [torrent name]]];
         
         if ([fDefaults boolForKey: @"QueueSeed"] && [self numToStartFromQueue: NO] <= 0)
         {
@@ -3713,7 +3720,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
                 if ([torrent isActive])
                 {
                     //stop all transfers (since some are active) before going to sleep and remember to resume when we wake up
-                    [fTorrents makeObjectsPerformSelector: @selector(sleep)];
+                    for (Torrent * torrent in fTorrents)
+                        [torrent sleep];
                     sleep(15);
                     break;
                 }
@@ -3738,7 +3746,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
 
         case kIOMessageSystemHasPoweredOn:
             //resume sleeping transfers after we wake up
-            [fTorrents makeObjectsPerformSelector: @selector(wakeUp)];
+            for (Torrent * torrent in fTorrents)
+                [torrent wakeUp];
             #warning check speed limit timer?
             //[self autoSpeedLimitChange: nil];
             break;

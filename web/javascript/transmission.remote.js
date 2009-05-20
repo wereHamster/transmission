@@ -35,28 +35,44 @@ TransmissionRemote.prototype =
 	initialize: function(controller) {
 		this._controller = controller;
 		this._error = '';
+		this._token = '';
 	},
 
 	/*
 	 * Display an error if an ajax request fails, and stop sending requests
+	 * or on a 409, globally set the X-Transmission-Session-Id and resend
 	 */
-	ajaxError: function(request, error_string, exception) {
-		this._error = request.responseText
-		            ? request.responseText.trim().replace(/(<([^>]+)>)/ig,"")
-		            : "";
-		if( !this._error.length )
-			this._error = 'Server not responding';
+	ajaxError: function(request, error_string, exception, ajaxObject) {
+		remote = this;
+
+		// set the Transmission-Session-Id on a 409
+		if(request.status == 409 && (token = request.getResponseHeader('X-Transmission-Session-Id'))){
+			remote._token = token;
+			$.ajax(ajaxObject);
+			return;
+		}
+
+		remote._error = request.responseText
+					? request.responseText.trim().replace(/(<([^>]+)>)/ig,"")
+					: "";
+		if( !remote._error.length )
+			remote._error = 'Server not responding';
 		
 		dialog.confirm('Connection Failed', 
 			'Could not connect to the server. You may need to reload the page to reconnect.', 
 			'Details',
-			'alert(transmission.remote._error);',
+			'alert(remote._error);',
 			null,
 			'Dismiss');
-		transmission.togglePeriodicRefresh(false);
+		remote._controller.togglePeriodicRefresh(false);
 	},
-	
+
+	appendSessionId: function(XHR) {
+		XHR.setRequestHeader('X-Transmission-Session-Id', this._token);
+	},
+
 	sendRequest: function( data, success ) {
+		remote = this;
 		$.ajax( {
 			url: RPC._Root,
 			type: 'POST',
@@ -64,7 +80,8 @@ TransmissionRemote.prototype =
 			dataType: 'json',
 			cache: false,
 			data: $.toJSON(data),
-			error: this.ajaxError,
+			beforeSend: function(XHR){ remote.appendSessionId(XHR) },
+			error: function(request, error_string, exception){ remote.ajaxError(request, error_string, exception, this) },
 			success: success
 		} );
 	},

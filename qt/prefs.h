@@ -59,6 +59,12 @@ class Prefs: public QObject
             MAIN_WINDOW_X,
             MAIN_WINDOW_Y,
             FILTER_MODE,
+            SESSION_IS_REMOTE,
+            SESSION_REMOTE_HOST,
+            SESSION_REMOTE_PORT,
+            SESSION_REMOTE_AUTH,
+            SESSION_REMOTE_USERNAME,
+            SESSION_REMOTE_PASSWORD,
 
             /* core prefs */
             FIRST_CORE_PREF,
@@ -103,8 +109,6 @@ class Prefs: public QObject
             RPC_USERNAME,
             RPC_WHITELIST_ENABLED,
             RPC_WHITELIST,
-            SEED_RATIO_LIMIT,
-            SEED_RATIO_LIMITED,
             USPEED_ENABLED,
             USPEED,
             UPLOAD_SLOTS_PER_TORRENT,

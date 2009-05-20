@@ -10,7 +10,9 @@
  * $Id$
  */
 
+#include <ctype.h> /* isspace */
 #include <errno.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h> /* strcmp */
@@ -73,6 +75,8 @@ static tr_option opts[] =
     { 'i', "info",                 "Show the current torrent(s)' details", "i",  0, NULL },
     { 920, "session-info",         "Show the session's details", "si", 0, NULL },
     { 'l', "list",                 "List all torrents", "l",  0, NULL },
+    { 960, "move",                 "Move current torrent's data to a new folder", NULL, 1, "<path>" },
+    { 961, "find",                 "Tell Transmission where to find a torrent's data", NULL, 1, "<path>" },
     { 'm', "portmap",              "Enable portmapping via NAT-PMP or UPnP", "m",  0, NULL },
     { 'M', "no-portmap",           "Disable portmapping", "M",  0, NULL },
     { 'n', "auth",                 "Set authentication info", "n",  1, "<username:password>" },
@@ -131,6 +135,7 @@ static int    reqCount = 0;
 static int    debug = 0;
 static char * auth = NULL;
 static char * netrc = NULL;
+static char * sessionId = NULL;
 
 static char*
 tr_getcwd( void )
@@ -189,8 +194,16 @@ addIdArg( tr_benc *    args,
     }
     if( strcmp( id, "all" ) )
     {
-        tr_rpc_parse_list_str( tr_bencDictAdd( args,
-                                               "ids" ), id, strlen( id ) );
+        const char * pch;
+        tr_bool isList = strchr(id,',') || strchr(id,'-');
+        tr_bool isNum = TRUE;
+        for( pch=id; isNum && *pch; ++pch )
+            if( !isdigit( *pch ) )
+                isNum = FALSE;
+        if( isNum || isList )
+            tr_rpc_parse_list_str( tr_bencDictAdd( args, "ids" ), id, strlen( id ) );
+        else
+            tr_bencDictAddStr( args, "ids", id ); /* it's a torrent sha hash */
     }
 }
 
@@ -577,6 +590,20 @@ readargs( int           argc,
                 tr_bencDictAddBool( args, "seedRatioLimited", FALSE );
                 break;
 
+            case 960:
+                tr_bencDictAddStr( &top, "method", "torrent-set-location" );
+                tr_bencDictAddStr( args, "location", optarg );
+                tr_bencDictAddBool( args, "move", TRUE );
+                addIdArg( args, id );
+                break;
+
+            case 961:
+                tr_bencDictAddStr( &top, "method", "torrent-set-location" );
+                tr_bencDictAddStr( args, "location", optarg );
+                tr_bencDictAddBool( args, "move", FALSE );
+                addIdArg( args, id );
+                break;
+
             case TR_OPT_ERR:
                 fprintf( stderr, "invalid option\n" );
                 showUsage( );
@@ -736,7 +763,7 @@ getStatusString( tr_benc * t, char * buf, size_t buflen )
                              : "Verifying";
             double percent;
             if( tr_bencDictFindReal( t, "recheckProgress", &percent ) )
-                tr_snprintf( buf, buflen, "%s (%.0f%%)", str, percent*100.0 );
+                tr_snprintf( buf, buflen, "%s (%.0f%%)", str, floor(percent*100.0) );
             else
                 tr_strlcpy( buf, str, buflen );
 
@@ -1082,7 +1109,7 @@ printFileList( tr_benc * top )
                         }
                         printf( "%3d: %3.0f%% %-8s %-3s %9s  %s\n",
                                 j,
-                                ( 100.0 * percent ),
+                                floor( 100.0 * percent ),
                                 pristr,
                                 ( wanted ? "Yes" : "No" ),
                                 sizestr,
@@ -1272,56 +1299,113 @@ processResponse( const char * host,
     }
 }
 
+/* look for a session id in the header in case the server gives back a 409 */
+static size_t
+parseResponseHeader( void *ptr, size_t size, size_t nmemb, void * stream UNUSED )
+{
+    const char * line = ptr;
+    const size_t line_len = size * nmemb;
+    const char * key = TR_RPC_SESSION_ID_HEADER ": ";
+    const size_t key_len = strlen( key );
+
+    if( ( line_len >= key_len ) && !memcmp( line, key, key_len ) )
+    {
+        const char * begin = line + key_len;
+        const char * end = begin;
+        while( !isspace( *end ) )
+            ++end;
+        tr_free( sessionId );
+        sessionId = tr_strndup( begin, end-begin );
+    }
+
+    return line_len;
+}
+
+static CURL*
+tr_curl_easy_init( struct evbuffer * writebuf )
+{
+    CURL * curl = curl_easy_init( );
+    curl_easy_setopt( curl, CURLOPT_USERAGENT, MY_NAME "/" LONG_VERSION_STRING );
+    curl_easy_setopt( curl, CURLOPT_WRITEFUNCTION, writeFunc );
+    curl_easy_setopt( curl, CURLOPT_WRITEDATA, writebuf );
+    curl_easy_setopt( curl, CURLOPT_HEADERFUNCTION, parseResponseHeader );
+    curl_easy_setopt( curl, CURLOPT_POST, 1 );
+    curl_easy_setopt( curl, CURLOPT_NETRC, CURL_NETRC_OPTIONAL );
+    curl_easy_setopt( curl, CURLOPT_HTTPAUTH, CURLAUTH_ANY );
+    curl_easy_setopt( curl, CURLOPT_TIMEOUT, 60L );
+    curl_easy_setopt( curl, CURLOPT_VERBOSE, debug );
+#ifdef HAVE_ZLIB
+    curl_easy_setopt( curl, CURLOPT_ENCODING, "deflate" );
+#endif
+    if( netrc )
+        curl_easy_setopt( curl, CURLOPT_NETRC_FILE, netrc );
+    if( auth )
+        curl_easy_setopt( curl, CURLOPT_USERPWD, auth );
+    if( sessionId ) {
+        char * h = tr_strdup_printf( "%s: %s", TR_RPC_SESSION_ID_HEADER, sessionId );
+        struct curl_slist * custom_headers = curl_slist_append( NULL, h );
+        curl_easy_setopt( curl, CURLOPT_HTTPHEADER, custom_headers );
+        /* fixme: leaks */
+    }
+    return curl;
+}
+    
+
 static void
 processRequests( const char *  host,
                  int           port,
                  const char ** reqs,
                  int           reqCount )
 {
-    int               i;
-    CURL *            curl;
+    int i;
+    CURL * curl = NULL;
     struct evbuffer * buf = evbuffer_new( );
-    char *            url = tr_strdup_printf(
-        "http://%s:%d/transmission/rpc", host, port );
+    char * url = tr_strdup_printf( "http://%s:%d/transmission/rpc", host, port );
 
-    curl = curl_easy_init( );
-    curl_easy_setopt( curl, CURLOPT_VERBOSE, debug );
-#ifdef HAVE_ZLIB
-    curl_easy_setopt( curl, CURLOPT_ENCODING, "deflate" );
-#endif
-    curl_easy_setopt( curl, CURLOPT_USERAGENT, MY_NAME "/" LONG_VERSION_STRING );
-    curl_easy_setopt( curl, CURLOPT_WRITEFUNCTION, writeFunc );
-    curl_easy_setopt( curl, CURLOPT_WRITEDATA, buf );
-    curl_easy_setopt( curl, CURLOPT_POST, 1 );
-    curl_easy_setopt( curl, CURLOPT_URL, url );
-    curl_easy_setopt( curl, CURLOPT_NETRC, CURL_NETRC_OPTIONAL );
-    curl_easy_setopt( curl, CURLOPT_HTTPAUTH, CURLAUTH_ANY );
-    curl_easy_setopt( curl, CURLOPT_TIMEOUT, 60L );
-    if( netrc )
-        curl_easy_setopt( curl, CURLOPT_NETRC_FILE, netrc );
-    if( auth )
-        curl_easy_setopt( curl, CURLOPT_USERPWD, auth );
-
-    for( i = 0; i < reqCount; ++i )
+    for( i=0; i<reqCount; ++i )
     {
         CURLcode res;
+        evbuffer_drain( buf, EVBUFFER_LENGTH( buf ) );
+
+        if( curl == NULL )
+        {
+            curl = tr_curl_easy_init( buf );
+            curl_easy_setopt( curl, CURLOPT_URL, url );
+        }
+
         curl_easy_setopt( curl, CURLOPT_POSTFIELDS, reqs[i] );
+
         if( debug )
             fprintf( stderr, "posting:\n--------\n%s\n--------\n", reqs[i] );
         if( ( res = curl_easy_perform( curl ) ) )
-            tr_nerr( MY_NAME, "(%s:%d) %s", host, port,
-                    curl_easy_strerror( res ) );
-        else
-            processResponse( host, port, EVBUFFER_DATA(
-                                buf ), EVBUFFER_LENGTH( buf ) );
-
-        evbuffer_drain( buf, EVBUFFER_LENGTH( buf ) );
+            tr_nerr( MY_NAME, "(%s:%d) %s", host, port, curl_easy_strerror( res ) );
+        else {
+            long response;
+            curl_easy_getinfo( curl, CURLINFO_RESPONSE_CODE, &response );
+            switch( response ) {
+                case 200:
+                    processResponse( host, port, EVBUFFER_DATA(buf), EVBUFFER_LENGTH(buf) );
+                    break;
+                case 409:
+                    /* session id failed.  our curl header func has already
+                     * pulled the new session id from this response's headers,
+                     * build a new CURL* and try again */
+                    curl_easy_cleanup( curl );
+                    curl = NULL;
+                    --i;
+                    break;
+                default:
+                    fprintf( stderr, "Unexpected response: %s\n", (char*)EVBUFFER_DATA(buf) );
+                    break;
+            }
+        }
     }
 
     /* cleanup */
     tr_free( url );
     evbuffer_free( buf );
-    curl_easy_cleanup( curl );
+    if( curl != NULL )
+        curl_easy_cleanup( curl );
 }
 
 int

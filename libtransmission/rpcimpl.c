@@ -158,6 +158,13 @@ getTorrents( tr_session * session,
                 if( tor->anyDate >= now - window )
                     torrents[torrentCount++] = tor;
         }
+        else
+        {
+            tr_torrent * tor;
+            torrents = tr_new0( tr_torrent *, 1 );
+            if(( tor = tr_torrentFindFromHashString( session, str )))
+                torrents[torrentCount++] = tor;
+        }
     }
     else /* all of them */
     {
@@ -409,6 +416,8 @@ addField( const tr_torrent * tor,
         tr_bencDictAddStr( d, key, st->announceResponse );
     else if( !strcmp( key, "announceURL" ) )
         tr_bencDictAddStr( d, key, st->announceURL );
+    else if( !strcmp( key, "bandwidthPriority" ) )
+        tr_bencDictAddInt( d, key, tr_torrentGetPriority( tor ) );
     else if( !strcmp( key, "comment" ) )
         tr_bencDictAddStr( d, key, inf->comment ? inf->comment : "" );
     else if( !strcmp( key, "corruptEver" ) )
@@ -515,8 +524,6 @@ addField( const tr_torrent * tor,
         tr_bencDictAddInt( d, key, (int)( st->pieceDownloadSpeed * 1024 ) );
     else if( !strcmp( key, "rateUpload" ) )
         tr_bencDictAddInt( d, key, (int)( st->pieceUploadSpeed * 1024 ) );
-    else if( !strcmp( key, "ratio" ) )
-        tr_bencDictAddReal( d, key, st->ratio );
     else if( !strcmp( key, "recheckProgress" ) )
         tr_bencDictAddReal( d, key, st->recheckProgress );
     else if( !strcmp( key, "scrapeResponse" ) )
@@ -547,12 +554,12 @@ addField( const tr_torrent * tor,
         tr_bencDictAddInt( d, key, inf->totalSize );
     else if( !strcmp( key, "uploadedEver" ) )
         tr_bencDictAddInt( d, key, st->uploadedEver );
-    else if( !strcmp( key, "uploadRatio" ) )
-        tr_bencDictAddReal( d, key, tr_getRatio( st->uploadedEver, st->downloadedEver ) );
     else if( !strcmp( key, "uploadLimit" ) )
         tr_bencDictAddInt( d, key, tr_torrentGetSpeedLimit( tor, TR_UP ) );
     else if( !strcmp( key, "uploadLimited" ) )
         tr_bencDictAddBool( d, key, tr_torrentUsesSpeedLimit( tor, TR_UP ) );
+    else if( !strcmp( key, "uploadRatio" ) )
+        tr_bencDictAddReal( d, key, st->ratio );
     else if( !strcmp( key, "wanted" ) )
     {
         tr_file_index_t i;
@@ -721,6 +728,9 @@ torrentSet( tr_session               * session,
         tr_bool      boolVal;
         tr_torrent * tor = torrents[i];
 
+        if( tr_bencDictFindInt( args_in, "bandwidthPriority", &tmp ) )
+            if( tr_isPriority( tmp ) )
+                tr_torrentSetPriority( tor, tmp );
         if( tr_bencDictFindList( args_in, "files-unwanted", &files ) )
             setFileDLs( tor, FALSE, files );
         if( tr_bencDictFindList( args_in, "files-wanted", &files ) )
@@ -751,6 +761,42 @@ torrentSet( tr_session               * session,
     }
 
     tr_free( torrents );
+    return errmsg;
+}
+
+static const char*
+torrentSetLocation( tr_session               * session,
+                    tr_benc                  * args_in,
+                    tr_benc                  * args_out UNUSED,
+                    struct tr_rpc_idle_data  * idle_data )
+{
+    const char * errmsg = NULL;
+    const char * location = NULL;
+
+    assert( idle_data == NULL );
+
+    if( !tr_bencDictFindStr( args_in, "location", &location ) )
+    {
+        errmsg = "no location";
+    }
+    else
+    {
+        tr_bool move = FALSE;
+        int i, torrentCount;
+        tr_torrent ** torrents = getTorrents( session, args_in, &torrentCount );
+
+        tr_bencDictFindBool( args_in, "move", &move );
+
+        for( i=0; i<torrentCount; ++i )
+        {
+            tr_torrent * tor = torrents[i];
+            tr_torrentSetLocation( tor, location, move, NULL );
+            notify( session, TR_RPC_TORRENT_CHANGED, tor );
+        }
+
+        tr_free( torrents );
+    }
+
     return errmsg;
 }
 
@@ -1191,7 +1237,7 @@ sessionGet( tr_session               * s,
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_PORT, tr_sessionGetPeerPort( s ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_PORT_RANDOM_ON_START, tr_sessionGetPeerPortRandomOnStart( s ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_PORT_FORWARDING, tr_sessionIsPortForwardingEnabled( s ) );
-    tr_bencDictAddInt ( d, "rpc-version", 5 );
+    tr_bencDictAddInt ( d, "rpc-version", 6 );
     tr_bencDictAddInt ( d, "rpc-version-minimum", 1 );
     tr_bencDictAddReal( d, "seedRatioLimit", tr_sessionGetRatioLimit( s ) );
     tr_bencDictAddBool( d, "seedRatioLimited", tr_sessionIsRatioLimited( s ) );
@@ -1224,19 +1270,20 @@ static struct method
 }
 methods[] =
 {
-    { "port-test",          FALSE, portTest            },
-    { "blocklist-update",   FALSE, blocklistUpdate     },
-    { "session-get",        TRUE,  sessionGet          },
-    { "session-set",        TRUE,  sessionSet          },
-    { "session-stats",      TRUE,  sessionStats        },
-    { "torrent-add",        FALSE, torrentAdd          },
-    { "torrent-get",        TRUE,  torrentGet          },
-    { "torrent-remove",     TRUE,  torrentRemove       },
-    { "torrent-set",        TRUE,  torrentSet          },
-    { "torrent-start",      TRUE,  torrentStart        },
-    { "torrent-stop",       TRUE,  torrentStop         },
-    { "torrent-verify",     TRUE,  torrentVerify       },
-    { "torrent-reannounce", TRUE,  torrentReannounce   }
+    { "port-test",             FALSE, portTest            },
+    { "blocklist-update",      FALSE, blocklistUpdate     },
+    { "session-get",           TRUE,  sessionGet          },
+    { "session-set",           TRUE,  sessionSet          },
+    { "session-stats",         TRUE,  sessionStats        },
+    { "torrent-add",           FALSE, torrentAdd          },
+    { "torrent-get",           TRUE,  torrentGet          },
+    { "torrent-remove",        TRUE,  torrentRemove       },
+    { "torrent-set",           TRUE,  torrentSet          },
+    { "torrent-set-location",  TRUE,  torrentSetLocation  },
+    { "torrent-start",         TRUE,  torrentStart        },
+    { "torrent-stop",          TRUE,  torrentStop         },
+    { "torrent-verify",        TRUE,  torrentVerify       },
+    { "torrent-reannounce",    TRUE,  torrentReannounce   }
 };
 
 static void

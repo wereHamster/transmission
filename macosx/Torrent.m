@@ -116,7 +116,7 @@ int trashDataFile(const char * filename)
     return self;
 }
 
-- (id) initWithHistory: (NSDictionary *) history lib: (tr_session *) lib
+- (id) initWithHistory: (NSDictionary *) history lib: (tr_session *) lib forcePause: (BOOL) pause
 {
     self = [self initWithHash: [history objectForKey: @"TorrentHash"]
                 path: [history objectForKey: @"TorrentPath"] torrentStruct: NULL lib: lib
@@ -132,7 +132,7 @@ int trashDataFile(const char * filename)
     {
         //start transfer
         NSNumber * active;
-        if ((active = [history objectForKey: @"Active"]) && [active boolValue])
+        if (!pause && (active = [history objectForKey: @"Active"]) && [active boolValue])
         {
             fStat = tr_torrentStat(fHandle);
             [self startTransfer];
@@ -442,6 +442,16 @@ int trashDataFile(const char * filename)
 - (BOOL) waitingToStart
 {
     return fWaitToStart;
+}
+
+- (tr_priority_t) priority
+{
+    return tr_torrentGetPriority(fHandle);
+}
+
+- (void) setPriority: (tr_priority_t) priority
+{
+    return tr_torrentSetPriority(fHandle, priority);
 }
 
 - (void) revealData
@@ -1458,7 +1468,7 @@ int trashDataFile(const char * filename)
     [[NSNotificationCenter defaultCenter] postNotificationName: @"TorrentFileCheckChange" object: self];
 }
 
-- (void) setFilePriority: (NSInteger) priority forIndexes: (NSIndexSet *) indexSet
+- (void) setFilePriority: (tr_priority_t) priority forIndexes: (NSIndexSet *) indexSet
 {
     const NSUInteger count = [indexSet count];
     tr_file_index_t * files = malloc(count * sizeof(tr_file_index_t));
@@ -1469,7 +1479,7 @@ int trashDataFile(const char * filename)
     free(files);
 }
 
-- (BOOL) hasFilePriority: (NSInteger) priority forIndexes: (NSIndexSet *) indexSet
+- (BOOL) hasFilePriority: (tr_priority_t) priority forIndexes: (NSIndexSet *) indexSet
 {
     for (NSInteger index = [indexSet firstIndex]; index != NSNotFound; index = [indexSet indexGreaterThanIndex: index])
         if (priority == tr_torrentGetFilePriority(fHandle, index) && [self canChangeDownloadCheckForFile: index])
@@ -1487,7 +1497,7 @@ int trashDataFile(const char * filename)
         if (![self canChangeDownloadCheckForFile: index])
             continue;
         
-        const NSInteger priority = tr_torrentGetFilePriority(fHandle, index);
+        const tr_priority_t priority = tr_torrentGetFilePriority(fHandle, index);
         if (priority == TR_PRI_LOW)
         {
             if (low)

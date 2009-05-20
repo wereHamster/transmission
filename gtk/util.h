@@ -61,6 +61,8 @@ char*       tr_strltime( char * buf,
 
 char*       gtr_localtime( time_t time );
 
+char*       gtr_localtime2( char * buf, time_t time, size_t buflen );
+
 /* create a directory and any missing parent directories */
 int         mkdir_p( const char *name,
                      mode_t      mode );
@@ -97,7 +99,7 @@ void        gtr_widget_set_tooltip_text( GtkWidget * w, const char * tip );
 GtkWidget * gtr_button_new_from_stock( const char * stock,
                                        const char * mnemonic );
 
-guint       gtr_timeout_add_seconds( guint       interval,
+guint       gtr_timeout_add_seconds( guint       seconds,
                                      GSourceFunc function,
                                      gpointer    data );
 

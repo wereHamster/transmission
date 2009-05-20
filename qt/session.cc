@@ -32,6 +32,7 @@
 #include "prefs.h"
 #include "qticonloader.h"
 #include "session.h"
+#include "session-dialog.h"
 #include "torrent.h"
 
 // #define DEBUG_HTTP
@@ -88,7 +89,6 @@ Session :: sessionSet( const char * key, const QVariant& value )
         case QVariant::String: tr_bencDictAddStr  ( args, key, value.toString().toUtf8() ); break;
         default: assert( "unknown type" );
     }
-std::cerr << tr_bencToJSON(&top) << std::endl;
     exec( &top );
     tr_bencFree( &top );
 }
@@ -121,8 +121,6 @@ Session :: updatePref( int key )
         case Prefs :: DOWNLOAD_DIR:
         case Prefs :: PEER_LIMIT_GLOBAL:
         case Prefs :: PEER_LIMIT_TORRENT:
-        case Prefs :: SEED_RATIO_LIMIT:
-        case Prefs :: SEED_RATIO_LIMITED:
         case Prefs :: USPEED_ENABLED:
         case Prefs :: USPEED:
         case Prefs :: DSPEED_ENABLED:
@@ -131,9 +129,14 @@ Session :: updatePref( int key )
         case Prefs :: PORT_FORWARDING:
         case Prefs :: PEER_PORT:
         case Prefs :: PEER_PORT_RANDOM_ON_START:
-        case Prefs :: RATIO:
-        case Prefs :: RATIO_ENABLED:
             sessionSet( myPrefs.keyStr(key), myPrefs.variant(key) );
+            break;
+
+        case Prefs :: RATIO:
+            sessionSet( "seedRatioLimit", myPrefs.variant(key) );           
+            break;           
+        case Prefs :: RATIO_ENABLED:
+            sessionSet( "seedRatioLimited", myPrefs.variant(key) );
             break;
 
         case Prefs :: RPC_AUTH_REQUIRED:
@@ -174,11 +177,11 @@ Session :: updatePref( int key )
 ****
 ***/
 
-Session :: Session( const char * configDir, Prefs& prefs, const char * url, bool paused ):
+Session :: Session( const char * configDir, Prefs& prefs ):
     myBlocklistSize( -1 ),
     myPrefs( prefs ),
     mySession( 0 ),
-    myUrl( url )
+    myConfigDir( configDir )
 {
     myStats.ratio = TR_RATIO_NA;
     myStats.uploadedBytes = 0;
@@ -188,44 +191,86 @@ Session :: Session( const char * configDir, Prefs& prefs, const char * url, bool
     myStats.secondsActive = 0;
     myCumulativeStats = myStats;
 
-    if( url != 0 )
-    {
-        connect( &myHttp, SIGNAL(requestStarted(int)), this, SLOT(onRequestStarted(int)));
-        connect( &myHttp, SIGNAL(requestFinished(int,bool)), this, SLOT(onRequestFinished(int,bool)));
-        connect( &myHttp, SIGNAL(dataReadProgress(int,int)), this, SIGNAL(dataReadProgress()));
-        connect( &myHttp, SIGNAL(dataSendProgress(int,int)), this, SIGNAL(dataSendProgress()));
-        myHttp.setHost( myUrl.host( ), myUrl.port( ) );
-        myHttp.setUser( myUrl.userName( ), myUrl.password( ) );
-        myBuffer.open( QIODevice::ReadWrite );
+    connect( &myHttp, SIGNAL(requestStarted(int)), this, SLOT(onRequestStarted(int)));
+    connect( &myHttp, SIGNAL(requestFinished(int,bool)), this, SLOT(onRequestFinished(int,bool)));
+    connect( &myHttp, SIGNAL(dataReadProgress(int,int)), this, SIGNAL(dataReadProgress()));
+    connect( &myHttp, SIGNAL(dataSendProgress(int,int)), this, SIGNAL(dataSendProgress()));
+    connect( &myHttp, SIGNAL(authenticationRequired(QString, quint16, QAuthenticator*)), this, SIGNAL(httpAuthenticationRequired()) );
+    connect( &myPrefs, SIGNAL(changed(int)), this, SLOT(updatePref(int)) );
 
-        if( paused )
-            exec( "{ \"method\": \"torrent-stop\" }" );
+    myBuffer.open( QIODevice::ReadWrite );
+}
+
+Session :: ~Session( )
+{
+    stop( );
+}
+
+/***
+****
+***/
+
+void
+Session :: stop( )
+{
+    myHttp.abort( );
+    myUrl.clear( );
+
+    if( mySession )
+    {
+        tr_sessionClose( mySession );
+        mySession = 0;
+    }
+}
+
+void
+Session :: restart( )
+{
+    stop( );
+    start( );
+}
+
+void
+Session :: start( )
+{
+    if( myPrefs.get<bool>(Prefs::SESSION_IS_REMOTE) )
+    {
+        const int port( myPrefs.get<int>(Prefs::SESSION_REMOTE_PORT) );
+        const bool auth( myPrefs.get<bool>(Prefs::SESSION_REMOTE_AUTH) );
+        const QString host( myPrefs.get<QString>(Prefs::SESSION_REMOTE_HOST) );
+        const QString user( myPrefs.get<QString>(Prefs::SESSION_REMOTE_USERNAME) );
+        const QString pass( myPrefs.get<QString>(Prefs::SESSION_REMOTE_PASSWORD) );
+
+        QUrl url;
+        url.setScheme( "http" );
+        url.setHost( host );
+        url.setPort( port );
+        if( auth ) {
+            url.setUserName( user );
+            url.setPassword( pass );
+        }
+        myUrl = url;
+
+        myHttp.setHost( host, port );
+        myHttp.setUser( user, pass );
     }
     else
     {
         tr_benc settings;
         tr_bencInitDict( &settings, 0 );
         tr_sessionGetDefaultSettings( &settings );
-        tr_sessionLoadSettings( &settings, configDir, "qt" );
-        mySession = tr_sessionInit( "qt", configDir, true, &settings );
+        tr_sessionLoadSettings( &settings, myConfigDir.toUtf8().constData(), "qt" );
+        mySession = tr_sessionInit( "qt", myConfigDir.toUtf8().constData(), true, &settings );
         tr_bencFree( &settings );
 
         tr_ctor * ctor = tr_ctorNew( mySession );
-        if( paused )
-            tr_ctorSetPaused( ctor, TR_FORCE, TRUE );
         int torrentCount;
         tr_torrent ** torrents = tr_sessionLoadTorrents( mySession, ctor, &torrentCount );
         tr_free( torrents );
         tr_ctorFree( ctor );
     }
 
-    connect( &myPrefs, SIGNAL(changed(int)), this, SLOT(updatePref(int)) );
-}
-
-Session :: ~Session( )
-{
-    if( mySession )
-        tr_sessionClose( mySession );
+    emit sourceChanged( );
 }
 
 bool
@@ -280,51 +325,72 @@ namespace
 const int Session :: ADD_TORRENT_TAG = TAG_ADD_TORRENT;
 
 void
-Session :: torrentSet( int id, const QString& key, double value )
+Session :: torrentSet( const QSet<int>& ids, const QString& key, double value )
 {
-    QString s;
-    QTextStream( &s ) << "{ \"method\": \"torrent-set\", \"arguments\": { \"ids\": "<<id<<", \""<<key<<"\": "<<value<<" } }";
-std::cerr << qPrintable(s) << std::endl;
-    exec( s.toUtf8().constData() );
-    refreshExtraStats( id );
+    tr_benc top;
+    tr_bencInitDict( &top, 2 );
+    tr_bencDictAddStr( &top, "method", "torrent-set" );
+    tr_benc * args = tr_bencDictAddDict( &top, "arguments", 2 );
+    tr_bencDictAddReal( args, key.toUtf8().constData(), value );
+    addOptionalIds( args, ids );
+    exec( &top );
+    tr_bencFree( &top );
 }
 
 void
-Session :: torrentSet( int id, const QString& key, int value )
+Session :: torrentSet( const QSet<int>& ids, const QString& key, int value )
 {
-    QString s;
-    QTextStream( &s ) << "{ \"method\": \"torrent-set\", \"arguments\": { \"ids\": "<<id<<", \""<<key<<"\": "<<value<<" } }";
-std::cerr << qPrintable(s) << std::endl;
-    exec( s.toUtf8().constData() );
-    refreshExtraStats( id );
+    tr_benc top;
+    tr_bencInitDict( &top, 2 );
+    tr_bencDictAddStr( &top, "method", "torrent-set" );
+    tr_benc * args = tr_bencDictAddDict( &top, "arguments", 2 );
+    tr_bencDictAddInt( args, key.toUtf8().constData(), value );
+    addOptionalIds( args, ids );
+    exec( &top );
+    tr_bencFree( &top );
 }
 
 void
-Session :: torrentSet( int id, const QString& key, bool value )
+Session :: torrentSet( const QSet<int>& ids, const QString& key, bool value )
 {
-    QString s;
-    QTextStream( &s ) << "{ \"method\": \"torrent-set\", \"arguments\": { \"ids\": "<<id<<", \""<<key<<"\": "<<(value?"true":"false")<<" } }";
-std::cerr << qPrintable(s) << std::endl;
-    exec( s.toUtf8().constData() );
-    refreshExtraStats( id );
+    tr_benc top;
+    tr_bencInitDict( &top, 2 );
+    tr_bencDictAddStr( &top, "method", "torrent-set" );
+    tr_benc * args = tr_bencDictAddDict( &top, "arguments", 2 );
+    tr_bencDictAddBool( args, key.toUtf8().constData(), value );
+    addOptionalIds( args, ids );
+    exec( &top );
+    tr_bencFree( &top );
 }
 
 void
-Session :: torrentSet( int id, const QString& key, const QList<int>& value )
+Session :: torrentSet( const QSet<int>& ids, const QString& key, const QList<int>& value )
 {
     tr_benc top;
     tr_bencInitDict( &top, 2 );
     tr_bencDictAddStr( &top, "method", "torrent-set" );
     tr_benc * args( tr_bencDictAddDict( &top, "arguments", 2 ) );
-    tr_bencListAddInt( tr_bencDictAddList( args, "ids", 1 ), id );
+    addOptionalIds( args, ids );
     tr_benc * list( tr_bencDictAddList( args, key.toUtf8().constData(), value.size( ) ) );
     foreach( int i, value )
         tr_bencListAddInt( list, i );
     exec( &top );
     tr_bencFree( &top );
-    refreshExtraStats( id );
 }
 
+void
+Session :: torrentSetLocation( const QSet<int>& ids, const QString& location, bool doMove )
+{
+    tr_benc top;
+    tr_bencInitDict( &top, 2 );
+    tr_bencDictAddStr( &top, "method", "torrent-set-location" );
+    tr_benc * args( tr_bencDictAddDict( &top, "arguments", 3 ) );
+    addOptionalIds( args, ids );
+    tr_bencDictAddStr( args, "location", location.toUtf8().constData() );
+    tr_bencDictAddBool( args, "move", doMove );
+    exec( &top );
+    tr_bencFree( &top );
+}
 
 void
 Session :: refreshTorrents( const QSet<int>& ids )
@@ -348,14 +414,14 @@ Session :: refreshTorrents( const QSet<int>& ids )
 }
 
 void
-Session :: refreshExtraStats( int id )
+Session :: refreshExtraStats( const QSet<int>& ids )
 {
     tr_benc top;
     tr_bencInitDict( &top, 3 );
     tr_bencDictAddStr( &top, "method", "torrent-get" );
     tr_bencDictAddInt( &top, "tag", TAG_SOME_TORRENTS );
     tr_benc * args( tr_bencDictAddDict( &top, "arguments", 2 ) );
-    tr_bencListAddInt( tr_bencDictAddList( args, "ids", 1 ), id );
+    addOptionalIds( args, ids );
     addList( tr_bencDictAddList( args, "fields", 0 ), getStatKeys( ) + getExtraStatKeys( ));
     exec( &top );
     tr_bencFree( &top );
@@ -374,13 +440,13 @@ Session :: sendTorrentRequest( const char * request, const QSet<int>& ids )
 }
 
 void
-Session :: pause( const QSet<int>& ids )
+Session :: pauseTorrents( const QSet<int>& ids )
 {
     sendTorrentRequest( "torrent-stop", ids );
 }
 
 void
-Session :: start( const QSet<int>& ids )
+Session :: startTorrents( const QSet<int>& ids )
 {
     sendTorrentRequest( "torrent-start", ids );
 }
@@ -484,14 +550,17 @@ Session :: exec( const char * request )
     {
         tr_rpc_request_exec_json( mySession, request, strlen( request ), localSessionCallback, this );
     }
-    else
+    else if( !myUrl.isEmpty( ) )
     {
-        const QByteArray data( request, strlen( request ) );
         static const QString path( "/transmission/rpc" );
         QHttpRequestHeader header( "POST", path );
         header.setValue( "User-Agent", QCoreApplication::instance()->applicationName() + "/" + LONG_VERSION_STRING );
         header.setValue( "Content-Type", "application/json; charset=UTF-8" );
-        myHttp.request( header, data, &myBuffer );
+        if( !mySessionId.isEmpty( ) )
+            header.setValue( TR_RPC_SESSION_ID_HEADER, mySessionId );
+        QBuffer * reqbuf = new QBuffer;
+        reqbuf->setData( QByteArray( request ) );
+        myHttp.request( header, reqbuf, &myBuffer );
 #ifdef DEBUG_HTTP
         std::cerr << "sending " << qPrintable(header.toString()) << "\nBody:\n" << request << std::endl;
 #endif
@@ -510,6 +579,9 @@ void
 Session :: onRequestFinished( int id, bool error )
 {
     Q_UNUSED( id );
+    QIODevice * sourceDevice = myHttp.currentSourceDevice( );
+
+    QHttpResponseHeader response = myHttp.lastResponse();
 
 #ifdef DEBUG_HTTP
     std::cerr << "http request " << id << " ended.. response header: "
@@ -519,14 +591,23 @@ Session :: onRequestFinished( int id, bool error )
               << std::endl;
 #endif
 
-    if( error )
+    if( ( response.statusCode() == 409 ) && ( myBuffer.buffer().indexOf("invalid session-id") != -1 ) )
+    {
+        // we got a 409 telling us our session id has expired.
+        // update it and resubmit the request.
+        mySessionId = response.value( TR_RPC_SESSION_ID_HEADER );
+        exec( qobject_cast<QBuffer*>(sourceDevice)->buffer().constData() );
+    }
+    else if( error )
+    {
         std::cerr << "http error: " << qPrintable(myHttp.errorString()) << std::endl;
-    else {
+    }
+    else
+    {
         const QByteArray& response( myBuffer.buffer( ) );
         const char * json( response.constData( ) );
         int jsonLength( response.size( ) );
-        if( json[jsonLength-1] == '\n' ) --jsonLength;
-
+        if( jsonLength>0 && json[jsonLength-1] == '\n' ) --jsonLength;
         parseResponse( json, jsonLength );
     }
 
@@ -730,7 +811,7 @@ Session :: addTorrent( QString filename )
 {
     QFile file( filename );
     file.open( QIODevice::ReadOnly );
-    QByteArray raw( file.readAll( ) );
+    const QByteArray raw( file.readAll( ) );
     file.close( );
 
     if( !raw.isEmpty( ) )
@@ -806,12 +887,12 @@ void
 Session :: launchWebInterface( )
 {
     QUrl url;
-    if( !mySession) // remote session
+    if( !mySession ) // remote session
         url = myUrl;
     else { // local session
+        url.setScheme( "http" );
         url.setHost( "localhost" );
         url.setPort( myPrefs.getInt( Prefs::RPC_PORT ) );
     }
-    std::cerr << qPrintable(url.toString()) << std::endl;
     QDesktopServices :: openUrl( url );
 }

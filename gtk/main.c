@@ -49,6 +49,7 @@
 #include "makemeta-ui.h"
 #include "msgwin.h"
 #include "notify.h"
+#include "relocate.h"
 #include "stats.h"
 #include "tr-core.h"
 #include "tr-icon.h"
@@ -65,8 +66,7 @@
 #if GTK_CHECK_VERSION( 2, 8, 0 )
  #define SHOW_LICENSE
 static const char * LICENSE =
-    "The Transmission binaries and most of its source code is distributed "
-    "license. "
+    "Most of Transmission is covered by the MIT license."
     "\n\n"
     "Some files are copyrighted by Charles Kerr and are covered by "
     "the GPL version 2.  Works owned by the Transmission project "
@@ -97,19 +97,18 @@ static const char * LICENSE =
 
 struct cbdata
 {
-    unsigned int  isIconified : 1;
-    unsigned int  isClosing   : 1;
-    guint         timer;
-    gpointer      icon;
-    GtkWindow *   wind;
-    TrCore *      core;
-    GtkWidget *   msgwin;
-    GtkWidget *   prefs;
-    GSList *      errqueue;
-    GSList *      dupqueue;
-    GHashTable *  tor2details;
-    GHashTable *  details2tor;
-    GtkTreeSelection * sel;
+    gboolean            isIconified;
+    gboolean            isClosing;
+    guint               timer;
+    gpointer            icon;
+    GtkWindow         * wind;
+    TrCore            * core;
+    GtkWidget         * msgwin;
+    GtkWidget         * prefs;
+    GSList            * errqueue;
+    GSList            * dupqueue;
+    GtkTreeSelection  * sel;
+    GtkWidget         * details;
 };
 
 #define CBDATA_PTR "callback-data-pointer"
@@ -171,10 +170,10 @@ accumulateStatusForeach( GtkTreeModel *      model,
 
     gtk_tree_model_get( model, iter, MC_ACTIVITY, &activity, -1 );
 
-    if( TR_STATUS_IS_ACTIVE( activity ) )
-        ++counts->activeCount;
-    else
+    if( activity == TR_STATUS_STOPPED )
         ++counts->inactiveCount;
+    else
+        ++counts->activeCount;
 }
 
 static void
@@ -189,7 +188,7 @@ accumulateCanUpdateForeach( GtkTreeModel *      model,
 }
 
 static void
-refreshTorrentActions( struct cbdata * data )
+refreshActions( struct cbdata * data )
 {
     int canUpdate;
     struct counts_data counts;
@@ -205,7 +204,7 @@ refreshTorrentActions( struct cbdata * data )
     action_sensitize( "delete-torrent", counts.totalCount != 0 );
     action_sensitize( "verify-torrent", counts.totalCount != 0 );
     action_sensitize( "open-torrent-folder", counts.totalCount == 1 );
-    action_sensitize( "show-torrent-properties", counts.totalCount == 1 );
+    action_sensitize( "relocate-torrent", counts.totalCount == 1 );
 
     canUpdate = 0;
     gtk_tree_selection_selected_foreach( s, accumulateCanUpdateForeach, &canUpdate );
@@ -229,9 +228,41 @@ refreshTorrentActions( struct cbdata * data )
 }
 
 static void
+refreshDetailsDialog( struct cbdata * data )
+{
+    GtkTreeSelection * s = tr_window_get_selection( data->wind );
+    GtkTreeModel * model;
+    GSList * ids = NULL;
+    GList * selrows = NULL;
+    GList * l;
+
+    if( data->details == NULL )
+        return;
+
+    /* build a list of the selected torrents' ids */
+    s = tr_window_get_selection( data->wind );
+    for( selrows=l=gtk_tree_selection_get_selected_rows(s,&model); l; l=l->next ) {
+        GtkTreeIter iter;
+        if( gtk_tree_model_get_iter( model, &iter, l->data ) ) {
+            tr_torrent * tor;
+            gtk_tree_model_get( model, &iter, MC_TORRENT_RAW, &tor, -1 );
+            ids = g_slist_append( ids, GINT_TO_POINTER( tr_torrentId( tor ) ) );
+        }
+    }
+
+    torrent_inspector_set_torrents( data->details, ids );
+
+    /* cleanup */
+    g_slist_free( ids );
+    g_list_foreach( selrows, (GFunc)gtk_tree_path_free, NULL );
+    g_list_free( selrows );
+}
+
+static void
 selectionChangedCB( GtkTreeSelection * s UNUSED, gpointer data )
 {
-    refreshTorrentActions( data );
+    refreshActions( data );
+    refreshDetailsDialog( data );
 }
 
 static void
@@ -355,8 +386,6 @@ main( int     argc,
     };
 
     cbdata = g_new0( struct cbdata, 1 );
-    cbdata->tor2details = g_hash_table_new( g_str_hash, g_str_equal );
-    cbdata->details2tor = g_hash_table_new( g_direct_hash, g_direct_equal );
 
     /* bind the gettext domain */
     setlocale( LC_ALL, "" );
@@ -583,7 +612,7 @@ rowChangedCB( GtkTreeModel  * model UNUSED,
 {
     struct cbdata * data = gdata;
     if( gtk_tree_selection_path_is_selected ( data->sel, path ) )
-        refreshTorrentActions( gdata );
+        refreshActions( gdata );
 }
 
 static void
@@ -602,7 +631,7 @@ winsetup( struct cbdata * cbdata,
     model = tr_core_model( cbdata->core );
     g_signal_connect( model, "row-changed", G_CALLBACK( rowChangedCB ), cbdata );
     g_signal_connect( wind, "delete-event", G_CALLBACK( winclose ), cbdata );
-    refreshTorrentActions( cbdata );
+    refreshActions( cbdata );
 
     setupdrag( GTK_WIDGET( wind ), cbdata );
 }
@@ -615,6 +644,8 @@ quitThreadFunc( gpointer gdata )
     tr_core_close( cbdata->core );
 
     /* shutdown the gui */
+    if( cbdata->details )
+        gtk_widget_destroy( GTK_WIDGET( cbdata->details ) );
     if( cbdata->prefs )
         gtk_widget_destroy( GTK_WIDGET( cbdata->prefs ) );
     if( cbdata->wind )
@@ -622,22 +653,16 @@ quitThreadFunc( gpointer gdata )
     g_object_unref( cbdata->core );
     if( cbdata->icon )
         g_object_unref( cbdata->icon );
-    if( cbdata->errqueue )
-    {
+    if( cbdata->errqueue ) {
         g_slist_foreach( cbdata->errqueue, (GFunc)g_free, NULL );
         g_slist_free( cbdata->errqueue );
     }
-    if( cbdata->dupqueue )
-    {
+    if( cbdata->dupqueue ) {
         g_slist_foreach( cbdata->dupqueue, (GFunc)g_free, NULL );
         g_slist_free( cbdata->dupqueue );
     }
-
-    g_hash_table_destroy( cbdata->details2tor );
-    g_hash_table_destroy( cbdata->tor2details );
     g_free( cbdata );
 
-    /* exit the gtk main loop */
     gtk_main_quit( );
     return NULL;
 }
@@ -652,8 +677,8 @@ do_exit_cb( GtkWidget *w  UNUSED,
 static void
 wannaquit( void * vdata )
 {
-    GtkWidget *     r, * p, * b, * w, *c;
-    struct cbdata * cbdata = vdata;
+    GtkWidget *r, *p, *b, *w, *c;
+    struct cbdata *cbdata = vdata;
 
     /* stop the update timer */
     if( cbdata->timer )
@@ -688,8 +713,7 @@ wannaquit( void * vdata )
     w = gtr_button_new_from_stock( GTK_STOCK_QUIT, _( "_Quit Now" ) );
     g_signal_connect( w, "clicked", G_CALLBACK( do_exit_cb ), NULL );
     gtk_container_add( GTK_CONTAINER( b ), w );
-    gtk_table_attach( GTK_TABLE(
-                          p ), b, 1, 2, 2, 3, GTK_FILL, GTK_FILL, 0, 10 );
+    gtk_table_attach( GTK_TABLE( p ), b, 1, 2, 2, 3, GTK_FILL, GTK_FILL, 0, 10 );
 
     gtk_widget_show_all( r );
 
@@ -1091,7 +1115,7 @@ updatemodel( gpointer gdata )
             tr_window_update( data->wind );
 
         /* update the actions */
-        refreshTorrentActions( data );
+        refreshActions( data );
     }
 
     return !done;
@@ -1182,18 +1206,6 @@ updateTrackerForeach( GtkTreeModel *      model,
 }
 
 static void
-detailsClosed( gpointer  user_data,
-               GObject * details )
-{
-    struct cbdata * data = user_data;
-    gpointer        hashString = g_hash_table_lookup( data->details2tor,
-                                                      details );
-
-    g_hash_table_remove( data->details2tor, details );
-    g_hash_table_remove( data->tor2details, hashString );
-}
-
-static void
 openFolderForeach( GtkTreeModel *           model,
                    GtkTreePath  * path      UNUSED,
                    GtkTreeIter *            iter,
@@ -1204,34 +1216,6 @@ openFolderForeach( GtkTreeModel *           model,
     gtk_tree_model_get( model, iter, MC_TORRENT, &gtor, -1 );
     tr_torrent_open_folder( gtor );
     g_object_unref( G_OBJECT( gtor ) );
-}
-
-static void
-showInfoForeach( GtkTreeModel *      model,
-                 GtkTreePath  * path UNUSED,
-                 GtkTreeIter *       iter,
-                 gpointer            user_data )
-{
-    const char *    hashString;
-    struct cbdata * data = user_data;
-    TrTorrent *     tor = NULL;
-    GtkWidget *     w;
-
-    gtk_tree_model_get( model, iter, MC_TORRENT, &tor, -1 );
-    hashString = tr_torrent_info( tor )->hashString;
-    w = g_hash_table_lookup( data->tor2details, hashString );
-    if( w != NULL )
-        gtk_window_present( GTK_WINDOW( w ) );
-    else
-    {
-        w = torrent_inspector_new( GTK_WINDOW( data->wind ), data->core, tor );
-        gtk_widget_show( w );
-        g_hash_table_insert( data->tor2details, (gpointer)hashString, w );
-        g_hash_table_insert( data->details2tor, w, (gpointer)hashString );
-        g_object_weak_ref( G_OBJECT( w ), detailsClosed, data );
-    }
-
-    g_object_unref( G_OBJECT( tor ) );
 }
 
 static void
@@ -1299,6 +1283,24 @@ pauseAllTorrents( struct cbdata * data )
     tr_rpc_request_exec_json( session, cmd, strlen( cmd ), NULL, NULL );
 }
 
+static tr_torrent*
+getFirstSelectedTorrent( struct cbdata * data )
+{
+    tr_torrent * tor = NULL;
+    GtkTreeSelection * s = tr_window_get_selection( data->wind );
+    GtkTreeModel * m;
+    GList * l = gtk_tree_selection_get_selected_rows( s, &m );
+    if( l != NULL ) {
+        GtkTreePath * p = l->data;
+        GtkTreeIter i;
+        if( gtk_tree_model_get_iter( m, &i, p ) )
+            gtk_tree_model_get( m, &i, MC_TORRENT_RAW, &tor, -1 );
+    }
+    g_list_foreach( l, (GFunc)gtk_tree_path_free, NULL );
+    g_list_free( l );
+    return tor;
+}
+
 void
 doAction( const char * action_name, gpointer user_data )
 {
@@ -1329,6 +1331,16 @@ doAction( const char * action_name, gpointer user_data )
     {
         startAllTorrents( data );
     }
+    else if( !strcmp( action_name, "relocate-torrent" ) )
+    {
+        tr_torrent * tor = getFirstSelectedTorrent( data );
+        if( tor )
+        {
+            GtkWindow * parent = GTK_WINDOW( data->wind );
+            GtkWidget * w = gtr_relocate_dialog_new( parent, tor );
+            gtk_widget_show( w );
+        }
+    }
     else if( !strcmp( action_name, "pause-torrent" ) )
     {
         GtkTreeSelection * s = tr_window_get_selection( data->wind );
@@ -1348,8 +1360,12 @@ doAction( const char * action_name, gpointer user_data )
     }
     else if( !strcmp( action_name, "show-torrent-properties" ) )
     {
-        GtkTreeSelection * s = tr_window_get_selection( data->wind );
-        gtk_tree_selection_selected_foreach( s, showInfoForeach, data );
+        if( data->details == NULL ) {
+            data->details = torrent_inspector_new( GTK_WINDOW( data->wind ), data->core );
+            g_object_add_weak_pointer( G_OBJECT( data->details ), (gpointer*)&data->details );
+        }
+        refreshDetailsDialog( data );
+        gtk_widget_show( data->details );
     }
     else if( !strcmp( action_name, "update-tracker" ) )
     {
@@ -1435,4 +1451,3 @@ doAction( const char * action_name, gpointer user_data )
     if( changed )
         updatemodel( data );
 }
-

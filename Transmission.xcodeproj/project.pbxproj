@@ -86,6 +86,7 @@
 		A2265F420B5EF5F40093DDA5 /* FileNameCell.m in Sources */ = {isa = PBXBuildFile; fileRef = A2265F400B5EF5F40093DDA5 /* FileNameCell.m */; };
 		A226FDAC0D0CDF20005A7F71 /* libnatpmp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 3C7A118D0D0B2EB800B5701F /* libnatpmp.a */; };
 		A22A8D560AEEAFA5007E9CB9 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = A22A8D540AEEAFA5007E9CB9 /* Localizable.strings */; };
+		A22CFB820FB66EF30009BD3E /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A22CFB810FB66EF30009BD3E /* Carbon.framework */; };
 		A22D3AA60D00D1790079CFED /* TurtleTemplate.png in Resources */ = {isa = PBXBuildFile; fileRef = A22D3AA30D00D1790079CFED /* TurtleTemplate.png */; };
 		A22E59A70DC11A1D00F4BE15 /* libcurl.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = A29EBE700DC06068006CEE80 /* libcurl.dylib */; };
 		A22E59A80DC11A1F00F4BE15 /* libcurl.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = A29EBE700DC06068006CEE80 /* libcurl.dylib */; };
@@ -476,6 +477,14 @@
 		A223AA830D220CEB00840069 /* nl */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = nl; path = macosx/nl.lproj/PrefsWindow.xib; sourceTree = "<group>"; };
 		A2265F3F0B5EF5F40093DDA5 /* FileNameCell.h */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.h; name = FileNameCell.h; path = macosx/FileNameCell.h; sourceTree = "<group>"; };
 		A2265F400B5EF5F40093DDA5 /* FileNameCell.m */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.objc; name = FileNameCell.m; path = macosx/FileNameCell.m; sourceTree = "<group>"; };
+		A22CF7AC0FA3505F0009BD3E /* it */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = it; path = macosx/it.lproj/GroupRules.xib; sourceTree = "<group>"; };
+		A22CF7B20FA3517E0009BD3E /* zh_TW */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = zh_TW; path = macosx/zh_TW.lproj/GroupRules.xib; sourceTree = "<group>"; };
+		A22CF7B90FA352740009BD3E /* fr */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = fr; path = macosx/fr.lproj/GroupRules.xib; sourceTree = "<group>"; };
+		A22CF7C90FA5D3F90009BD3E /* es */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = es; path = macosx/es.lproj/GroupRules.xib; sourceTree = "<group>"; };
+		A22CF7CC0FA5E2DB0009BD3E /* nl */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = nl; path = macosx/nl.lproj/GroupRules.xib; sourceTree = "<group>"; };
+		A22CF7CF0FA6750E0009BD3E /* tr */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = tr; path = macosx/tr.lproj/GroupRules.xib; sourceTree = "<group>"; };
+		A22CF7D10FA6A19B0009BD3E /* ru */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = ru; path = macosx/ru.lproj/GroupRules.xib; sourceTree = "<group>"; };
+		A22CFB810FB66EF30009BD3E /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = /System/Library/Frameworks/Carbon.framework; sourceTree = "<absolute>"; };
 		A22D3AA30D00D1790079CFED /* TurtleTemplate.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = TurtleTemplate.png; path = macosx/Images/TurtleTemplate.png; sourceTree = "<group>"; };
 		A22F1E540E7DA8030065DB9D /* sparkle_dsa_pub.pem */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; name = sparkle_dsa_pub.pem; path = macosx/sparkle_dsa_pub.pem; sourceTree = "<group>"; };
 		A231274B0D11D0B7003F9AFF /* AboutWindow.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = AboutWindow.xib; path = macosx/AboutWindow.xib; sourceTree = "<group>"; };
@@ -495,6 +504,14 @@
 		A24B655F0D3F30870079EA4D /* QuitBadge.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = QuitBadge.png; path = macosx/Images/QuitBadge.png; sourceTree = "<group>"; };
 		A24F19070A3A790800C9C145 /* Sparkle.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Sparkle.framework; path = macosx/Sparkle.framework; sourceTree = "<group>"; };
 		A250EE800E2ED87B00A688E6 /* web */ = {isa = PBXFileReference; lastKnownFileType = folder; path = web; sourceTree = "<group>"; };
+		A251A6580F9E8FB3004F5973 /* pt */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt; path = macosx/pt.lproj/GroupRules.xib; sourceTree = "<group>"; };
+		A251A6590F9E8FBF004F5973 /* pt */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt; path = macosx/pt.lproj/AddWindow.xib; sourceTree = "<group>"; };
+		A251A65A0F9E8FCA004F5973 /* pt */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt; path = macosx/pt.lproj/Creator.xib; sourceTree = "<group>"; };
+		A251A65B0F9E8FCE004F5973 /* pt */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt; path = macosx/pt.lproj/InfoWindow.xib; sourceTree = "<group>"; };
+		A251A65C0F9E8FD5004F5973 /* pt */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt; path = macosx/pt.lproj/MainMenu.xib; sourceTree = "<group>"; };
+		A251A65D0F9E8FD5004F5973 /* pt */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt; path = macosx/pt.lproj/PrefsWindow.xib; sourceTree = "<group>"; };
+		A251A65E0F9E8FDA004F5973 /* pt */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = pt; path = macosx/pt.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A251A6620F9E8FED004F5973 /* pt */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = pt; path = macosx/pt.lproj/Localizable.strings; sourceTree = "<group>"; };
 		A25485390EB66CBB004539DA /* codelength.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = codelength.h; path = "third-party/miniupnp/codelength.h"; sourceTree = "<group>"; };
 		A256588A0A9A695400E8A03B /* MessageWindowController.h */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.h; name = MessageWindowController.h; path = macosx/MessageWindowController.h; sourceTree = "<group>"; };
 		A256588B0A9A695400E8A03B /* MessageWindowController.m */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.objc; name = MessageWindowController.m; path = macosx/MessageWindowController.m; sourceTree = "<group>"; };
@@ -786,6 +803,7 @@
 				A261F1DC0A69A1610002815A /* Growl.framework in Frameworks */,
 				A29EBE710DC06068006CEE80 /* libcurl.dylib in Frameworks */,
 				A2E669790F5B8E5A00B4251A /* Security.framework in Frameworks */,
+				A22CFB820FB66EF30009BD3E /* Carbon.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1047,6 +1065,7 @@
 				13E42FB307B3F0F600E4EEF1 /* CoreData.framework */,
 				29B97325FDCFA39411CA2CEA /* Foundation.framework */,
 				A2E669780F5B8E5A00B4251A /* Security.framework */,
+				A22CFB810FB66EF30009BD3E /* Carbon.framework */,
 				A261F1DB0A69A1610002815A /* Growl.framework */,
 				A24F19070A3A790800C9C145 /* Sparkle.framework */,
 			);
@@ -1595,6 +1614,7 @@
 				ru,
 				zh_TW,
 				tr,
+				pt,
 			);
 			mainGroup = 29B97314FDCFA39411CA2CEA /* Transmission */;
 			projectDirPath = "";
@@ -1966,6 +1986,7 @@
 				A28AFE070DA1C47A00673957 /* zh_TW */,
 				A202FF5D0DDA9275009938FF /* it */,
 				A2B5DF910E39883100394E9A /* tr */,
+				A251A65E0F9E8FDA004F5973 /* pt */,
 			);
 			name = InfoPlist.strings;
 			sourceTree = "<group>";
@@ -1974,6 +1995,14 @@
 			isa = PBXVariantGroup;
 			children = (
 				A215BF5D0F02EBB800350CDB /* en */,
+				A251A6580F9E8FB3004F5973 /* pt */,
+				A22CF7AC0FA3505F0009BD3E /* it */,
+				A22CF7B20FA3517E0009BD3E /* zh_TW */,
+				A22CF7B90FA352740009BD3E /* fr */,
+				A22CF7C90FA5D3F90009BD3E /* es */,
+				A22CF7CC0FA5E2DB0009BD3E /* nl */,
+				A22CF7CF0FA6750E0009BD3E /* tr */,
+				A22CF7D10FA6A19B0009BD3E /* ru */,
 			);
 			name = GroupRules.xib;
 			sourceTree = "<group>";
@@ -1989,6 +2018,7 @@
 				A202FF5F0DDA9275009938FF /* it */,
 				A291477F0E195A0C00F60CB2 /* en */,
 				A2B5DF930E39884200394E9A /* tr */,
+				A251A6620F9E8FED004F5973 /* pt */,
 			);
 			name = Localizable.strings;
 			sourceTree = "<group>";
@@ -2004,6 +2034,7 @@
 				A28AFE0B0DA1C47A00673957 /* zh_TW */,
 				A202FF610DDA9275009938FF /* it */,
 				A2B5DF8F0E39882900394E9A /* tr */,
+				A251A65D0F9E8FD5004F5973 /* pt */,
 			);
 			name = PrefsWindow.xib;
 			sourceTree = "<group>";
@@ -2019,6 +2050,7 @@
 				A28AFE0A0DA1C47A00673957 /* zh_TW */,
 				A202FF600DDA9275009938FF /* it */,
 				A2B5DF8D0E39882200394E9A /* tr */,
+				A251A65C0F9E8FD5004F5973 /* pt */,
 			);
 			name = MainMenu.xib;
 			sourceTree = "<group>";
@@ -2034,6 +2066,7 @@
 				A28AFE050DA1C47A00673957 /* zh_TW */,
 				A202FF5B0DDA9275009938FF /* it */,
 				A2B5DF860E39880000394E9A /* tr */,
+				A251A6590F9E8FBF004F5973 /* pt */,
 			);
 			name = AddWindow.xib;
 			sourceTree = "<group>";
@@ -2049,6 +2082,7 @@
 				A28AFE060DA1C47A00673957 /* zh_TW */,
 				A202FF5C0DDA9275009938FF /* it */,
 				A2B5DF890E39881000394E9A /* tr */,
+				A251A65A0F9E8FCA004F5973 /* pt */,
 			);
 			name = Creator.xib;
 			sourceTree = "<group>";
@@ -2064,6 +2098,7 @@
 				A28AFE080DA1C47A00673957 /* zh_TW */,
 				A202FF5E0DDA9275009938FF /* it */,
 				A2B5DF8B0E39881900394E9A /* tr */,
+				A251A65B0F9E8FCE004F5973 /* pt */,
 			);
 			name = InfoWindow.xib;
 			sourceTree = "<group>";

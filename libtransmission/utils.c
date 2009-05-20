@@ -32,6 +32,7 @@
 #endif
 
 #include "transmission.h"
+#include "fdlimit.h"
 #include "ConvertUTF.h"
 #include "list.h"
 #include "utils.h"
@@ -288,13 +289,11 @@ tr_msgLoggingIsActive( int level )
 }
 
 void
-tr_msg( const char * file,
-        int          line,
-        int          level,
-        const char * name,
-        const char * fmt,
-        ... )
+tr_msg( const char * file, int line,
+        int level, const char * name,
+        const char * fmt, ... )
 {
+    const int err = errno; /* message logging shouldn't affect errno */
     FILE * fp;
     tr_msgInit( );
     tr_lockLock( messageLock );
@@ -349,6 +348,7 @@ tr_msg( const char * file,
     }
 
     tr_lockUnlock( messageLock );
+    errno = err;
 }
 
 /***
@@ -465,9 +465,10 @@ uint8_t *
 tr_loadFile( const char * path,
              size_t *     size )
 {
-    uint8_t *    buf;
+    uint8_t * buf;
     struct stat  sb;
-    FILE *       file;
+    int fd;
+    ssize_t n;
     const char * err_fmt = _( "Couldn't read \"%1$s\": %2$s" );
 
     /* try to stat the file */
@@ -488,34 +489,36 @@ tr_loadFile( const char * path,
     }
 
     /* Load the torrent file into our buffer */
-    file = fopen( path, "rb" );
-    if( !file )
+    fd = tr_open_file_for_scanning( path );
+    if( fd < 0 )
     {
         const int err = errno;
         tr_err( err_fmt, path, tr_strerror( errno ) );
         errno = err;
         return NULL;
     }
-    buf = malloc( sb.st_size );
+    buf = malloc( sb.st_size + 1 );
     if( !buf )
     {
         const int err = errno;
         tr_err( err_fmt, path, _( "Memory allocation failed" ) );
-        fclose( file );
+        tr_close_file( fd );
         errno = err;
         return NULL;
     }
-    if( fread( buf, sb.st_size, 1, file ) != 1 )
+    n = read( fd, buf, sb.st_size );
+    if( n == -1 )
     {
         const int err = errno;
         tr_err( err_fmt, path, tr_strerror( errno ) );
-        fclose( file );
+        tr_close_file( fd );
         free( buf );
         errno = err;
         return NULL;
     }
 
-    fclose( file );
+    tr_close_file( fd );
+    buf[ sb.st_size ] = '\0';
     *size = sb.st_size;
     return buf;
 }
@@ -1562,4 +1565,73 @@ tr_strratio( char * buf, size_t buflen, double ratio, const char * infinity )
     else
         tr_snprintf( buf, buflen, "%'.0f", ratio );
     return buf;
+}
+
+/***
+****
+***/
+
+int
+tr_moveFile( const char * oldpath, const char * newpath )
+{
+    int in;
+    int out;
+    char * buf;
+    struct stat st;
+    size_t bytesLeft;
+    size_t buflen;
+
+    /* make sure the old file exists */
+    if( stat( oldpath, &st ) ) {
+        const int err = errno;
+        errno = err;
+        return -1;
+    }
+    if( !S_ISREG( st.st_mode ) ) {
+        errno = ENOENT;
+        return -1;
+    }
+    bytesLeft = st.st_size;
+
+    /* make sure the target directory exists */
+    {
+        char * newdir = tr_dirname( newpath );
+        int i = tr_mkdirp( newdir, 0777 );
+        tr_free( newdir );
+        if( i )
+            return i;
+    }
+
+    /* they  might be on the same filesystem... */
+    if( !rename( oldpath, newpath ) )
+        return 0;
+
+    /* copy the file */
+    in = tr_open_file_for_scanning( oldpath );
+    tr_preallocate_file( newpath, bytesLeft );
+    out = tr_open_file_for_writing( newpath );
+    buflen = stat( newpath, &st ) ? 4096 : st.st_blksize;
+    buf = tr_new( char, buflen );
+    while( bytesLeft > 0 )
+    {
+        ssize_t bytesWritten;
+        const size_t bytesThisPass = MIN( bytesLeft, buflen );
+        const int numRead = read( in, buf, bytesThisPass );
+        if( numRead < 0 )
+            break;
+        bytesWritten = write( out, buf, numRead );
+        if( bytesWritten < 0 )
+            break;
+        bytesLeft -= bytesWritten;
+    }
+
+    /* cleanup */
+    tr_free( buf );
+    tr_close_file( out );
+    tr_close_file( in );
+    if( bytesLeft != 0 )
+        return -1;
+
+    unlink( oldpath );
+    return 0;
 }

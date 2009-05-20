@@ -297,6 +297,9 @@ PrefsDialog :: createBandwidthTab( )
         r = spinBoxNew( Prefs :: ALT_SPEED_LIMIT_UP, 0, INT_MAX, 5 );
         hig->addRow( s, r );
 
+        s = tr( "<small>When enabled, Speed Limit Mode overrides the Global Bandwidth Limits</small>" );
+        hig->addWideControl( new QLabel( s ) );
+
         QCheckBox * c = checkBoxNew( tr( "Use Speed Limit Mode &between" ), Prefs::ALT_SPEED_LIMIT_TIME_ENABLED );
         h = new QHBoxLayout( );
         h->setSpacing( HIG::PAD );
@@ -467,7 +470,7 @@ PrefsDialog :: createPeersTab( )
 
     hig->addSectionDivider( );
     hig->addSectionTitle( tr( "Privacy" ) );
-    hig->addRow( tr( "Encryption &mode:" ), box );
+    hig->addRow( tr( "&Encryption mode:" ), box );
     hig->addWideControl( checkBoxNew( tr( "Use peer e&xchange" ), Prefs::PEX_ENABLED ) );
 
     hig->finish( );
@@ -536,7 +539,7 @@ PrefsDialog :: createTorrentsTab( )
 
         hig->addWideControl( checkBoxNew( tr( "Display &options dialog" ), Prefs::OPTIONS_PROMPT ) );
         hig->addWideControl( checkBoxNew( tr( "&Start when added" ), Prefs::START ) );
-        hig->addWideControl( checkBoxNew( tr( "Mo&ve source files to Trash" ), Prefs::TRASH_ORIGINAL ) );
+        hig->addWideControl( checkBoxNew( tr( "&Delete source files" ), Prefs::TRASH_ORIGINAL ) );
 
         b = myDestinationButton = new QPushButton;
         b->setIcon( folderPixmap );

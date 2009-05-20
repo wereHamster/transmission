@@ -201,8 +201,27 @@ preallocateFileFull( const char * filename, uint64_t length )
     return success;
 }
 
-FILE*
-tr_open_file_for_reading( const char * filename, tr_bool sequential )
+tr_bool
+tr_preallocate_file( const char * filename, uint64_t length )
+{
+    return preallocateFileFull( filename, length );
+}
+
+int
+tr_open_file_for_writing( const char * filename )
+{
+    int flags = O_WRONLY | O_CREAT;
+#ifdef O_BINARY
+    flags |= O_BINARY;
+#endif
+#ifdef O_LARGEFILE
+    flags |= O_LARGEFILE;
+#endif
+    return open( filename, flags, 0666 );
+}
+
+int
+tr_open_file_for_scanning( const char * filename )
 {
     int fd;
     int flags;
@@ -210,10 +229,7 @@ tr_open_file_for_reading( const char * filename, tr_bool sequential )
     /* build the flags */
     flags = O_RDONLY;
 #ifdef O_SEQUENTIAL
-    if( sequential ) flags |= O_SEQUENTIAL;
-#endif
-#ifdef O_RANDOM
-    if( !sequential ) flags |= O_RANDOM
+    flags |= O_SEQUENTIAL;
 #endif
 #ifdef O_BINARY
     flags |= O_BINARY;
@@ -224,14 +240,35 @@ tr_open_file_for_reading( const char * filename, tr_bool sequential )
 
     /* open the file */
     fd = open( filename, flags, 0666 );
-    if( fd < 0 )
-        return NULL;
-
+    if( fd >= 0 )
+    {
+        /* Set hints about the lookahead buffer and caching. It's okay
+           for these to fail silently, so don't let them affect errno */
+        const int err = errno;
 #ifdef HAVE_POSIX_FADVISE
-    posix_fadvise( fd, 0, 0, sequential ? POSIX_FADV_SEQUENTIAL : POSIX_FADV_RANDOM );
+        posix_fadvise( fd, 0, 0, POSIX_FADV_SEQUENTIAL );
 #endif
+#ifdef SYS_DARWIN
+        fcntl( fd, F_NOCACHE, 1 );
+        fcntl( fd, F_RDAHEAD, 1 );
+#endif
+        errno = err;
+    }
 
-    return fdopen( fd, "r" );
+    return fd;
+}
+
+void
+tr_close_file( int fd )
+{
+#if defined(HAVE_POSIX_FADVISE)
+    /* Set hint about not caching this file.
+       It's okay for this to fail silently, so don't let it affect errno */
+    const int err = errno;
+    posix_fadvise( fd, 0, 0, POSIX_FADV_DONTNEED );
+    errno = err;
+#endif
+    close( fd );
 }
 
 /**
@@ -327,7 +364,7 @@ TrCloseFile( int i )
     assert( i < gFd->openFileLimit );
     assert( fileIsOpen( o ) );
 
-    close( o->fd );
+    tr_close_file( o->fd );
     o->fd = -1;
     o->isCheckedOut = 0;
 }

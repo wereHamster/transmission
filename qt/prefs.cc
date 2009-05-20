@@ -56,6 +56,12 @@ Prefs::PrefItem Prefs::myItems[] =
     { MAIN_WINDOW_X, "main-window-x", QVariant::Int },
     { MAIN_WINDOW_Y, "main-window-y", QVariant::Int },
     { FILTER_MODE, "filter-mode", TrTypes::FilterModeType },
+    { SESSION_IS_REMOTE, "remote-session-enabled", QVariant::Bool },
+    { SESSION_REMOTE_HOST, "remote-session-host", QVariant::String },
+    { SESSION_REMOTE_PORT, "remote-session-port", QVariant::Int },
+    { SESSION_REMOTE_AUTH, "remote-session-requres-authentication", QVariant::Bool },
+    { SESSION_REMOTE_USERNAME, "remote-session-username", QVariant::String },
+    { SESSION_REMOTE_PASSWORD, "remote-session-password", QVariant::String },
 
     /* libtransmission settings */
     { ALT_SPEED_LIMIT_UP, TR_PREFS_KEY_ALT_SPEED_UP, QVariant::Int },
@@ -99,8 +105,6 @@ Prefs::PrefItem Prefs::myItems[] =
     { RPC_USERNAME, TR_PREFS_KEY_RPC_USERNAME, QVariant::String },
     { RPC_WHITELIST_ENABLED, TR_PREFS_KEY_RPC_WHITELIST_ENABLED, QVariant::Bool },
     { RPC_WHITELIST, TR_PREFS_KEY_RPC_WHITELIST, QVariant::String },
-    { SEED_RATIO_LIMIT, TR_PREFS_KEY_RATIO, QVariant::Double },
-    { SEED_RATIO_LIMITED, TR_PREFS_KEY_RATIO_ENABLED, QVariant::Bool },
     { USPEED_ENABLED, TR_PREFS_KEY_USPEED_ENABLED, QVariant::Bool },
     { USPEED, TR_PREFS_KEY_USPEED, QVariant::Int },
     { UPLOAD_SLOTS_PER_TORRENT, TR_PREFS_KEY_UPLOAD_SLOTS_PER_TORRENT, QVariant::Int }
@@ -256,6 +260,10 @@ Prefs :: initDefaults( tr_benc * d )
     tr_bencDictAddInt( d, keyStr(MINIMAL_VIEW), false );
     tr_bencDictAddInt( d, keyStr(START), true );
     tr_bencDictAddInt( d, keyStr(TRASH_ORIGINAL), false );
+    tr_bencDictAddStr( d, keyStr(SESSION_REMOTE_HOST), "localhost" );
+    tr_bencDictAddInt( d, keyStr(SESSION_REMOTE_PORT), atoi(TR_DEFAULT_RPC_PORT_STR) );
+    tr_bencDictAddBool( d, keyStr(SESSION_IS_REMOTE), false );
+    tr_bencDictAddBool( d, keyStr(SESSION_REMOTE_AUTH), false );
 }
 
 /***

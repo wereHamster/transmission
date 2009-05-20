@@ -16,6 +16,7 @@
 #include <QCheckBox>
 #include <QDesktopServices>
 #include <QFileDialog>
+#include <QLabel>
 #include <QSize>
 #include <QStyle>
 #include <QHBoxLayout>
@@ -34,7 +35,9 @@
 #include "options.h"
 #include "prefs.h"
 #include "prefs-dialog.h"
+#include "relocate.h"
 #include "session.h"
+#include "session-dialog.h"
 #include "speed.h"
 #include "stats-dialog.h"
 #include "torrent-delegate.h"
@@ -77,9 +80,11 @@ namespace
 
 TrMainWindow :: TrMainWindow( Session& session, Prefs& prefs, TorrentModel& model, bool minimized ):
     myLastFullUpdateTime( 0 ),
+    mySessionDialog( new SessionDialog( session, prefs, this ) ),
     myPrefsDialog( new PrefsDialog( session, prefs, this ) ),
     myAboutDialog( new AboutDialog( this ) ),
     myStatsDialog( new StatsDialog( session, this ) ),
+    myDetailsDialog( 0 ),
     myFileDialog( 0 ),
     myFilterModel( prefs ),
     myTorrentDelegate( new TorrentDelegate( this ) ),
@@ -97,12 +102,6 @@ TrMainWindow :: TrMainWindow( Session& session, Prefs& prefs, TorrentModel& mode
     sep->setSeparator( true );
 
     ui.setupUi( this );
-
-    QString title( "Transmission" );
-    const QUrl remoteUrl( session.getRemoteUrl( ) );
-    if( !remoteUrl.isEmpty( ) )
-        title += tr( " - %1" ).arg( remoteUrl.toString() );
-    setWindowTitle( title );
 
     QStyle * style = this->style();
 
@@ -159,14 +158,20 @@ TrMainWindow :: TrMainWindow( Session& session, Prefs& prefs, TorrentModel& mode
     connect( ui.action_About, SIGNAL(triggered()), myAboutDialog, SLOT(show()));
     connect( ui.action_Contents, SIGNAL(triggered()), this, SLOT(openHelp()));
     connect( ui.action_OpenFolder, SIGNAL(triggered()), this, SLOT(openFolder()));
+    connect( ui.action_SetLocation, SIGNAL(triggered()), this, SLOT(setLocation()));
     connect( ui.action_Properties, SIGNAL(triggered()), this, SLOT(openProperties()));
+    connect( ui.action_SessionDialog, SIGNAL(triggered()), mySessionDialog, SLOT(show()));
     connect( ui.listView, SIGNAL(activated(const QModelIndex&)), ui.action_Properties, SLOT(trigger()));
+
+    QAction * sep2 = new QAction( this );
+    sep2->setSeparator( true );
 
     // context menu
     QList<QAction*> actions;
     actions << ui.action_Properties
             << ui.action_OpenFolder
-            << sep
+            << ui.action_SetLocation
+            << sep2
             << ui.action_Start
             << ui.action_Pause
             << ui.action_Verify
@@ -190,6 +195,9 @@ TrMainWindow :: TrMainWindow( Session& session, Prefs& prefs, TorrentModel& mode
 
     // torrent view
     myFilterModel.setSourceModel( &myModel );
+    connect( &myModel, SIGNAL(modelReset()), this, SLOT(onModelReset()));
+    connect( &myModel, SIGNAL(rowsRemoved(const QModelIndex&,int,int)), this, SLOT(onModelReset()));
+    connect( &myModel, SIGNAL(rowsInserted(const QModelIndex&,int,int)), this, SLOT(onModelReset()));
     ui.listView->setModel( &myFilterModel );
     connect( ui.listView->selectionModel(), SIGNAL(selectionChanged(const QItemSelection&,const QItemSelection&)), this, SLOT(refreshActionSensitivity()));
 
@@ -250,9 +258,11 @@ TrMainWindow :: TrMainWindow( Session& session, Prefs& prefs, TorrentModel& mode
     foreach( int key, initKeys )
         refreshPref( key );
 
+    connect( &mySession, SIGNAL(sourceChanged()), this, SLOT(onSessionSourceChanged()) );
     connect( &mySession, SIGNAL(statsUpdated()), this, SLOT(refreshStatusBar()) );
     connect( &mySession, SIGNAL(dataReadProgress()), this, SLOT(dataReadProgress()) );
     connect( &mySession, SIGNAL(dataSendProgress()), this, SLOT(dataSendProgress()) );
+    connect( &mySession, SIGNAL(httpAuthenticationRequired()), this, SLOT(wrongAuthentication()) );
 
     if( mySession.isServer( ) )
         myNetworkLabel->hide( );
@@ -263,11 +273,31 @@ TrMainWindow :: TrMainWindow( Session& session, Prefs& prefs, TorrentModel& mode
 
     refreshActionSensitivity( );
     refreshStatusBar( );
+    refreshTitle( );
     refreshVisibleCount( );
 }
 
 TrMainWindow :: ~TrMainWindow( )
 {
+}
+
+/****
+*****
+****/
+
+void
+TrMainWindow :: onSessionSourceChanged( )
+{
+    myModel.clear( );
+}
+
+void
+TrMainWindow :: onModelReset( )
+{
+    refreshTitle( );
+    refreshVisibleCount( );
+    refreshActionSensitivity( );
+    refreshStatusBar( );
 }
 
 /****
@@ -316,6 +346,21 @@ TrMainWindow :: createFilterBar( )
     h = new QHBoxLayout( top );
     h->setContentsMargins( HIG::PAD_SMALL, HIG::PAD_SMALL, HIG::PAD_SMALL, HIG::PAD_SMALL );
     h->setSpacing( HIG::PAD_SMALL );
+
+    top->setStyleSheet(" \
+      QPushButton{ \
+        border-radius: 10px; \
+        padding: 0 5px; \
+        border: 1px none; \
+      } \
+      QPushButton:pressed, QPushButton:checked{ \
+        border-width: 1px; \
+        border-style: solid; \
+        border-color: #5f5f5f #979797 #979797; \
+        background-color: #979797; \
+        color: white; \
+      } \
+    ");
 
         QList<QString> titles;
         titles << tr( "A&ll" ) << tr( "&Active" ) << tr( "&Downloading" ) << tr( "&Seeding" ) << tr( "&Paused" );
@@ -366,7 +411,8 @@ QWidget *
 TrMainWindow :: createStatusBar( )
 {
     QMenu * m;
-    QLabel * l;
+    QLabel *l, *l2;
+    QWidget *w;
     QHBoxLayout * h;
     QPushButton * p;
     QActionGroup * a;
@@ -376,6 +422,7 @@ TrMainWindow :: createStatusBar( )
     QWidget * top = myStatusBar = new QWidget;
     h = new QHBoxLayout( top );
     h->setContentsMargins( HIG::PAD_SMALL, HIG::PAD_SMALL, HIG::PAD_SMALL, HIG::PAD_SMALL );
+    h->setSpacing( HIG::PAD_SMALL );
 
         p = myOptionsButton = new TrIconPushButton( this );
         p->setIcon( QIcon( ":/icons/options.png" ) );
@@ -418,25 +465,30 @@ TrMainWindow :: createStatusBar( )
         p->setFlat( true );
         p->setMenu( m );
         h->addWidget( p );  
-        h->addSpacing( HIG :: PAD_SMALL );
         l = myStatsLabel = new QLabel( this );
         h->addWidget( l );  
    
-    h->addStretch( 1 );
-
+        w = new QWidget( this );
+        w->setMinimumSize( HIG::PAD_BIG, 1 );
+        w->setMaximumSize( HIG::PAD_BIG, 1 );
+        h->addWidget( w );
         l = new QLabel( this );
         l->setPixmap( getStockIcon( "go-down", QStyle::SP_ArrowDown ).pixmap( smallIconSize ) );
         h->addWidget( l );
-        l = myDownloadSpeedLabel = new QLabel( this );
-        h->addWidget( l );
+        l2 = myDownloadSpeedLabel = new QLabel( this );
+        h->addWidget( l2 );
+        myDownStatusWidgets << w << l << l2;
 
-    h->addSpacing( HIG :: PAD_BIG );
-
+        w = new QWidget( this );
+        w->setMinimumSize( HIG::PAD_BIG, 1 );
+        w->setMaximumSize( HIG::PAD_BIG, 1 );
+        h->addWidget( w );
         l = new QLabel;
         l->setPixmap( getStockIcon( "go-up", QStyle::SP_ArrowUp ).pixmap( smallIconSize ) );
         h->addWidget( l );
-        l = myUploadSpeedLabel = new QLabel;
-        h->addWidget( l );
+        l2 = myUploadSpeedLabel = new QLabel;
+        h->addWidget( l2 );
+        myUpStatusWidgets << w << l << l2;
 
     return top;
 }
@@ -550,12 +602,27 @@ TrMainWindow :: setSortAscendingPref( bool b )
 ****/
 
 void
+TrMainWindow :: onDetailsDestroyed( )
+{
+    myDetailsDialog = 0;
+}
+
+void
 TrMainWindow :: openProperties( )
 {
-    const int id( *getSelectedTorrents().begin() );
-    Torrent * torrent( myModel.getTorrentFromId( id ) );
-    assert( torrent != 0 );
-    QDialog * d( new Details( mySession, *torrent, this ) );
+    if( myDetailsDialog == 0 ) {
+        myDetailsDialog = new Details( mySession, myModel, this );
+        connect( myDetailsDialog, SIGNAL(destroyed(QObject*)), this, SLOT(onDetailsDestroyed()));
+    }
+
+    myDetailsDialog->setIds( getSelectedTorrents( ) );
+    myDetailsDialog->show( );
+}
+
+void
+TrMainWindow :: setLocation( )
+{
+    QDialog * d = new RelocateDialog( mySession, getSelectedTorrents(), this );
     d->show( );
 }
 
@@ -580,6 +647,16 @@ TrMainWindow :: openHelp( )
 }
 
 void
+TrMainWindow :: refreshTitle( )
+{
+    QString title( "Transmission" );
+    const QUrl url( mySession.getRemoteUrl( ) );
+    if( !url.isEmpty() )
+        title += tr( " - %1" ).arg( url.toString(QUrl::RemoveUserInfo) );
+    setWindowTitle( title );
+}
+
+void
 TrMainWindow :: refreshVisibleCount( )
 {
     const int visibleCount( myFilterModel.rowCount( ) );
@@ -590,6 +667,7 @@ TrMainWindow :: refreshVisibleCount( )
     else
         str = tr( "%L1 of %Ln Torrent(s)", 0, totalCount ).arg( visibleCount );
     myVisibleCountLabel->setText( str );
+    myVisibleCountLabel->setVisible( totalCount > 0 );
 }
 
 void
@@ -599,6 +677,11 @@ TrMainWindow :: refreshStatusBar( )
     const Speed down( myModel.getDownloadSpeed( ) );
     myUploadSpeedLabel->setText( Utils :: speedToString( up ) );
     myDownloadSpeedLabel->setText( Utils :: speedToString( down ) );
+    foreach( QWidget * w, myUpStatusWidgets ) w->setVisible( !up.isZero( ) );
+    foreach( QWidget * w, myDownStatusWidgets ) w->setVisible( !down.isZero( ) );
+
+    myNetworkLabel->setVisible( !mySession.isServer( ) );
+
     const QString mode( myPrefs.getString( Prefs::STATUSBAR_STATS ) );
     QString str;
 
@@ -658,11 +741,12 @@ TrMainWindow :: refreshActionSensitivity( )
     ui.action_Verify->setEnabled( haveSelection );
     ui.action_Remove->setEnabled( haveSelection );
     ui.action_Delete->setEnabled( haveSelection );
+    ui.action_Properties->setEnabled( haveSelection );
     ui.action_DeselectAll->setEnabled( haveSelection );
+    ui.action_SetLocation->setEnabled( haveSelection );
 
     const bool oneSelection( selected == 1 );
-    ui.action_Properties->setEnabled( oneSelection );
-    ui.action_OpenFolder->setEnabled( oneSelection );
+    ui.action_OpenFolder->setEnabled( oneSelection && mySession.isLocal( ) );
 
     ui.action_SelectAll->setEnabled( selected < rowCount );
     ui.action_StartAll->setEnabled( paused > 0 );
@@ -670,6 +754,9 @@ TrMainWindow :: refreshActionSensitivity( )
     ui.action_Start->setEnabled( selectedAndPaused > 0 );
     ui.action_Pause->setEnabled( selectedAndPaused < selected );
     ui.action_Announce->setEnabled( selected > 0 && ( canAnnounce == selected ) );
+
+    if( myDetailsDialog )
+        myDetailsDialog->setIds( getSelectedTorrents( ) );
 }
 
 /**
@@ -699,22 +786,22 @@ TrMainWindow :: getSelectedTorrents( ) const
 void
 TrMainWindow :: startSelected( )
 {
-    mySession.start( getSelectedTorrents( ) );
+    mySession.startTorrents( getSelectedTorrents( ) );
 }
 void
 TrMainWindow :: pauseSelected( )
 {
-    mySession.pause( getSelectedTorrents( ) );
+    mySession.pauseTorrents( getSelectedTorrents( ) );
 }
 void
 TrMainWindow :: startAll( )
 {
-    mySession.start( );
+    mySession.startTorrents( );
 }
 void
 TrMainWindow :: pauseAll( )
 {
-    mySession.pause( );
+    mySession.pauseTorrents( );
 }
 void
 TrMainWindow :: removeSelected( )
@@ -1032,4 +1119,11 @@ TrMainWindow :: dataSendProgress( )
 {
     myLastSendTime = time( NULL );
     updateNetworkIcon( );
+}
+
+void
+TrMainWindow :: wrongAuthentication( )
+{
+    mySession.stop( );
+    mySessionDialog->show( );
 }

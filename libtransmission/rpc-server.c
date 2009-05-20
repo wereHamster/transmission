@@ -32,12 +32,20 @@
 #include "crypto.h"
 #include "list.h"
 #include "platform.h"
+#include "ptrarray.h"
 #include "rpcimpl.h"
 #include "rpc-server.h"
 #include "trevent.h"
 #include "utils.h"
 #include "web.h"
 #include "net.h"
+
+/* session-id is used to make cross-site request forgery attacks difficult.
+ * Don't disable this feature unless you really know what you're doing!
+ * http://en.wikipedia.org/wiki/Cross-site_request_forgery
+ * http://shiflett.org/articles/cross-site-request-forgeries
+ * http://www.webappsec.org/lists/websecurity/archive/2008-04/msg00037.html */
+#define REQUIRE_SESSION_ID
 
 #define MY_NAME "RPC Server"
 #define MY_REALM "Transmission"
@@ -62,6 +70,9 @@ struct tr_rpc_server
     char *             whitelistStr;
     tr_list *          whitelist;
 
+    char *             sessionId;
+    time_t             sessionIdExpiresAt;
+
 #ifdef HAVE_ZLIB
     z_stream           stream;
 #endif
@@ -72,6 +83,36 @@ struct tr_rpc_server
         if( tr_deepLoggingIsActive( ) ) \
             tr_deepLog( __FILE__, __LINE__, MY_NAME, __VA_ARGS__ ); \
     } while( 0 )
+
+
+/***
+****
+***/
+
+static char*
+get_current_session_id( struct tr_rpc_server * server )
+{
+    const time_t now = time( NULL );
+
+    if( !server->sessionId || ( now >= server->sessionIdExpiresAt ) )
+    {
+        int i;
+        const int n = 48;
+        const char * pool = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        const size_t pool_size = strlen( pool );
+        char * buf = tr_new( char, n+1 );
+
+        for( i=0; i<n; ++i )
+            buf[i] = pool[ tr_cryptoRandInt( pool_size ) ];
+        buf[n] = '\0';
+
+        tr_free( server->sessionId );
+        server->sessionId = buf;
+        server->sessionIdExpiresAt = now + (60*60); /* expire in an hour */
+    }
+
+    return server->sessionId;
+}
 
 
 /**
@@ -95,10 +136,8 @@ send_simple_response( struct evhttp_request * req,
 }
 
 static const char*
-tr_memmem( const char * s1,
-           size_t       l1,
-           const char * s2,
-           size_t       l2 )
+tr_memmem( const char * s1, size_t l1, /* haystack */
+           const char * s2, size_t l2 ) /* needle */
 {
     if( !l2 ) return s1;
     while( l1 >= l2 )
@@ -112,6 +151,67 @@ tr_memmem( const char * s1,
     return NULL;
 }
 
+struct tr_mimepart
+{
+    char * headers;
+    int headers_len;
+    char * body;
+    int body_len;
+};
+
+static void
+tr_mimepart_free( struct tr_mimepart * p )
+{
+    tr_free( p->body );
+    tr_free( p->headers );
+    tr_free( p );
+}
+
+static void
+extract_parts_from_multipart( const struct evkeyvalq * headers,
+                              const struct evbuffer * body,
+                              tr_ptrArray * setme_parts )
+{
+    const char * content_type = evhttp_find_header( headers, "Content-Type" );
+    const char * in = (const char*) EVBUFFER_DATA( body );
+    size_t inlen = EVBUFFER_LENGTH( body );
+
+    const char * boundary_key = "boundary=";
+    const char * boundary_key_begin = strstr( content_type, boundary_key );
+    const char * boundary_val = boundary_key_begin ? boundary_key_begin + strlen( boundary_key ) : "arglebargle";
+    char * boundary = tr_strdup_printf( "--%s", boundary_val );
+    const size_t boundary_len = strlen( boundary );
+
+    const char * delim = tr_memmem( in, inlen, boundary, boundary_len );
+    while( delim )
+    {
+        size_t part_len;
+        const char * part = delim + boundary_len;
+
+        inlen -= ( part - in );
+        in = part;
+
+        delim = tr_memmem( in, inlen, boundary, boundary_len );
+        part_len = delim ? (size_t)( delim - part ) : inlen;
+
+        if( part_len )
+        {
+            const char * rnrn = tr_memmem( part, part_len, "\r\n\r\n", 4 );
+            if( rnrn )
+            {
+                struct tr_mimepart * p = tr_new( struct tr_mimepart, 1 );
+                p->headers_len = rnrn - part;
+                p->headers = tr_strndup( part, p->headers_len );
+                p->body_len = (part+part_len) - (rnrn + 4);
+                p->body = tr_strndup( rnrn+4, p->body_len );
+                tr_ptrArrayAppend( setme_parts, p );
+            }
+        }
+    }
+
+    tr_free( boundary );
+}
+
 static void
 handle_upload( struct evhttp_request * req,
                struct tr_rpc_server *  server )
@@ -122,76 +222,67 @@ handle_upload( struct evhttp_request * req,
     }
     else
     {
-        const char * content_type = evhttp_find_header( req->input_headers,
-                                                        "Content-Type" );
+        int i;
+        int n;
+        tr_bool hasSessionId = FALSE;
+        tr_ptrArray parts = TR_PTR_ARRAY_INIT;
 
         const char * query = strchr( req->uri, '?' );
-        const int    paused = query && strstr( query + 1, "paused=true" );
+        const tr_bool paused = query && strstr( query + 1, "paused=true" );
 
-        const char * in = (const char *) EVBUFFER_DATA( req->input_buffer );
-        size_t       inlen = EVBUFFER_LENGTH( req->input_buffer );
+        extract_parts_from_multipart( req->input_headers, req->input_buffer, &parts );
+        n = tr_ptrArraySize( &parts );
 
-        const char * boundary_key = "boundary=";
-        const char * boundary_key_begin = strstr( content_type,
-                                                  boundary_key );
-        const char * boundary_val =
-            boundary_key_begin ? boundary_key_begin +
-            strlen( boundary_key ) : "arglebargle";
+        /* first look for the session id */
+        for( i=0; i<n; ++i ) {
+            struct tr_mimepart * p = tr_ptrArrayNth( &parts, i );
+            if( tr_memmem( p->headers, p->headers_len, TR_RPC_SESSION_ID_HEADER, strlen( TR_RPC_SESSION_ID_HEADER ) ) )
+                break;
+        }
+        if( i<n ) {
+            const struct tr_mimepart * p = tr_ptrArrayNth( &parts, i );
+            const char * ours = get_current_session_id( server );
+            const int ourlen = strlen( ours );
+            hasSessionId = ourlen<=p->body_len && !memcmp( p->body, ours, ourlen );
+        }
 
-        char *       boundary = tr_strdup_printf( "--%s", boundary_val );
-        const size_t boundary_len = strlen( boundary );
-
-        const char * delim = tr_memmem( in, inlen, boundary, boundary_len );
-        while( delim )
+        if( !hasSessionId )
         {
-            size_t       part_len;
-            const char * part = delim + boundary_len;
-            inlen -= ( part - in );
-            in = part;
-            delim = tr_memmem( in, inlen, boundary, boundary_len );
-            part_len = delim ? (size_t)( delim - part ) : inlen;
-
-            if( part_len )
+            send_simple_response( req, 409, NULL );
+        }
+        else for( i=0; i<n; ++i )
+        {
+            struct tr_mimepart * p = tr_ptrArrayNth( &parts, i );
+            if( strstr( p->headers, "filename=\"" ) )
             {
-                char * text = tr_strndup( part, part_len );
-                if( strstr( text, "filename=\"" ) )
-                {
-                    const char * body = strstr( text, "\r\n\r\n" );
-                    if( body )
-                    {
-                        char * b64;
-                        size_t  body_len;
-                        tr_benc top, *args;
-                        struct evbuffer * json = tr_getBuffer( );
+                char * b64;
+                int body_len = p->body_len;
+                tr_benc top, *args;
+                const char * body = p->body;
+                struct evbuffer * json = evbuffer_new( );
 
-                        body += 4; /* walk past the \r\n\r\n */
-                        body_len = part_len - ( body - text );
-                        if( body_len >= 2
-                          && !memcmp( &body[body_len - 2], "\r\n", 2 ) )
-                            body_len -= 2;
+                if( body_len >= 2 && !memcmp( &body[body_len - 2], "\r\n", 2 ) )
+                    body_len -= 2;
 
-                        tr_bencInitDict( &top, 2 );
-                        args = tr_bencDictAddDict( &top, "arguments", 2 );
-                        tr_bencDictAddStr( &top, "method", "torrent-add" );
-                        b64 = tr_base64_encode( body, body_len, NULL );
-                        tr_bencDictAddStr( args, "metainfo", b64 );
-                        tr_bencDictAddBool( args, "paused", paused );
-                        tr_bencSaveAsJSON( &top, json );
-                        tr_rpc_request_exec_json( server->session,
-                                                  EVBUFFER_DATA( json ),
-                                                  EVBUFFER_LENGTH( json ),
-                                                  NULL, NULL );
+                tr_bencInitDict( &top, 2 );
+                args = tr_bencDictAddDict( &top, "arguments", 2 );
+                tr_bencDictAddStr( &top, "method", "torrent-add" );
+                b64 = tr_base64_encode( body, body_len, NULL );
+                tr_bencDictAddStr( args, "metainfo", b64 );
+                tr_bencDictAddBool( args, "paused", paused );
+                tr_bencSaveAsJSON( &top, json );
+                tr_rpc_request_exec_json( server->session,
+                                          EVBUFFER_DATA( json ),
+                                          EVBUFFER_LENGTH( json ),
+                                          NULL, NULL );
 
-                        tr_releaseBuffer( json );
-                        tr_free( b64 );
-                        tr_bencFree( &top );
-                    }
-                }
-                tr_free( text );
+                evbuffer_free( json );
+                tr_free( b64 );
+                tr_bencFree( &top );
             }
         }
 
-        tr_free( boundary );
+        tr_ptrArrayDestruct( &parts, (PtrArrayForeachFunc)tr_mimepart_free );
 
         /* use xml here because json responses to file uploads is trouble.
          * see http://www.malsup.com/jquery/form/#sample7 for details */
@@ -296,6 +387,17 @@ add_response( struct evhttp_request * req,
 }
 
 static void
+add_time_header( struct evkeyvalq * headers, const char * key, time_t value )
+{
+    /* According to RFC 2616 this must follow RFC 1123's date format,
+       so use gmtime instead of localtime... */
+    char buf[128];
+    struct tm tm = *gmtime( &value );
+    strftime( buf, sizeof( buf ), "%a, %d %b %Y %H:%M:%S GMT", &tm );
+    evhttp_add_header( headers, key, buf );
+}
+
+static void
 serve_file( struct evhttp_request * req,
             struct tr_rpc_server *  server,
             const char *            filename )
@@ -317,16 +419,20 @@ serve_file( struct evhttp_request * req,
 
         if( errno )
         {
-            send_simple_response( req, HTTP_NOTFOUND, filename );
+            char * tmp = tr_strdup_printf( "%s (%s)", filename, tr_strerror( errno ) );
+            send_simple_response( req, HTTP_NOTFOUND, tmp );
+            tr_free( tmp );
         }
         else
         {
             struct evbuffer * out;
+            const time_t now = time( NULL );
 
             errno = error;
             out = tr_getBuffer( );
-            evhttp_add_header( req->output_headers, "Content-Type",
-                               mimetype_guess( filename ) );
+            evhttp_add_header( req->output_headers, "Content-Type", mimetype_guess( filename ) );
+            add_time_header( req->output_headers, "Date", now );
+            add_time_header( req->output_headers, "Expires", now+(24*60*60) );
             add_response( req, server, out, content, content_len );
             evhttp_send_reply( req, HTTP_OK, "OK", out );
 
@@ -447,22 +553,55 @@ isAddressAllowed( const tr_rpc_server * server,
     return FALSE;
 }
 
+static tr_bool
+test_session_id( struct tr_rpc_server * server, struct evhttp_request * req )
+{
+    const char * ours = get_current_session_id( server );
+    const char * theirs = evhttp_find_header( req->input_headers, TR_RPC_SESSION_ID_HEADER );
+    char * tmp;
+
+    if( theirs && !strcmp( theirs, ours ) )
+        return TRUE;
+
+#ifdef REQUIRE_SESSION_ID
+    tmp = tr_strdup_printf(
+        "<p>Please add this header to your HTTP requests:</p>"
+        "<p style=\"padding-left: 20pt;\"><code>%s: %s</code></p>"
+        "<p><b>RPC Application Developers:</b></p>"
+        "<p style=\"padding-left: 20pt;\">As of Transmission 1.53 and 1.61, RPC clients "
+        "need to look for this 409 response containing the phrase \"invalid session-id\".  "
+        "It occurs when the request's %s header was missing "
+        "(such as during bootstrapping) or expired. "
+        "Either way, you can parse this response's headers for the new session-id.</p>"
+        "<p style=\"padding-left: 20pt;\">This requirement has been added to make "
+        "<a href=\"http://en.wikipedia.org/wiki/Cross-site_request_forgery\">CSRF</a>"
+        " attacks more difficult.</p>",
+        TR_RPC_SESSION_ID_HEADER, TR_RPC_SESSION_ID_HEADER, ours );
+
+    evhttp_add_header( req->output_headers, TR_RPC_SESSION_ID_HEADER, ours );
+    send_simple_response( req, 409, tmp );
+    tr_free( tmp );
+
+    return FALSE;
+#else
+    return TRUE
+#endif
+}
+
 static void
-handle_request( struct evhttp_request * req,
-                void *                  arg )
+handle_request( struct evhttp_request * req, void * arg )
 {
     struct tr_rpc_server * server = arg;
 
     if( req && req->evcon )
     {
         const char * auth;
-        char *       user = NULL;
-        char *       pass = NULL;
+        char * user = NULL;
+        char * pass = NULL;
 
         evhttp_add_header( req->output_headers, "Server", MY_REALM );
 
         auth = evhttp_find_header( req->input_headers, "Authorization" );
-
         if( auth && !strncasecmp( auth, "basic ", 6 ) )
         {
             int    plen;
@@ -476,7 +615,7 @@ handle_request( struct evhttp_request * req,
 
         if( !isAddressAllowed( server, req->remote_host ) )
         {
-            send_simple_response( req, 401,
+            send_simple_response( req, 403,
                 "<p>Unauthorized IP Address.</p>"
                 "<p>Either disable the IP address whitelist or add your address to it.</p>"
                 "<p>If you're editing settings.json, see the 'rpc-whitelist' and 'rpc-whitelist-enabled' entries.</p>"
@@ -503,11 +642,13 @@ handle_request( struct evhttp_request * req,
         }
         else if( !strncmp( req->uri + strlen( server->url ), "rpc", 3 ) )
         {
-            handle_rpc( req, server );
+            if ( test_session_id( server, req ) )
+                handle_rpc( req, server );
         }
         else if( !strncmp( req->uri + strlen( server->url ), "upload", 6 ) )
         {
-            handle_upload( req, server );
+            if ( test_session_id( server, req ) )
+                handle_upload( req, server );
         }
         else
         {
@@ -731,6 +872,7 @@ closeServer( void * vserver )
     deflateEnd( &s->stream );
 #endif
     tr_free( s->url );
+    tr_free( s->sessionId );
     tr_free( s->whitelistStr );
     tr_free( s->username );
     tr_free( s->password );

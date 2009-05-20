@@ -1,10 +1,39 @@
 NEWS file for Transmission <http://www.transmissionbt.com/>
 
-1.60 (2009/mm/dd)
+1.70 (2009/mm/dd)
+<http://trac.transmissionbt.com/query?milestone=1.70&group=component&groupdesc=1&order=severity>
+- All Platforms
+   + Add ability to move a torrent's data and/or tell Transmission where to look for it
+- Mac
+   + Hold down the option key on launch to pause all transfers
+
+1.61 (2009/05/11)
+<http://trac.transmissionbt.com/query?milestone=1.61&group=component&groupdesc=1&order=severity>
+- All Platforms
+   + Close potential CSRF security hole for Web Client users
+   + Fix locale error in the JSON parser
+- Qt
+   + Various small bugfixes to the beta Qt client
+- Web Client
+   + Fix 1.60 error when serving Web Client files on some embedded platforms
+   + Add response header to allow clients to cache static files
+- Daemon
+   + transmission-remote was unable to select torrents by their SHA1 hash
+
+1.53 (2009/05/11)
+- All Platforms
+   + Close potential CSRF security hole for Web Client users
+   + Fix locale error in the JSON parser
+
+1.60 (2009/05/04)
 <http://trac.transmissionbt.com/query?milestone=1.60&group=component&groupdesc=1&order=severity>
 - All Platforms
+   + Seed ratio limiting
+   + Transfer prioritization
+   + Option to specify if transfers are included in the global bandwidth limits
    + Random port, with optional randomization on startup
-   + Option for transfers to specify if they are included in the global bandwidth limits
+   + Improvements to UPnP port forwarding
+   + Support for file preallocation on XFS filesystems
 - Mac
    + Requires Mac OS X 10.5 Leopard or newer
    + Groups (moved to preferences) can be auto-assigned to transfers when adding based on multiple criteria
@@ -13,16 +42,21 @@ NEWS file for Transmission <http://www.transmissionbt.com/>
    + Bonjour support for the web interface
    + File filter field in the inspector
    + Option to include beta releases when auto-updating (using modified Sparkle 1.5)
+   + Portuguese localization
+- Qt
+   + New beta Qt client!
 - GTK+
    + Speed Limit: Second set of bandwidth limits that can be toggled or scheduled
-   + Show the file icon in the list
+   + Properties dialog now lets you edit/view multiple torrents at once
    + Allow sorting of the torrent list by size and by ETA
-- Qt
-   + New beta Qt client
+   + Show the file icon in the list
 - Daemon
    + Watch folder for auto-adding torrents
+   + Many new features in the RPC/JSON interface
+   + Allow users to specify a specific address when listening for peers
 - Web Client 
    + File selection and prioritization
+   + Add option to verify local data
    + Fix "Remove Data" bug
 
 1.52 (2009/04/12)
