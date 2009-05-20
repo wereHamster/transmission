@@ -842,7 +842,7 @@ tr_torrentStat( tr_torrent * tor )
     const tr_tracker_info * ti;
     int                     usableSeeds = 0;
     uint64_t                now;
-    double                  downloadedForRatio, seedRatio;
+    double                  downloadedForRatio, seedRatio=0;
     tr_bool                 checkSeedRatio;
 
     if( !tor )
@@ -982,7 +982,7 @@ tr_torrentStat( tr_torrent * tor )
 ***/
 
 static uint64_t
-fileBytesCompleted( const tr_torrent * tor,
+oldFileBytesCompleted( const tr_torrent * tor,
                     tr_file_index_t    fileIndex )
 {
     const tr_file *        file     =  &tor->info.files[fileIndex];
@@ -1030,6 +1030,73 @@ fileBytesCompleted( const tr_torrent * tor,
     }
 
     return haveBytes;
+}
+
+static uint64_t
+fileBytesCompleted( const tr_torrent * tor, tr_file_index_t index )
+{
+    uint64_t total = 0;
+
+    const tr_file * f = &tor->info.files[index];
+    const tr_block_index_t firstBlock = f->offset / tor->blockSize;
+    const uint64_t lastByte = f->offset + f->length - (f->length?1:0);
+    const tr_block_index_t lastBlock = lastByte / tor->blockSize;
+
+    if( firstBlock == lastBlock )
+    {
+        if( tr_cpBlockIsCompleteFast( &tor->completion, firstBlock ) )
+            total = f->length;
+    }
+    else
+    {
+        uint32_t i;
+
+        /* the first block */
+        if( tr_cpBlockIsCompleteFast( &tor->completion, firstBlock ) )
+            total += tor->blockSize - ( f->offset % tor->blockSize );
+
+        /* the middle blocks */
+        if( f->firstPiece == f->lastPiece )
+        {
+            for( i=firstBlock+1; i<lastBlock; ++i )
+                if( tr_cpBlockIsCompleteFast( &tor->completion, i ) )
+                    total += tor->blockSize;
+        }
+        else
+        {
+            int64_t b = 0;
+            const tr_block_index_t firstBlockOfLastPiece
+                       = tr_torPieceFirstBlock( tor, f->lastPiece );
+            const tr_block_index_t lastBlockOfFirstPiece
+                       = tr_torPieceFirstBlock( tor, f->firstPiece )
+                         + tr_torPieceCountBlocks( tor, f->firstPiece ) - 1;
+
+            /* the rest of the first piece */
+            for( i=firstBlock+1; i<lastBlock && i<=lastBlockOfFirstPiece; ++i )
+                if( tr_cpBlockIsCompleteFast( &tor->completion, i ) )
+                    ++b;
+
+            /* the middle pieces */
+            if( f->firstPiece + 1 < f->lastPiece )
+                for( i=f->firstPiece+1; i<f->lastPiece; ++i )
+                    b += tor->blockCountInPiece - tr_cpMissingBlocksInPiece( &tor->completion, i );
+
+            /* the rest of the last piece */
+            for( i=firstBlockOfLastPiece; i<lastBlock; ++i )
+                if( tr_cpBlockIsCompleteFast( &tor->completion, i ) )
+                    ++b;
+
+            b *= tor->blockSize;
+            total += b;
+        }
+
+        /* the last block */
+        if( tr_cpBlockIsCompleteFast( &tor->completion, lastBlock ) )
+            total += ( lastByte+1 - (lastBlock*tor->blockSize) );
+    }
+
+    assert( total == oldFileBytesCompleted( tor, index ) );
+    return total;
 }
 
 tr_file_stat *
@@ -1204,20 +1271,23 @@ freeTorrent( tr_torrent * tor )
 static void
 checkAndStartImpl( void * vtor )
 {
+    time_t now;
     tr_torrent * tor = vtor;
 
     assert( tr_isTorrent( tor ) );
 
     tr_globalLock( tor->session );
 
+    now = time( NULL );
     tor->isRunning = TRUE;
     tor->needsSeedRatioCheck = TRUE;
     *tor->errorString = '\0';
     tr_torrentResetTransferStats( tor );
     tor->completeness = tr_cpGetStatus( &tor->completion );
     tr_torrentSaveResume( tor );
-    tor->startDate = tor->anyDate = time( NULL );
+    tor->startDate = tor->anyDate = now;
     tr_trackerStart( tor->tracker );
+    tor->dhtAnnounceAt = now + tr_cryptoWeakRandInt( 20 );
     tr_peerMgrStartTorrent( tor );
 
     tr_globalUnlock( tor->session );

@@ -281,15 +281,13 @@ privateFree( gpointer vprivate )
 }
 
 static void
-onYinYangReleased( GtkWidget * w           UNUSED,
-                   GdkEventButton * button UNUSED,
-                   gpointer                vprivate )
+onYinYangReleased( GtkWidget * w UNUSED, gpointer vprivate )
 {
     PrivateData * p = vprivate;
 
-    gtk_menu_popup( GTK_MENU(
-                       p->status_menu ), NULL, NULL, NULL, NULL, 0,
-                   gtk_get_current_event_time( ) );
+    gtk_menu_popup( GTK_MENU( p->status_menu ),
+                    NULL, NULL, NULL, NULL, 0,
+                    gtk_get_current_event_time( ) );
 }
 
 #define STATS_MODE "stats-mode"
@@ -799,7 +797,7 @@ tr_window_new( GtkUIManager * ui_mgr, TrCore * core )
     const char *  pch;
     PrivateData * p;
     GtkWidget   *mainmenu, *toolbar, *filter, *list, *status;
-    GtkWidget *   vbox, *w, *self, *h, *c, *s, *hbox, *image, *menu;
+    GtkWidget *   vbox, *w, *self, *h, *s, *hbox, *image, *menu;
     GtkWindow *   win;
     GSList *      l;
 

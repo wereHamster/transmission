@@ -7,8 +7,8 @@
 #         "Z" for unsupported trunk builds,
 #         "0" for stable, supported releases
 # these should be the only two lines you need to change
-PEERID_PREFIX="-TR1610-"
-USERAGENT_PREFIX="1.61"
+PEERID_PREFIX="-TR161X-"
+USERAGENT_PREFIX="1.61+"
 
 SVN_REVISION=`find -E ./libtransmission ./macosx                     \
                   -regex ".*\.([chmp]|cpp|po|sh)"                    \
@@ -31,11 +31,11 @@ cat > libtransmission/version.h.new << EOF
 #define PEERID_PREFIX             "$PEERID_PREFIX"
 #define USERAGENT_PREFIX          "$USERAGENT_PREFIX"
 #define SVN_REVISION              "$SVN_REVISION"
+#define SVN_REVISION_NUM          $SVN_REVISION
 #define SHORT_VERSION_STRING      "$USERAGENT_PREFIX"
 #define LONG_VERSION_STRING       "$USERAGENT_PREFIX ($SVN_REVISION)"
 
 #define VERSION_STRING_INFOPLIST  $USERAGENT_PREFIX
-#define BUNDLE_VERSION_INFOPLIST  $SVN_REVISION
 EOF
 
 # Add a release definition

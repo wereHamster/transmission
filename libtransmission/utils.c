@@ -10,13 +10,17 @@
  * $Id$
  */
 
+#ifdef HAVE_MEMMEM
+ #define _GNU_SOURCE /* glibc's string.h needs this to pick up memmem */
+#endif
+
 #include <assert.h>
 #include <ctype.h> /* isalpha, tolower */
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h> /* strerror, memset */
+#include <string.h> /* strerror, memset, memmem */
 
 #include <libgen.h> /* basename */
 #include <sys/time.h>
@@ -681,6 +685,21 @@ tr_strndup( const void * in, int len )
     }
 
     return out;
+}
+
+const char*
+tr_memmem( const char * haystack, size_t haystacklen,
+           const char * needle, size_t needlelen )
+{
+#ifdef HAVE_MEMMEM
+    return memmem( haystack, haystacklen, needle, needlelen );
+#else
+    size_t i;
+    for( i=0; i<haystacklen-needlelen; ++i )
+        if( !memcmp( haystack+i, needle, needlelen ) )
+            return haystack+i;
+    return NULL;
+#endif
 }
 
 char*

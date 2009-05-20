@@ -461,13 +461,13 @@ deleteTimers( struct tr_peerMgr * m )
     if( m->bandwidthTimer )
         tr_timerFree( &m->bandwidthTimer );
 
-    if( m->rechokeTimer == NULL )
+    if( m->rechokeTimer )
         tr_timerFree( &m->rechokeTimer );
 
-    if( m->reconnectTimer == NULL )
+    if( m->reconnectTimer )
         tr_timerFree( &m->reconnectTimer );
 
-    if( m->refillUpkeepTimer == NULL )
+    if( m->refillUpkeepTimer )
         tr_timerFree( &m->refillUpkeepTimer );
 }
 
@@ -1873,6 +1873,7 @@ tr_peerMgrPeerStats( const tr_torrent    * tor,
         if( !stat->clientIsChoked && !stat->clientIsInterested ) *pch++ = 'K';
         if( !stat->peerIsChoked && !stat->peerIsInterested ) *pch++ = '?';
         if( stat->isEncrypted ) *pch++ = 'E';
+        if( stat->from == TR_PEER_FROM_DHT ) *pch++ = 'H';
         if( stat->from == TR_PEER_FROM_PEX ) *pch++ = 'X';
         if( stat->isIncoming ) *pch++ = 'I';
         *pch = '\0';
@@ -2163,8 +2164,8 @@ compareCandidates( const void * va,
     if( a->time != b->time )
         return a->time < b->time ? -1 : 1;
 
-    /* all other things being equal, prefer peers whose
-     * information comes from a more reliable source */
+    /* In order to avoid fragmenting the swarm, peers from trackers and
+     * from the DHT should be preferred to peers from PEX. */
     if( a->from != b->from )
         return a->from < b->from ? -1 : 1;
 

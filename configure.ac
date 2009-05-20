@@ -3,8 +3,8 @@ dnl STATUS: "X" for prerelease beta builds,
 dnl         "Z" for unsupported trunk builds,
 dnl         "0" for stable, supported releases
 dnl these should be the only two lines you need to change
-m4_define([user_agent_prefix],[1.61])
-m4_define([peer_id_prefix],[-TR1610-])
+m4_define([user_agent_prefix],[1.61+])
+m4_define([peer_id_prefix],[-TR161Z-])
 
 AC_INIT([transmission],
         [user_agent_prefix],
@@ -87,7 +87,7 @@ AC_TRY_LINK([#include <linux/falloc.h>],
             [AC_DEFINE([HAVE_FALLOCATE],[1],[Defined if fallocate() exists])
              AC_MSG_RESULT([yes])],
             [AC_MSG_RESULT([no])])
-AC_CHECK_FUNCS([lrintf strlcpy daemon dirname basename daemon strcasecmp localtime_r posix_fallocate])
+AC_CHECK_FUNCS([lrintf strlcpy daemon dirname basename daemon strcasecmp localtime_r posix_fallocate memmem])
 AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 ACX_PTHREAD
@@ -263,7 +263,7 @@ fi
 use_nls=no
 if test "x$enable_nls" = "xyes" ; then
     use_nls=yes
-    IT_PROG_INTLTOOL([0.23],[no-xml])
+    IT_PROG_INTLTOOL([0.35],[no-xml])
     AC_CHECK_HEADERS([libintl.h])
     GETTEXT_PACKAGE=transmission
     AC_SUBST(GETTEXT_PACKAGE)
@@ -355,6 +355,7 @@ AC_CONFIG_FILES([Makefile
                  third-party/Makefile
                  third-party/miniupnp/Makefile
                  third-party/libnatpmp/Makefile
+                 third-party/dht/Makefile
                  macosx/Makefile
                  gtk/Makefile
                  gtk/icons/Makefile
