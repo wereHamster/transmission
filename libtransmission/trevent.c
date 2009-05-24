@@ -236,6 +236,7 @@ libeventThreadFunc( void * veh )
 
     /* loop until all the events are done */
     event_dispatch( );
+    assert( eh->die );
 
     /* shut down the thread */
     tr_lockFree( eh->lock );

@@ -44,37 +44,41 @@ Transmission.prototype =
 		this.preloadImages();
 		
 		// Set up user events
-		$('#pause_all_link').bind('click', this.stopAllClicked );
-		$('#resume_all_link').bind('click', this.startAllClicked);
-		$('#pause_selected_link').bind('click', this.stopSelectedClicked );
-		$('#resume_selected_link').bind('click', this.startSelectedClicked);
-		$('#remove_link').bind('click',  this.removeClicked);
-		$('#removedata_link').bind('click',  this.removeDataClicked);
-		$('#filter_all_link').parent().bind('click', this.showAllClicked);
-		$('#filter_downloading_link').parent().bind('click', this.showDownloadingClicked);
-		$('#filter_seeding_link').parent().bind('click', this.showSeedingClicked);
-		$('#filter_paused_link').parent().bind('click', this.showPausedClicked);
-		$('#prefs_save_button').bind('click', this.savePrefsClicked);
-		$('#prefs_cancel_button').bind('click', this.cancelPrefsClicked);
-		$('#inspector_tab_info').bind('click', this.inspectorTabClicked);
-		$('#inspector_tab_activity').bind('click', this.inspectorTabClicked);
-		$('#inspector_tab_files').bind('click', this.inspectorTabClicked);
+		var tr = this;
+		$('#pause_all_link').bind('click', function(e){ tr.stopAllClicked(e); });
+		$('#resume_all_link').bind('click', function(e){ tr.startAllClicked(e); });
+		$('#pause_selected_link').bind('click', function(e){ tr.stopSelectedClicked(e); } );
+		$('#resume_selected_link').bind('click', function(e){ tr.startSelectedClicked(e); });
+		$('#remove_link').bind('click',  function(e){ tr.removeClicked(e); });
+		$('#removedata_link').bind('click',  function(e){ tr.removeDataClicked(e); });
+		$('#filter_all_link').parent().bind('click', function(e){ tr.showAllClicked(e); });
+		$('#filter_downloading_link').parent().bind('click', function(e){ tr.showDownloadingClicked(e); });
+		$('#filter_seeding_link').parent().bind('click', function(e){ tr.showSeedingClicked(e); });
+		$('#filter_paused_link').parent().bind('click', function(e){ tr.showPausedClicked(e); });
+		$('#prefs_save_button').bind('click', function(e) { tr.savePrefsClicked(e); return false;});
+		$('#prefs_cancel_button').bind('click', function(e){ tr.cancelPrefsClicked(e); return false; });
+		$('.inspector_tab').bind('click', function(e){ tr.inspectorTabClicked(e, this); });
 		if (iPhone) {
-			$('#torrent_inspector').bind('click', this.hideInspector);
-			$('#preferences_link').bind('click', this.releaseClutchPreferencesButton);
+			$('#torrent_inspector').bind('click', function(e){ tr.hideInspector(); });
+			$('#preferences_link').bind('click', function(e){ tr.releaseClutchPreferencesButton(e); });
 		} else {
-			$(document).bind('keydown',  this.keyDown);
-			$('#torrent_container').bind('click', this.deselectAll);
-			$('#open_link').bind('click', this.openTorrentClicked);
-			$('#filter_toggle_link').bind('click', this.toggleFilterClicked);
-			$('#inspector_link').bind('click', this.toggleInspectorClicked);
-			$('#upload_confirm_button').bind('click', this.confirmUploadClicked);
-			$('#upload_cancel_button').bind('click', this.cancelUploadClicked);
+			$(document).bind('keydown',  function(e){ tr.keyDown(e); });
+			$('#torrent_container').bind('click', function(e){ tr.deselectAll( true ); });
+			$('#open_link').bind('click', function(e){ tr.openTorrentClicked(e); });
+			$('#filter_toggle_link').bind('click', function(e){ tr.toggleFilterClicked(e); });
+			$('#inspector_link').bind('click', function(e){ tr.toggleInspectorClicked(e); });
+			$('#upload_confirm_button').bind('click', function(e){ tr.confirmUploadClicked(e); return false;});
+			$('#upload_cancel_button').bind('click', function(e){ tr.cancelUploadClicked(e); return false; });
 		
 			this.setupSearchBox();
 			this.createContextMenu();
 			this.createSettingsMenu();
 		}
+
+		this._torrent_list = $('#torrent_list')[0];
+		this._inspector_file_list = $('#inspector_file_list')[0];
+		this._inspector_tab_files = $('#inspector_tab_files')[0];
+		this._toolbar_buttons = $('#torrent_global_menu ul li');
 		
 		// Setup the preference box
 		this.setupPrefConstraints();
@@ -83,8 +87,10 @@ Transmission.prototype =
 		this.initializeSettings( );
 		
 		// Get preferences & torrents from the daemon
+		var tr = this;
 		this.remote.loadDaemonPrefs( );
-		this.remote.loadTorrents( true );
+		this.initalizeAllTorrents();
+
 		this.togglePeriodicRefresh( true );
 	},
 
@@ -197,44 +203,44 @@ Transmission.prototype =
 	},
 
 	contextStopSelected: function( ) {
-		transmission.stopSelectedTorrents( );
+		this.stopSelectedTorrents( );
 	},
 	contextStartSelected: function( ) {
-		transmission.startSelectedTorrents( );
+		this.startSelectedTorrents( );
 	},
 	contextRemoveSelected: function( ) {
-		transmission.removeSelectedTorrents( );
+		this.removeSelectedTorrents( );
 	},
 	contextRemoveDataSelected: function( ) {
-		transmission.removeSelectedTorrentsAndData( );
+		this.removeSelectedTorrentsAndData( );
 	},
 	contextVerifySelected: function( ) {
-		transmission.verifySelectedTorrents( );
+		this.verifySelectedTorrents( );
 	},
 	contextToggleInspector: function( ) {
-		transmission.toggleInspector( );
+		this.toggleInspector( );
 	},
 	contextSelectAll: function( ) {
-		transmission.selectAll( true );
+		this.selectAll( true );
 	},
 	contextDeselectAll: function( ) {
-		transmission.deselectAll( true );
+		this.deselectAll( true );
 	},
     
 	/*
 	 * Create the torrent right-click menu
 	 */
 	createContextMenu: function() {
-		
+		var tr = this;
 		var bindings = {
-			context_pause_selected:    this.contextStopSelected,
-			context_resume_selected:   this.contextStartSelected,
-			context_remove:            this.contextRemoveSelected,
-			context_removedata:        this.contextRemoveDataSelected,
-			context_verify:            this.contextVerifySelected,
-			context_toggle_inspector:  this.contextToggleInspector,
-			context_select_all:        this.contextSelectAll,
-			context_deselect_all:      this.contextDeselectAll
+			context_pause_selected:    function(e){ tr.contextStopSelected(e); },
+			context_resume_selected:   function(e){ tr.contextStartSelected(e); },
+			context_remove:            function(e){ tr.contextRemoveSelected(e); },
+			context_removedata:        function(e){ tr.contextRemoveDataSelected(e); },
+			context_verify:            function(e){ tr.contextVerifySelected(e); },
+			context_toggle_inspector:  function(e){ tr.contextToggleInspector(e); },
+			context_select_all:        function(e){ tr.contextSelectAll(e); },
+			context_deselect_all:      function(e){ tr.contextDeselectAll(e); }
 		};
 		
 		// Setup the context menu
@@ -255,10 +261,11 @@ Transmission.prototype =
 	 * Create the footer settings menu
 	 */
 	createSettingsMenu: function() {
+		var tr = this;
 		$('#settings_menu').transMenu({
 			selected_char: '&#x2714;',
 			direction: 'up',
-			onClick: this.processSettingsMenuEvent
+			onClick: function(e){ return tr.processSettingsMenuEvent(e); }
 		});
 		
 		$('#unlimited_download_rate').selectMenuItem();
@@ -386,14 +393,14 @@ Transmission.prototype =
 	},
 
 	selectAll: function( doUpdate ) {
-		var tr = transmission;
+		var tr = this;
 		for( var i=0, len=tr._rows.length; i<len; ++i )
 			tr.selectElement( tr._rows[i] );
 		if( doUpdate )
 			tr.selectionChanged();
 	},
 	deselectAll: function( doUpdate ) {
-		var tr = transmission;
+		var tr = this;
 		for( var i=0, len=tr._rows.length; i<len; ++i )
 			tr.deselectElement( tr._rows[i] );
 		tr._last_torrent_clicked = null;
@@ -442,7 +449,7 @@ Transmission.prototype =
 	 */
 	keyDown: function(event)
 	{
-		var tr = transmission;
+		var tr = this;
 		var sel = tr.getSelectedTorrents( );
 		var rows = tr.getVisibleRows( );
 		var i = -1;
@@ -474,7 +481,7 @@ Transmission.prototype =
 	},
 
 	stopAllClicked: function( event ) {
-		var tr = transmission;
+		var tr = this;
 		if( tr.isButtonEnabled( event ) ) {
 			tr.stopAllTorrents( );
 			tr.hideiPhoneAddressbar( );
@@ -482,7 +489,7 @@ Transmission.prototype =
 	},
 
 	stopSelectedClicked: function( event ) {
-		var tr = transmission;
+		var tr = this;
 		if( tr.isButtonEnabled( event ) ) {
 			tr.stopSelectedTorrents( );
 			tr.hideiPhoneAddressbar( );
@@ -490,7 +497,7 @@ Transmission.prototype =
 	},
 
 	startAllClicked: function( event ) {
-		var tr = transmission;
+		var tr = this;
 		if( tr.isButtonEnabled( event ) ) {
 			tr.startAllTorrents( );
 			tr.hideiPhoneAddressbar( );
@@ -498,7 +505,7 @@ Transmission.prototype =
 	},
 
 	startSelectedClicked: function( event ) {
-		var tr = transmission;
+		var tr = this;
 		if( tr.isButtonEnabled( event ) ) {
 			tr.startSelectedTorrents( );
 			tr.hideiPhoneAddressbar( );
@@ -506,7 +513,7 @@ Transmission.prototype =
 	},
 
 	openTorrentClicked: function( event ) {
-		var tr = transmission;
+		var tr = this;
 		if( tr.isButtonEnabled( event ) ) {
 			$('body').addClass('open_showing');
 			tr.uploadTorrentFile( );
@@ -522,26 +529,26 @@ Transmission.prototype =
 		} else {
 			$('#upload_container').hide();
 		}
-		transmission.updateButtonStates();
+		this.updateButtonStates();
 	},
 
 	cancelUploadClicked: function(event) {
-		transmission.hideUploadDialog( );
+		this.hideUploadDialog( );
 	},
 
 	confirmUploadClicked: function(event) {
-		transmission.uploadTorrentFile( true );
-		transmission.hideUploadDialog( );
+		this.uploadTorrentFile( true );
+		this.hideUploadDialog( );
 	},
 
 	cancelPrefsClicked: function(event) {
-		transmission.hidePrefsDialog( );
+		this.hidePrefsDialog( );
 	},
 
 	savePrefsClicked: function(event)
 	{
 		// handle the clutch prefs locally
-		var tr = transmission;
+		var tr = this;
 		tr.setPref( Prefs._AutoStart, $('#prefs_form #auto_start')[0].checked );
 		var rate = parseInt( $('#prefs_form #refresh_rate')[0].value );
 		if( rate != tr[Prefs._RefreshRate] ) {
@@ -567,7 +574,7 @@ Transmission.prototype =
 	},
 
 	removeClicked: function( event ) {	
-		var tr = transmission;
+		var tr = this;
 		if( tr.isButtonEnabled( event ) ) {
 			tr.removeSelectedTorrents( );
 			tr.hideiPhoneAddressbar( );
@@ -575,7 +582,7 @@ Transmission.prototype =
 	},
 
 	removeDataClicked: function( event ) {	
-		var tr = transmission;
+		var tr = this;
 		if( tr.isButtonEnabled( event ) ) {
 			tr.removeSelectedTorrentsAndData( );
 			tr.hideiPhoneAddressbar( );
@@ -583,22 +590,21 @@ Transmission.prototype =
 	},
 
 	toggleInspectorClicked: function( event ) {
-		var tr = transmission;
+		var tr = this;
 		if( tr.isButtonEnabled( event ) )
 			tr.toggleInspector( );
 	},
 
-	inspectorTabClicked: function(event) {
-	
+	inspectorTabClicked: function(event, tab) {
 		if (iPhone) event.stopPropagation();
 		
 		// Select the clicked tab, unselect the others,
 		// and display the appropriate info
-		var tab_ids = $(this).parent('#inspector_tabs').find('.inspector_tab').map(
+		var tab_ids = $(tab).parent('#inspector_tabs').find('.inspector_tab').map(
 			function() { return $(this).attr('id'); } 
 		);
 		for( var i=0; i<tab_ids.length; ++i ) {
-			if (this.id == tab_ids[i]) {
+			if (tab.id == tab_ids[i]) {
 				$('#' + tab_ids[i]).addClass('selected');
 				$('#' + tab_ids[i] + '_container').show();
 			} else {
@@ -606,12 +612,14 @@ Transmission.prototype =
 				$('#' + tab_ids[i] + '_container').hide();
 			}
 		}
-		transmission.hideiPhoneAddressbar();
+		this.hideiPhoneAddressbar();
+	
+		this.updateVisibleFileLists();
 	},
 	
 	toggleFilterClicked: function(event) {
-		if (transmission.isButtonEnabled(event))
-			transmission.toggleFilter();
+		if (this.isButtonEnabled(event))
+			this.toggleFilter();
 	},
 	setFilter: function( mode )
 	{
@@ -631,16 +639,16 @@ Transmission.prototype =
 		this.refilter( );
 	},
 	showAllClicked: function( event ) {	
-		transmission.setFilter( Prefs._FilterAll );
+		this.setFilter( Prefs._FilterAll );
 	},
 	showDownloadingClicked: function( event ) {
-		transmission.setFilter( Prefs._FilterDownloading );
+		this.setFilter( Prefs._FilterDownloading );
 	},
 	showSeedingClicked: function(event) {	
-		transmission.setFilter( Prefs._FilterSeeding );
+		this.setFilter( Prefs._FilterSeeding );
 	},
 	showPausedClicked: function(event) {
-		transmission.setFilter( Prefs._FilterPaused );
+		this.setFilter( Prefs._FilterPaused );
 	},
 
 	/*
@@ -656,24 +664,17 @@ Transmission.prototype =
 	 * Turn the periodic ajax-refresh on & off
 	 */
 	togglePeriodicRefresh: function(state) {
+		var tr = this;
 		if (state && this._periodic_refresh == null) {
 			// sanity check
 			if( !this[Prefs._RefreshRate] )
 			     this[Prefs._RefreshRate] = 5;
 			remote = this.remote;
-			this._periodic_refresh = setInterval(this.periodicRefresh, this[Prefs._RefreshRate] * 1000 );
+			this._periodic_refresh = setInterval(function(){ tr.refreshTorrents(); }, this[Prefs._RefreshRate] * 1000 );
 		} else {
 			clearInterval(this._periodic_refresh);
 			this._periodic_refresh = null;
 		}
-	},
-	
-	periodicRefresh: function() {
-		// Note: 'this' != 'transmission instance' since it is being called by setInterval
-		if (!transmission._periodicRefreshIterations)
-			transmission._periodicRefreshIterations = 0;
-		
-		remote.loadTorrents(transmission._periodicRefreshIterations++ % 10 == 0);
 	},
 	
 	scheduleFileRefresh: function() {
@@ -689,7 +690,7 @@ Transmission.prototype =
 	showPrefsDialog: function( ) {
 		$('body').addClass('prefs_showing');
 		$('#prefs_container').show();
-		transmission.hideiPhoneAddressbar();
+		this.hideiPhoneAddressbar();
 		if( Safari3 )
 			setTimeout("$('div#prefs_container div.dialog_window').css('top', '0px');",10);
 		this.updateButtonStates( );
@@ -699,7 +700,7 @@ Transmission.prototype =
 	{
 		$('body.prefs_showing').removeClass('prefs_showing');
 		if (iPhone) {
-			transmission.hideiPhoneAddressbar();
+			this.hideiPhoneAddressbar();
 			$('#prefs_container').hide();
 		} else if (Safari3) {
 			$('div#prefs_container div.dialog_window').css('top', '-425px');
@@ -766,27 +767,27 @@ Transmission.prototype =
 	 * Process an event in the footer-menu
 	 */
 	processSettingsMenuEvent: function(event) {
-		// Don't use 'this' in the function to avoid confusion (this != transmission instance)
-		var element = this;
+		var tr = this;
+		var $element = $(event.target);
 		
 		// Figure out which menu has been clicked
-		switch ($(element).parent()[0].id) {
+		switch ($element.parent()[0].id) {
 			
 			// Display the preferences dialog
 			case 'footer_super_menu':
-				if ($(element)[0].id == 'preferences') {
+				if ($element[0].id == 'preferences') {
 					$('div#prefs_container div#pref_error').hide();
 					$('div#prefs_container h2.dialog_heading').show();
-					transmission.showPrefsDialog( );
+					tr.showPrefsDialog( );
 				}
 				break;
 			
 			// Limit the download rate
 			case 'footer_download_rate_menu':
 				var args = { };
-				var rate = (this.innerHTML).replace(/[^0-9]/ig, '');
-				if ($(this).is('#unlimited_download_rate')) {
-					$(this).deselectMenuSiblings().selectMenuItem();
+				var rate = ($element[0].innerHTML).replace(/[^0-9]/ig, '');
+				if ($element.is('#unlimited_download_rate')) {
+					$element.deselectMenuSiblings().selectMenuItem();
 					args[RPC._DownSpeedLimited] = false;
 				} else {
 					setInnerHTML( $('#limited_download_rate')[0], 'Limit (' + rate + ' KB/s)' );
@@ -796,15 +797,15 @@ Transmission.prototype =
 					args[RPC._DownSpeedLimited] = true;
 				}
 				$('div.preference input#limit_download')[0].checked = args[RPC._DownSpeedLimited];
-				transmission.remote.savePrefs( args );
+				tr.remote.savePrefs( args );
 				break;
 			
 			// Limit the upload rate
 			case 'footer_upload_rate_menu':
 				var args = { };
-				var rate = (this.innerHTML).replace(/[^0-9]/ig, '');
-				if ($(this).is('#unlimited_upload_rate')) {
-					$(this).deselectMenuSiblings().selectMenuItem();
+				var rate = ($element[0].innerHTML).replace(/[^0-9]/ig, '');
+				if ($element.is('#unlimited_upload_rate')) {
+					$element.deselectMenuSiblings().selectMenuItem();
 					args[RPC._UpSpeedLimited] = false;
 				} else {
 					setInnerHTML( $('#limited_upload_rate')[0], 'Limit (' + rate + ' KB/s)' );
@@ -814,37 +815,39 @@ Transmission.prototype =
 					args[RPC._UpSpeedLimited] = true;
 				}
 				$('div.preference input#limit_upload')[0].checked = args[RPC._UpSpeedLimited];
-				transmission.remote.savePrefs( args );
+				tr.remote.savePrefs( args );
 				break;
 			
 			// Sort the torrent list 
 			case 'footer_sort_menu':
 
 				// The 'reverse sort' option state can be toggled independently of the other options
-				if ($(this).is('#reverse_sort_order')) {
+				if ($element.is('#reverse_sort_order')) {
 					var dir;
-					if ($(this).menuItemIsSelected()) {
-						$(this).deselectMenuItem();
+					if ($element.menuItemIsSelected()) {
+						$element.deselectMenuItem();
 						dir = Prefs._SortAscending;
 					} else {
-						$(this).selectMenuItem();
+						$element.selectMenuItem();
 						dir = Prefs._SortDescending;
 					}
-					transmission.setSortDirection( dir );
+					tr.setSortDirection( dir );
 
 				// Otherwise, deselect all other options (except reverse-sort) and select this one
 				} else {
-					$(this).parent().find('span.selected').each( function() {
-						if (! $(this).parent().is('#reverse_sort_order')) {
-							$(this).parent().deselectMenuItem();
+					$element.parent().find('span.selected').each( function() {
+						if (! $element.parent().is('#reverse_sort_order')) {
+							$element.parent().deselectMenuItem();
 						}
 					});
-					$(this).selectMenuItem();
-					var method = $(this)[0].id.replace(/sort_by_/, '');
-					transmission.setSortMethod( method );
+					$element.selectMenuItem();
+					var method = $element[0].id.replace(/sort_by_/, '');
+					tr.setSortMethod( method );
 				}
 				break;
 		}
+		$('#settings_menu').trigger('closemenu');
+		return false; // to prevent the event from bubbling up
 	},
 
 	setLastTorrentClicked: function( torrent )
@@ -862,7 +865,7 @@ Transmission.prototype =
 
 		var torrents = this.getSelectedTorrents( );
 		if( !torrents.length && iPhone ) {
-			transmission.hideInspector();
+			this.hideInspector();
 			return;
 		}
 
@@ -1011,14 +1014,16 @@ Transmission.prototype =
 		$(".inspector_row > div:contains('N/A')").css('color', '#666');
 		this.updateVisibleFileLists();
 	},
+
+	fileListIsVisible: function() {
+		return this._inspector_tab_files.className.indexOf('selected') != -1;
+	},
 	
 	updateVisibleFileLists: function() {
-		jQuery.each( this.getSelectedTorrents(), function() {
-			this.showFileList();
-		} );
-		jQuery.each( this.getDeselectedTorrents(), function() {
-			this.hideFileList();
-		} );
+		if( this.fileListIsVisible( ) === true ) {
+			jQuery.each( this.getSelectedTorrents(), function() { this.showFileList(); } );
+			jQuery.each( this.getDeselectedTorrents(), function() { this.hideFileList(); } );
+		}
 	},
     
 	/*
@@ -1058,7 +1063,7 @@ Transmission.prototype =
 		if (iPhone) {
 			transmsision.deselectAll( );
 			$('body.inspector_showing').removeClass('inspector_showing');
-			transmission.hideiPhoneAddressbar();
+			this.hideiPhoneAddressbar();
 		} else {
 			$('#torrent_filter_bar')[0].style.right = '0px';
 			$('#torrent_container')[0].style.right = '0px';
@@ -1094,87 +1099,93 @@ Transmission.prototype =
 		this.setFilter( Prefs._FilterAll );
 	},
 
-	updateTorrentsData: function( torrent_list ) {
+	refreshTorrents: function() {
 		var tr = this;
-		jQuery.each( torrent_list, function() {
+		this.remote.getUpdatedDataFor('recently-active', function(active, removed){ tr.updateTorrentsData(active, removed); });
+	},
+
+	updateTorrentsData: function( active, removed_ids ) {
+		var tr = this;
+		var new_torrent_ids = [];
+		var refresh_files_for = [];
+		jQuery.each( active, function() {
 			var t = Torrent.lookup(tr._torrents, this.id);
-			if (t) t.refresh(this);
+			if (t){
+		    t.refresh(this);
+		    if(t.isSelected())
+		      refresh_files_for.push(t.id());
+		  }
+		  else
+		    new_torrent_ids.push(this.id);
+		} );
+
+		if(refresh_files_for.length > 0)
+			tr.remote.loadTorrentFiles( refresh_files_for );
+
+		if(new_torrent_ids.length > 0)
+			tr.remote.getInitialDataFor(new_torrent_ids, function(torrents){ tr.addTorrents(torrents) } );
+
+		var removedAny = tr.deleteTorrents(removed_ids);
+
+		if( ( new_torrent_ids.length != 0 ) || removedAny ) {
+			tr.hideiPhoneAddressbar();
+			tr.deselectAll( true );
+		}
+
+		this.refilter();
+	},
+
+	updateTorrentsFileData: function( torrents ){
+		var tr = this;
+		var listIsVisible = tr.fileListIsVisible( );
+		jQuery.each( torrents, function() {
+			var t = Torrent.lookup(tr._torrents, this.id);
+			if (t) {
+				t.refreshFileModel(this);
+				if( listIsVisible && t.isSelected())
+					t.refreshFileView();
+			}
 		} );
 	},
-	
-	/*
-	 * Process got some new torrent data from the server
-	 */
-	updateAllTorrents: function( torrent_list ) {
-		var torrent_data;
-		var new_torrents = [];
-		var torrent_ids = [];
-		var handled = [];
-		
-		// refresh existing torrents
-		this.updateTorrentsData( torrent_list );
-		
-		// partition existing and new torrents
-		
-		for( var i=0, len=torrent_list.length; i<len; ++i ) {
-			var data = torrent_list[i];
-			var t = Torrent.lookup( this._torrents, data.id );
-			if( !t )
-				new_torrents.push( data );
-			else {
-				handled.push( t );
-			}
-		}
-		
-		// Add any torrents that aren't already being displayed
-		// if file data is available
-		if( new_torrents.length ) {
-			if (data.files) {
-				for( var i=0, len=new_torrents.length; i<len; ++i ) {
-					var t = new Torrent( this, new_torrents[i] );
-					this._torrents.push( t );
-					handled.push( t );
-				}
-				this._torrents.sort( Torrent.compareById );
-			} else {
-				// There are new torrents available
-				// pick them up on the next refresh
-				this.scheduleFileRefresh();
-			}
-		}
-		
-		// Remove any torrents that weren't in the refresh list
-		var removedAny = false;
-		handled.sort( Torrent.compareById ); // for Torrent.indexOf
-		var allTorrents = this._torrents.clone();
-		for( var i=0, len=allTorrents.length; i<len; ++i ) {
-			var t = allTorrents[i];
-			if( Torrent.indexOf( handled, t.id() ) == -1 ) {
-				var pos = Torrent.indexOf( this._torrents, t.id( ) );
-				var e = this._torrents[pos].element();
-				if( e ) {
-					delete e._torrent;
-					e.hide( );
-				}
-				t.hideFileList();
-				this._torrents.splice( pos, 1 );
-				removedAny = true;
-			}
-		}
-		
-		if( ( new_torrents.length != 0 ) || removedAny ) {
-			this.hideiPhoneAddressbar();
-			this.deselectAll( true );
-		}
-		
-		// FIXME: not sure if this is possible in RPC
-		// Update the disk space remaining
-		//var disk_space_msg = 'Free Space: '
-		//+ Math.formatBytes(data.free_space_bytes)
-		//+ ' (' + data.free_space_percent + '% )';
-		//setInnerHTML( $('div#disk_space_container')[0], disk_space_msg );
-		
+
+	initalizeAllTorrents: function(){
+		var tr = this;
+		this.remote.getInitialDataFor( null ,function(torrents) { tr.addTorrents(torrents); } );
+	},
+
+	addTorrents: function( new_torrents ){
+		var fragment = document.createDocumentFragment( );
+		for( var i=0, row; row=new_torrents[i]; ++i )
+			this._torrents.push( new Torrent( fragment, this, row ) );
+		this._torrent_list.appendChild( fragment );
 		this.refilter( );
+	},
+
+	deleteTorrents: function(torrent_ids){
+		if(typeof torrent_ids == 'undefined')
+			return false;
+		var tr = this;
+		var removedAny = false;
+		$.each( torrent_ids, function(index, id){
+			var torrent = Torrent.lookup(tr._torrents, id);
+
+			if(torrent) {
+				removedAny = true;
+				var e = torrent.element();
+				if( e ) {
+					var row_index = tr.getTorrentIndex(tr._rows, torrent);
+					delete e._torrent; //remove circular refernce to help IE garbage collect
+					tr._rows.splice(row_index, 1)
+					e.remove();
+				}
+
+				var pos = Torrent.indexOf( tr._torrents, torrent.id( ) );
+				torrent.hideFileList();
+				tr._torrents.splice( pos, 1 );
+			}
+		});
+
+		return removedAny;
 	},
 
 	/*
@@ -1183,11 +1194,16 @@ Transmission.prototype =
 	setTorrentBgColors: function( )
 	{
 		var rows = this.getVisibleRows( );
-		for( var i=0, len=rows.length; i<len; ++i )
-			if ((i+1) % 2 == 0)
-				$.className.add( rows[i][0], 'even' );
-			else
-				$.className.remove( rows[i][0], 'even' );
+		for( var i=0, len=rows.length; i<len; ++i ) {
+			var wasEven = rows[i][0].className.indexOf('even') != -1;
+			var isEven = ((i+1) % 2 == 0);
+			if( wasEven != isEven ) {
+				if( wasEven )
+					rows[i].removeClass('even');
+				else
+					rows[i].addClass('even');
+			}
+		}
 	},
     
 	updateStatusbar: function()
@@ -1251,7 +1267,7 @@ Transmission.prototype =
 				args.dataType = 'xml';
 				args.iframe = true;
 				args.success = function( data ) {
-					tr.remote.loadTorrents( true );
+					tr.refreshTorrents();
 					tr.togglePeriodicRefresh( true );
 				};
 				tr.togglePeriodicRefresh( false );
@@ -1425,11 +1441,9 @@ Transmission.prototype =
 	updateButtonStates: function()
 	{
 		var showing_dialog = new RegExp("(prefs_showing|dialog_showing|open_showing)").test(document.body.className);
-		if (showing_dialog)
-		{
-			$('.torrent_global_menu ul li').addClass('disabled');
-		}
-		else
+		this._toolbar_buttons.toggleClass( 'disabled', showing_dialog );
+
+		if (!showing_dialog)
 		{
 			var torrents = this.getVisibleTorrents( );
 			var haveSelection = false;
@@ -1447,8 +1461,6 @@ Transmission.prototype =
 				if( isSelected && isActive ) haveActiveSelection = true;
 				if( isSelected && !isActive ) havePausedSelection = true;
 			}
-
-			$('.torrent_global_menu ul li.disabled').removeClass('disabled');
 
 			this.setEnabled( 'li#pause_selected', haveActiveSelection );
 			this.setEnabled( 'li.context_pause_selected', haveActiveSelection );

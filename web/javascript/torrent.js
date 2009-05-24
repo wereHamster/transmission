@@ -6,8 +6,8 @@
  *	Class Torrent
  */
 
-function Torrent(controller,data) {
-    this.initialize(controller,data);
+function Torrent(domParent,controller,data) {
+    this.initialize(domParent,controller,data);
 } 
 
 // Constants
@@ -23,58 +23,73 @@ Torrent.prototype =
 	/*
 	 * Constructor
 	 */
-	initialize: function(controller, data) {
+	initialize: function(domParent,controller, data) {
+		this._id            = data.id;
+		this._is_private    = data.isPrivate;
+		this._hashString    = data.hashString;
+		this._date          = data.addedDate;
+		this._size          = data.totalSize;
+		this._tracker       = data.announceURL;
+		this._comment       = data.comment;
+		this._creator       = data.creator;
+		this._creator_date  = data.dateCreated;
+		this._sizeWhenDone  = data.sizeWhenDone;
+		this._name          = data.name;
+		this._name_lc       = this._name.toLowerCase( );
+		this._file_model    = [ ];
+		this._file_view     = [ ];
+
 		// Create a new <li> element
-		var element = $('<li/>');
-		element.addClass('torrent');
-		element[0].id = 'torrent_' + data.id;
+		var top_e = document.createElement( 'li' );
+		top_e.className = 'torrent';
+		top_e.id = 'torrent_' + data.id;
+		var element = $(top_e);
 		element._torrent = this;
 		this._element = element;
 		this._controller = controller;
 		controller._rows.push( element );
 		
 		// Create the 'name' <div>
-		var e = $('<div/>');
-		e.addClass('torrent_name');
-		element.append( e );
+		var e = document.createElement( 'div' );
+		e.className = 'torrent_name';
+		top_e.appendChild( e );
 		element._name_container = e;
 		
 		// Create the 'progress details' <div>
-		e = $('<div/>');
-		e.addClass('torrent_progress_details');
-		element.append(e);
+		e = document.createElement( 'div' );
+		e.className = 'torrent_progress_details';
+		top_e.appendChild( e );
 		element._progress_details_container = e;
 
 		// Create the 'in progress' bar
-		e = $('<div/>');
-		e.addClass('torrent_progress_bar incomplete');
-		e.css('width', '0%');
-		element.append( e );
+		e = document.createElement( 'div' );
+		e.className = 'torrent_progress_bar incomplete';
+		e.style.width = '0%';
+		top_e.appendChild( e );
 		element._progress_complete_container = e;
 			
 		// Create the 'incomplete' bar (initially hidden)
-		e = $('<div/>');
-		e.addClass('torrent_progress_bar incomplete');
-		e.hide();
-		element.append( e );
+		e = document.createElement( 'div' );
+		e.className = 'torrent_progress_bar incomplete';
+		e.style.display = 'none';
+		top_e.appendChild( e );
 		element._progress_incomplete_container = e;
 		
 		// Add the pause/resume button - don't specify the
 		// image or alt text until the 'refresh()' function
 		// (depends on torrent state)
-		var image = $('<div/>');
-		image.addClass('torrent_pause');
-		e = $('<a/>');
-		e.append( image );
-		element.append( e );
+		var image = document.createElement( 'div' );
+		image.className = 'torrent_pause';
+		e = document.createElement( 'a' );
+		e.appendChild( image );
+		top_e.appendChild( e );
 		element._pause_resume_button_image = image;
-		element._pause_resume_button = e;
-		if (!iPhone) e.bind('click', {element: element}, this.clickPauseResumeButton);
+		if (!iPhone) $(e).bind('click', {element: element}, this.clickPauseResumeButton);
 		
 		// Create the 'peer details' <div>
-		e = $('<div/>');
-		e.addClass('torrent_peer_details');
-		element.append( e );
+		e = document.createElement( 'div' );
+		e.className = 'torrent_peer_details';
+		top_e.appendChild( e );
 		element._peer_details_container = e;
 		
 		// Set the torrent click observer
@@ -87,36 +102,34 @@ Torrent.prototype =
 			this._element.css('margin-top', '7px');
 		
 		// insert the element
-		$('#torrent_list').append(this._element);
-		this.initializeTorrentFilesInspectorGroup(data.files.length);
-		
-		for (var i = 0; i < data.files.length; i++) {
-			var file = data.files[i];
-			file.index    = i;
-			file.torrent  = this;
-			file.priority = data.priorities[i];
-			file.wanted   = data.wanted[i];
-			var torrentFile = new TorrentFile(file); 
-			this._files.push(torrentFile);
-			this._fileList.append(
-				torrentFile.element().addClass(i % 2 ? 'even' : 'odd').addClass('inspector_torrent_file_list_entry')
-			);
+		domParent.appendChild(top_e);
+
+		this.initializeTorrentFilesInspectorGroup();
+
+		for( var i=0; data.files!=null && i<data.files.length; ++i ) {
+			var src = data.files[i];
+			this._file_model[i] = {
+				'index': i,
+				'torrent': this,
+				'length': src.length,
+				'name': src.name
+			};
 		}
-		
+
 		// Update all the labels etc
 		this.refresh(data);
 	},
 	
 	initializeTorrentFilesInspectorGroup: function(length) {
-		this._files = [];
-        this._fileList = $('<ul/>').addClass('inspector_torrent_file_list').addClass('inspector_group').hide();
-        if(length == 1) 
-            this._fileList.addClass('single_file');
-        $('#inspector_file_list').append(this._fileList);
+		var e = document.createElement( 'ul' );
+		e.className = 'inspector_torrent_file_list inspector_group';
+		e.style.display = 'none';
+		this._controller._inspector_file_list.appendChild( e );
+		this._fileList = e;
 	},
 	
 	fileList: function() {
-		return this._fileList;
+		return $(this._fileList);
 	},
 	
 	/*--------------------------------------------
@@ -178,7 +191,7 @@ Torrent.prototype =
 	totalSeeders: function() { return this._total_seeders; },
 	uploadSpeed: function() { return this._upload_speed; },
 	uploadTotal: function() { return this._upload_total; },
-	showFileList: function() { this.refreshFiles(); this.fileList().show(); },
+	showFileList: function() { this.ensureFileListExists(); this.refreshFileView(); this.fileList().show(); },
 	hideFileList: function() { this.fileList().hide(); },
 	
 	/*--------------------------------------------
@@ -278,24 +291,6 @@ Torrent.prototype =
 	 * Refresh display
 	 */
 	refreshData: function(data) {
-		// These variables never change after the inital load
-		if (data.isPrivate)     this._is_private    = data.isPrivate;
-		if (data.hashString)    this._hashString    = data.hashString;
-		if (data.addedDate)     this._date          = data.addedDate;
-		if (data.totalSize)     this._size          = data.totalSize;
-		if (data.announceURL)   this._tracker       = data.announceURL;
-		if (data.comment)       this._comment       = data.comment;
-		if (data.creator)       this._creator       = data.creator;
-		if (data.dateCreated)   this._creator_date  = data.dateCreated;
-		if (data.sizeWhenDone)  this._sizeWhenDone  = data.sizeWhenDone;
-		if (data.path)          this._torrent_file  = data.path;//FIXME
-		if (data.name) {
-			this._name = data.name;
-			this._name_lc = this._name.toLowerCase( );
-		}
-		
-		// Set the regularly-changing torrent variables
-		this._id                    = data.id;
 		this._completed             = data.haveUnchecked + data.haveValid;
 		this._verified              = data.haveValid;
 		this._leftUntilDone         = data.leftUntilDone;
@@ -313,14 +308,20 @@ Torrent.prototype =
 		this._total_leechers        = Math.max( 0, data.leechers );
 		this._total_seeders         = Math.max( 0, data.seeders );
 		this._state                 = data.status;
-		
-		if (data.files) {
-			for (var i = 0; i < data.files.length; i++) {
-				var file_data      = data.files[i];
-				if (data.priorities) { file_data.priority = data.priorities[i]; }
-				if (data.wanted)     { file_data.wanted   = data.wanted[i]; }
-				this._files[i].readAttributes(file_data);
-			}
+
+		if (data.fileStats)
+			this.refreshFileModel( data );
+	},
+
+	refreshFileModel: function(data) {
+		for( var i=0; i<data.fileStats.length; ++i ) {
+			var src = data.fileStats[i];
+			var tgt = this._file_model[i];
+			if( !tgt )
+				tgt = this._file_model[i] = { };
+			tgt.wanted = src.wanted;
+			tgt.priority = src.priority;
+			tgt.bytesCompleted = src.bytesCompleted;
 		}
 	},
 
@@ -330,7 +331,7 @@ Torrent.prototype =
 		var root = this._element;
 		var MaxBarWidth = 100; // reduce this to make the progress bar shorter (%)
 		
-		setInnerHTML( root._name_container[0], this._name );
+		setInnerHTML( root._name_container, this._name );
 		
 		// Add the progress bar
                 var notDone = this._leftUntilDone > 0;
@@ -369,20 +370,17 @@ Torrent.prototype =
 			// Update the 'in progress' bar
 			var class_name = this.isActive() ? 'in_progress' : 'incomplete_stopped';
 			var e = root._progress_complete_container;
-			e.removeClass( );
-			e.addClass( 'torrent_progress_bar' );
-			e.addClass( class_name );
-			e.css( 'width', css_completed_width + '%' );
-			if(css_completed_width == 0) { e.addClass( 'empty' ); }
+			var str = 'torrent_progress_bar ' + class_name;
+			if(css_completed_width == 0) { str += ' empty'; }
+			e.className = str;
+			e.style.width = css_completed_width + '%';
 			
 			// Update the 'incomplete' bar
 			e = root._progress_incomplete_container;
-			if( !e.is('.incomplete')) {
-				e.removeClass();
-				e.addClass('torrent_progress_bar in_progress');
-			}
-			e.css('width', (MaxBarWidth - css_completed_width) + '%');
-			e.show();
+			if( e.className.indexOf( 'incomplete' ) == -1 )
+				e.className = 'torrent_progress_bar in_progress';
+			e.style.width =  (MaxBarWidth - css_completed_width) + '%';
+			e.style.display = 'block';
 			
 			// Create the 'peer details' label
 			// Eg: 'Downloading from 36 of 40 peers - DL: 60.2 KB/s UL: 4.3 KB/s'
@@ -406,8 +404,7 @@ Torrent.prototype =
 			// Update the 'in progress' bar
 			var class_name = (this.isActive()) ? 'complete' : 'complete_stopped';
 			var e = root._progress_complete_container;
-			e.removeClass();
-			e.addClass('torrent_progress_bar ' + class_name );
+			e.className = 'torrent_progress_bar ' + class_name;
 			
 			// Create the 'progress details' label
 			// Eg: '698.05 MB, uploaded 8.59 GB (Ratio: 12.3)'
@@ -419,10 +416,10 @@ Torrent.prototype =
 			                 + ')';
 			
 			// Hide the 'incomplete' bar
-			root._progress_incomplete_container.hide();
+			root._progress_incomplete_container.style.display = 'none';
 			
 			// Set progress to maximum
-			root._progress_complete_container.css('width', MaxBarWidth + '%');
+			root._progress_complete_container.style.width =  MaxBarWidth + '%';
 			
 			// Create the 'peer details' label
 			// Eg: 'Seeding to 13 of 22 peers - UL: 36.2 KB/s'
@@ -439,10 +436,10 @@ Torrent.prototype =
 		}
 		
 		// Update the progress details
-		setInnerHTML( root._progress_details_container[0], progress_details );
+		setInnerHTML( root._progress_details_container, progress_details );
 		
 		// Update the peer details and pause/resume button
-		e = root._pause_resume_button_image[0];
+		e = root._pause_resume_button_image;
 		if ( this.state() == Torrent._StatusPaused ) {
 			e.alt = 'Resume';
 			e.className = "torrent_resume";
@@ -457,23 +454,34 @@ Torrent.prototype =
 			peer_details = this._error_message;
 		}
 		
-		setInnerHTML( root._peer_details_container[0], peer_details );
+		setInnerHTML( root._peer_details_container, peer_details );
 	
-		this.refreshFiles( );	
+		this.refreshFileView( );	
 	},
 
-	refreshFiles: function() {
-		jQuery.each(this._files, function () {
-			this.refreshHTML();
-		} );
+	refreshFileView: function() {
+		if( this._file_view.length )
+			for( var i=0; i<this._file_model.length; ++i )
+				this._file_view[i].update( this._file_model[i] );
+	},
+
+	ensureFileListExists: function() {
+		if( this._file_view.length == 0 ) {
+			for( var i=0; i<this._file_model.length; ++i ) {
+				var v = new TorrentFile( this._file_model[i] );
+				this._file_view[i] = v;
+				var e = v.domElement( );
+				e.className = (i % 2 ? 'even' : 'odd') + ' inspector_torrent_file_list_entry';
+				this._fileList.appendChild( e );
+			}
+		}
 	},
 
 	/*
 	 * Return true if this torrent is selected
 	 */
 	isSelected: function() {
-		var e = this.element( );
-		return e && $.className.has( e[0], 'selected' );
+		return this.element()[0].className.indexOf('selected') != -1;
 	},
 
 	/**
@@ -634,30 +642,51 @@ function TorrentFile(file_data) {
 
 TorrentFile.prototype = {
 	initialize: function(file_data) {
+		//console.log( 'new TorrentFile ' + file_data.name );
 		this._dirty = true;
 		this._torrent = file_data.torrent;
+		this._index = file_data.index;
 		var pos = file_data.name.indexOf('/');
 		if (pos >= 0)
 			this.name = file_data.name.substring(pos + 1);
 		else
 			this.name = file_data.name;
 		this.readAttributes(file_data);
+
+		var li = document.createElement('li');
+		li.classNameConst = 'inspector_torrent_file_list_entry ' + ((this._index%2)?'odd':'event');
+		li.className = li.classNameConst;
+
+		var wanted_div = document.createElement('div');
+		wanted_div.className = "file_wanted_control";
+
+		var pri_div = document.createElement('div');
+		pri_div.classNameConst = "file_priority_control";
+		pri_div.className = pri_div.classNameConst;
+
+		var file_div = document.createElement('div');
+		file_div.className = "inspector_torrent_file_list_entry_name";
+		file_div.textContent = this.name;
+
+		var prog_div = document.createElement('div');
+		prog_div.className = "inspector_torrent_file_list_entry_progress";
+
+		li.appendChild(wanted_div);
+		li.appendChild(pri_div);
+		li.appendChild(file_div);
+		li.appendChild(prog_div);
 		
-		this._element = $('<li/>').append(
-			$('<div/>').addClass('file_wanted_control').
-			bind('click', { file: this }, this.fileWantedControlClicked)
-			
-		).append(
-			this._priority_control = $('<div/>').addClass('file_priority_control').
-			bind('click', { file: this }, this.filePriorityControlClicked)
-			
-		).append(
-			$('<div/>').addClass('inspector_torrent_file_list_entry_name').
-			append(this.name)
-			
-		).append(
-			this._progress = $('<div/>').addClass('inspector_torrent_file_list_entry_progress')
-		)
+		this._element = li;
+		this._priority_control = pri_div;
+		this._progress = $(prog_div);
+
+		$(wanted_div).bind('click', { file: this }, this.fileWantedControlClicked);
+		$(pri_div).bind('click', { file: this }, this.filePriorityControlClicked);
+	},
+
+	update: function(file_data) {
+		this.readAttributes(file_data);
+		this.refreshHTML();
 	},
 	
 	readAttributes: function(file_data) {
@@ -684,11 +713,15 @@ TorrentFile.prototype = {
 	},
 	
 	element: function() {
+		return $(this._element);
+	},
+	
+	domElement: function() {
 		return this._element;
 	},
 	
 	setPriority: function(priority) {
-		if(this.element().hasClass('complete') || this._torrent._files.length == 1)
+		if(this.element().hasClass('complete') || this._torrent._file_model.length == 1)
 		  return;
 		var priority_level = { high: 1, normal: 0, low: -1 }[priority];
 		if (this._prio == priority_level) { return; }
@@ -706,7 +739,7 @@ TorrentFile.prototype = {
 	},
 	
 	toggleWanted: function() {
-		if(this.element().hasClass('complete') || this._torrent._files.length == 1)
+		if(this.element().hasClass('complete') || this._torrent._file_model.length == 1)
 		  return;
 		this.setWanted(!this._wanted);
 	},
@@ -728,17 +761,22 @@ TorrentFile.prototype = {
 	},
 	
 	refreshWantedHTML: function() {
-		var element = this.element();
-		this.element().toggleClass('skip', !this._wanted);
-		this.element().toggleClass('complete', this._done>=this._size );
+		var e = this.element()[0];
+		var c = e.classNameConst;
+		if(!this._wanted) c += ' skip';
+		if(this._done>=this._size) c += ' complete';
+		e.className = c;
 	},
 	
 	refreshPriorityHTML: function() {
-		var priority = { '1': 'high', '0': 'normal', '-1': 'low' }[new String(this._prio)];
-		var off_priorities = [ 'high', 'normal', 'low' ].sort(function(a,b) { return (a == priority) ? 1 : -1; } );
-		this._priority_control.addClass(priority).
-			removeClass(off_priorities[0]).
-			removeClass(off_priorities[1]);
+		var e = this._priority_control;
+		var c = e.classNameConst;
+		switch( this._prio ) {
+			case 1: c += ' high'; break;
+			case -1: c += ' low'; break;
+			default: c += ' normal'; break;
+		}
+		e.className = c;
 	},
 	
 	fileWantedControlClicked: function(event) {

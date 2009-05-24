@@ -222,7 +222,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         }
         
         tr_benc settings;
-        tr_bencInitDict(&settings, 33);
+        tr_bencInitDict(&settings, 34);
         tr_sessionGetDefaultSettings(&settings);
         
         const BOOL usesSpeedLimitSched = [fDefaults boolForKey: @"SpeedLimitAuto"];
@@ -245,7 +245,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_USPEED_ENABLED, [fDefaults boolForKey: @"CheckUpload"]);
         
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_BLOCKLIST_ENABLED, [fDefaults boolForKey: @"Blocklist"]);
-        
+        tr_bencDictAddBool(&settings, TR_PREFS_KEY_DHT_ENABLED, [fDefaults boolForKey: @"DHTGlobal"]);
         tr_bencDictAddStr(&settings, TR_PREFS_KEY_DOWNLOAD_DIR, [[[fDefaults stringForKey: @"DownloadFolder"]
                                                                     stringByExpandingTildeInPath] UTF8String]);
         
@@ -2437,7 +2437,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     path = [path stringByExpandingTildeInPath];
     
     NSArray * importedNames;
-    if (!(importedNames = [[NSFileManager defaultManager] directoryContentsAtPath: path]))
+    if (!(importedNames = [[NSFileManager defaultManager] contentsOfDirectoryAtPath: path error: NULL]))
         return;
     
     //only check files that have not been checked yet
@@ -2449,32 +2449,31 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         fAutoImportedNames = [[NSMutableArray alloc] init];
     [fAutoImportedNames setArray: importedNames];
     
-    for (NSInteger i = [newNames count] - 1; i >= 0; i--)
-    {
-        NSString * file = [newNames objectAtIndex: i];
-        if ([[file pathExtension] caseInsensitiveCompare: @"torrent"] != NSOrderedSame)
-            [newNames removeObjectAtIndex: i];
-        else
-            [newNames replaceObjectAtIndex: i withObject: [path stringByAppendingPathComponent: file]];
-    }
-    
     for (NSString * file in newNames)
     {
+        if ([file hasPrefix: @"."])
+            continue;
+        
+        NSString * fullFile = [path stringByAppendingPathComponent: file];
+        
+        if (![[[NSWorkspace sharedWorkspace] typeOfFile: fullFile error: NULL] isEqualToString: @"org.bittorrent.torrent"])
+            continue;
+        
         tr_ctor * ctor = tr_ctorNew(fLib);
-        tr_ctorSetMetainfoFromFile(ctor, [file UTF8String]);
+        tr_ctorSetMetainfoFromFile(ctor, [fullFile UTF8String]);
         
         switch (tr_torrentParse(ctor, NULL))
         {
             case TR_OK:
-                [self openFiles: [NSArray arrayWithObject: file] addType: ADD_AUTO forcePath: nil];
+                [self openFiles: [NSArray arrayWithObject: fullFile] addType: ADD_AUTO forcePath: nil];
                 
                 [GrowlApplicationBridge notifyWithTitle: NSLocalizedString(@"Torrent File Auto Added", "Growl notification title")
-                    description: [file lastPathComponent] notificationName: GROWL_AUTO_ADD iconData: nil priority: 0 isSticky: NO
+                    description: file notificationName: GROWL_AUTO_ADD iconData: nil priority: 0 isSticky: NO
                     clickContext: nil];
                 break;
             
             case TR_EINVALID:
-                [fAutoImportedNames removeObject: [file lastPathComponent]];
+                [fAutoImportedNames removeObject: file];
         }
         
         tr_ctorFree(ctor);
@@ -2694,12 +2693,13 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     NSPasteboard * pasteboard = [info draggingPasteboard];
     if ([[pasteboard types] containsObject: NSFilenamesPboardType])
     {
+        #warning simplify
         //check if any torrent files can be added
         BOOL torrent = NO;
         NSArray * files = [pasteboard propertyListForType: NSFilenamesPboardType];
         for (NSString * file in files)
         {
-            if ([[file pathExtension] caseInsensitiveCompare: @"torrent"] == NSOrderedSame)
+            if ([[[NSWorkspace sharedWorkspace] typeOfFile: file error: NULL] isEqualToString: @"org.bittorrent.torrent"])
             {
                 tr_ctor * ctor = tr_ctorNew(fLib);
                 tr_ctorSetMetainfoFromFile(ctor, [file UTF8String]);
@@ -2763,7 +2763,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         NSArray * files = [pasteboard propertyListForType: NSFilenamesPboardType];
         for (NSString * file in files)
         {
-            if ([[file pathExtension] caseInsensitiveCompare: @"torrent"] == NSOrderedSame)
+            if ([[[NSWorkspace sharedWorkspace] typeOfFile: file error: NULL] isEqualToString: @"org.bittorrent.torrent"])
             {
                 tr_ctor * ctor = tr_ctorNew(fLib);
                 tr_ctorSetMetainfoFromFile(ctor, [file UTF8String]);

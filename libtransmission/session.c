@@ -347,6 +347,7 @@ tr_sessionGetDefaultSettings( tr_benc * d )
 
     tr_bencDictReserve( d, 35 );
     tr_bencDictAddBool( d, TR_PREFS_KEY_BLOCKLIST_ENABLED,        FALSE );
+    tr_bencDictAddBool( d, TR_PREFS_KEY_DHT_ENABLED,              TRUE );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_DOWNLOAD_DIR,             tr_getDefaultDownloadDir( ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_DSPEED,                   100 );
     tr_bencDictAddBool( d, TR_PREFS_KEY_DSPEED_ENABLED,           FALSE );
@@ -358,7 +359,7 @@ tr_sessionGetDefaultSettings( tr_benc * d )
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_LIMIT_TORRENT,       atoi( TR_DEFAULT_PEER_LIMIT_TORRENT_STR ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_PORT,                atoi( TR_DEFAULT_PEER_PORT_STR ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_PEER_PORT_RANDOM_ON_START, FALSE );
-    tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_PORT_RANDOM_LOW,     1024 );
+    tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_PORT_RANDOM_LOW,     49152 );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_PORT_RANDOM_HIGH,    65535 );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_SOCKET_TOS,          atoi( TR_DEFAULT_PEER_SOCKET_TOS_STR ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_PEX_ENABLED,              TRUE );
@@ -403,6 +404,7 @@ tr_sessionGetSettings( tr_session * s, struct tr_benc * d )
 
     tr_bencDictReserve( d, 30 );
     tr_bencDictAddBool( d, TR_PREFS_KEY_BLOCKLIST_ENABLED,        tr_blocklistIsEnabled( s ) );
+    tr_bencDictAddBool( d, TR_PREFS_KEY_DHT_ENABLED,              s->isDHTEnabled );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_DOWNLOAD_DIR,             s->downloadDir );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_DSPEED,                   tr_sessionGetSpeedLimit( s, TR_DOWN ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_DSPEED_ENABLED,           tr_sessionIsSpeedLimited( s, TR_DOWN ) );
@@ -527,7 +529,6 @@ tr_sessionSaveSettings( tr_session    * session,
     tr_bencFree( &settings );
 }
 
-static void metainfoLookupRescan( tr_session * );
 static void tr_sessionInitImpl( void * );
 static void onAltTimer( int, short, void* );
 static void setAltTimer( tr_session * session );
@@ -622,7 +623,9 @@ tr_sessionInitImpl( void * vdata )
     found = tr_bencDictFindBool( &settings, TR_PREFS_KEY_PEX_ENABLED, &boolVal );
     assert( found );
     session->isPexEnabled = boolVal;
-    /* This really ought to be a separate preference. */
+
+    found = tr_bencDictFindBool( &settings, TR_PREFS_KEY_DHT_ENABLED, &boolVal );
+    assert( found );
     session->isDHTEnabled = boolVal;
 
     found = tr_bencDictFindInt( &settings, TR_PREFS_KEY_ENCRYPTION, &i );
@@ -830,7 +833,6 @@ tr_sessionInitImpl( void * vdata )
 
     tr_statsInit( session );
     session->web = tr_webInit( session );
-    metainfoLookupRescan( session );
     session->isWaiting = FALSE;
     dbgmsg( "returning session %p; session->tracker is %p", session, session->tracker );
 
@@ -1596,6 +1598,23 @@ tr_sessionIsDHTEnabled( const tr_session * session )
     return session->isDHTEnabled;
 }
 
+void
+tr_sessionSetDHTEnabled( tr_session * session, tr_bool enabled )
+{
+    assert( tr_isSession( session ) );
+
+    if( ( enabled!=0 ) != (session->isDHTEnabled!=0) )
+    {
+        if( session->isDHTEnabled )
+            tr_dhtUninit( session );
+
+        session->isDHTEnabled = enabled!=0;
+
+        if( session->isDHTEnabled )
+            tr_dhtInit( session );
+    }
+}
+
 /***
 ****
 ***/
@@ -1760,19 +1779,6 @@ compareHashStringToLookupEntry( const void * va, const void * vb )
     return strcmp( a, b->hashString );
 }
 
-const char*
-tr_sessionFindTorrentFile( const tr_session * session,
-                           const char       * hashStr )
-{
-    struct tr_metainfo_lookup * l = bsearch( hashStr,
-                                             session->metainfoLookup,
-                                             session->metainfoLookupCount,
-                                             sizeof( struct tr_metainfo_lookup ),
-                                             compareHashStringToLookupEntry );
-
-    return l ? l->filename : NULL;
-}
-
 static void
 metainfoLookupRescan( tr_session * session )
 {
@@ -1831,17 +1837,46 @@ metainfoLookupRescan( tr_session * session )
     tr_dbg( "Found %d torrents in \"%s\"", n, dirname );
 }
 
+static struct tr_metainfo_lookup *
+metainfoLookup( const tr_session * session, const char * hashString )
+{
+    /* because only the mac client uses metainfoLookup, and because building
+     * the lookup is expensive, we hold off on building it until the client
+     * actually asks to look up a hash... */
+    if( !session->metainfoLookupCount )
+        metainfoLookupRescan( (tr_session*)session );
+
+    return bsearch( hashString,
+                    session->metainfoLookup,
+                    session->metainfoLookupCount,
+                    sizeof( struct tr_metainfo_lookup ),
+                    compareHashStringToLookupEntry );
+}
+
+const char*
+tr_sessionFindTorrentFile( const tr_session  * session,
+                           const char        * hashString )
+{
+    const struct tr_metainfo_lookup * l = metainfoLookup( session, hashString );
+
+    return l ? l->filename : NULL;
+}
+
 void
 tr_sessionSetTorrentFile( tr_session * session,
                           const char * hashString,
                           const char * filename )
 {
-    struct tr_metainfo_lookup * l = bsearch( hashString,
-                                             session->metainfoLookup,
-                                             session->metainfoLookupCount,
-                                             sizeof( struct tr_metainfo_lookup ),
-                                             compareHashStringToLookupEntry );
+    struct tr_metainfo_lookup * l;
 
+    /* since we walk session->configDir/torrents/ to build the lookup table,
+     * and tr_sessionSetTorrentFile() is just to tell us there's a new file
+     * in that same directory, we don't need to do anything here if the
+     * lookup table hasn't been built yet */
+    if( session->metainfoLookup == NULL )
+        return;
+
+    l = metainfoLookup( session, hashString );
     if( l )
     {
         if( l->filename != filename )

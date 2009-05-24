@@ -982,120 +982,71 @@ tr_torrentStat( tr_torrent * tor )
 ***/
 
 static uint64_t
-oldFileBytesCompleted( const tr_torrent * tor,
-                    tr_file_index_t    fileIndex )
-{
-    const tr_file *        file     =  &tor->info.files[fileIndex];
-    const tr_block_index_t firstBlock       =  file->offset /
-                                              tor->blockSize;
-    const uint64_t         firstBlockOffset =  file->offset %
-                                              tor->blockSize;
-    const uint64_t         lastOffset       =
-        file->length ? ( file->length - 1 ) : 0;
-    const tr_block_index_t lastBlock        =
-        ( file->offset + lastOffset ) / tor->blockSize;
-    const uint64_t         lastBlockOffset  =
-        ( file->offset + lastOffset ) % tor->blockSize;
-    uint64_t               haveBytes = 0;
-
-    assert( tr_isTorrent( tor ) );
-    assert( fileIndex < tor->info.fileCount );
-    assert( file->offset + file->length <= tor->info.totalSize );
-    assert( ( firstBlock < tor->blockCount )
-          || ( !file->length && file->offset == tor->info.totalSize ) );
-    assert( ( lastBlock < tor->blockCount )
-          || ( !file->length && file->offset == tor->info.totalSize ) );
-    assert( firstBlock <= lastBlock );
-    assert( tr_torBlockPiece( tor, firstBlock ) == file->firstPiece );
-    assert( tr_torBlockPiece( tor, lastBlock ) == file->lastPiece );
-
-    if( firstBlock == lastBlock )
-    {
-        if( tr_cpBlockIsCompleteFast( &tor->completion, firstBlock ) )
-            haveBytes += lastBlockOffset + 1 - firstBlockOffset;
-    }
-    else
-    {
-        tr_block_index_t i;
-
-        if( tr_cpBlockIsCompleteFast( &tor->completion, firstBlock ) )
-            haveBytes += tor->blockSize - firstBlockOffset;
-
-        for( i = firstBlock + 1; i < lastBlock; ++i )
-            if( tr_cpBlockIsCompleteFast( &tor->completion, i ) )
-                haveBytes += tor->blockSize;
-
-        if( tr_cpBlockIsCompleteFast( &tor->completion, lastBlock ) )
-            haveBytes += lastBlockOffset + 1;
-    }
-
-    return haveBytes;
-}
-
-static uint64_t
 fileBytesCompleted( const tr_torrent * tor, tr_file_index_t index )
 {
     uint64_t total = 0;
-
     const tr_file * f = &tor->info.files[index];
-    const tr_block_index_t firstBlock = f->offset / tor->blockSize;
-    const uint64_t lastByte = f->offset + f->length - (f->length?1:0);
-    const tr_block_index_t lastBlock = lastByte / tor->blockSize;
 
-    if( firstBlock == lastBlock )
+    if( f->length )
     {
-        if( tr_cpBlockIsCompleteFast( &tor->completion, firstBlock ) )
-            total = f->length;
-    }
-    else
-    {
-        uint32_t i;
+        const tr_block_index_t firstBlock = f->offset / tor->blockSize;
+        const uint64_t lastByte = f->offset + f->length - 1;
+        const tr_block_index_t lastBlock = lastByte / tor->blockSize;
 
-        /* the first block */
-        if( tr_cpBlockIsCompleteFast( &tor->completion, firstBlock ) )
-            total += tor->blockSize - ( f->offset % tor->blockSize );
-
-        /* the middle blocks */
-        if( f->firstPiece == f->lastPiece )
+        if( firstBlock == lastBlock )
         {
-            for( i=firstBlock+1; i<lastBlock; ++i )
-                if( tr_cpBlockIsCompleteFast( &tor->completion, i ) )
-                    total += tor->blockSize;
+            if( tr_cpBlockIsCompleteFast( &tor->completion, firstBlock ) )
+                total = f->length;
         }
         else
         {
-            int64_t b = 0;
-            const tr_block_index_t firstBlockOfLastPiece
-                       = tr_torPieceFirstBlock( tor, f->lastPiece );
-            const tr_block_index_t lastBlockOfFirstPiece
-                       = tr_torPieceFirstBlock( tor, f->firstPiece )
-                         + tr_torPieceCountBlocks( tor, f->firstPiece ) - 1;
+            uint32_t i;
 
-            /* the rest of the first piece */
-            for( i=firstBlock+1; i<lastBlock && i<=lastBlockOfFirstPiece; ++i )
-                if( tr_cpBlockIsCompleteFast( &tor->completion, i ) )
-                    ++b;
+            /* the first block */
+            if( tr_cpBlockIsCompleteFast( &tor->completion, firstBlock ) )
+                total += tor->blockSize - ( f->offset % tor->blockSize );
 
-            /* the middle pieces */
-            if( f->firstPiece + 1 < f->lastPiece )
-                for( i=f->firstPiece+1; i<f->lastPiece; ++i )
-                    b += tor->blockCountInPiece - tr_cpMissingBlocksInPiece( &tor->completion, i );
+            /* the middle blocks */
+            if( f->firstPiece == f->lastPiece )
+            {
+                for( i=firstBlock+1; i<lastBlock; ++i )
+                    if( tr_cpBlockIsCompleteFast( &tor->completion, i ) )
+                        total += tor->blockSize;
+            }
+            else
+            {
+                int64_t b = 0;
+                const tr_block_index_t firstBlockOfLastPiece
+                           = tr_torPieceFirstBlock( tor, f->lastPiece );
+                const tr_block_index_t lastBlockOfFirstPiece
+                           = tr_torPieceFirstBlock( tor, f->firstPiece )
+                             + tr_torPieceCountBlocks( tor, f->firstPiece ) - 1;
 
-            /* the rest of the last piece */
-            for( i=firstBlockOfLastPiece; i<lastBlock; ++i )
-                if( tr_cpBlockIsCompleteFast( &tor->completion, i ) )
-                    ++b;
+                /* the rest of the first piece */
+                for( i=firstBlock+1; i<lastBlock && i<=lastBlockOfFirstPiece; ++i )
+                    if( tr_cpBlockIsCompleteFast( &tor->completion, i ) )
+                        ++b;
 
-            b *= tor->blockSize;
-            total += b;
+                /* the middle pieces */
+                if( f->firstPiece + 1 < f->lastPiece )
+                    for( i=f->firstPiece+1; i<f->lastPiece; ++i )
+                        b += tor->blockCountInPiece - tr_cpMissingBlocksInPiece( &tor->completion, i );
+
+                /* the rest of the last piece */
+                for( i=firstBlockOfLastPiece; i<lastBlock; ++i )
+                    if( tr_cpBlockIsCompleteFast( &tor->completion, i ) )
+                        ++b;
+
+                b *= tor->blockSize;
+                total += b;
+            }
+
+            /* the last block */
+            if( tr_cpBlockIsCompleteFast( &tor->completion, lastBlock ) )
+                total += ( f->offset + f->length ) - ( tor->blockSize * lastBlock );
         }
-
-        /* the last block */
-        if( tr_cpBlockIsCompleteFast( &tor->completion, lastBlock ) )
-            total += ( lastByte+1 - (lastBlock*tor->blockSize) );
     }
 
-    assert( total == oldFileBytesCompleted( tor, index ) );
     return total;
 }
 
@@ -2280,7 +2231,8 @@ tr_torrentDeleteLocalData( tr_torrent * tor, tr_fileFunc fileFunc )
 struct LocationData
 {
     tr_bool move_from_old_location;
-    tr_bool * setme_done;
+    int * setme_state;
+    double * setme_progress;
     char * location;
     tr_torrent * tor;
 };
@@ -2288,10 +2240,12 @@ struct LocationData
 static void
 setLocation( void * vdata )
 {
+    int err = 0;
     struct LocationData * data = vdata;
     tr_torrent * tor = data->tor;
     const tr_bool do_move = data->move_from_old_location;
     const char * location = data->location;
+    double bytesHandled = 0;
 
     assert( tr_isTorrent( tor ) );
 
@@ -2313,37 +2267,51 @@ setLocation( void * vdata )
         /* try to move the files.
          * FIXME: there are still all kinds of nasty cases, like what
          * if the target directory runs out of space halfway through... */
-        for( i=0; i<tor->info.fileCount; ++i )
+        for( i=0; !err && i<tor->info.fileCount; ++i )
         {
             struct stat sb;
-            char * oldpath = tr_buildPath( tor->downloadDir, tor->info.files[i].name, NULL );
-            char * newpath = tr_buildPath( location, tor->info.files[i].name, NULL );
-
+            const tr_file * f = &tor->info.files[i];
+            char * oldpath = tr_buildPath( tor->downloadDir, f->name, NULL );
+            char * newpath = tr_buildPath( location, f->name, NULL );
             
-            if( do_move && !stat( oldpath, &sb ) )
+            if( do_move )
             {
-                tr_moveFile( oldpath, newpath );
+                errno = 0;
                 tr_torinf( tor, "moving \"%s\" to \"%s\"", oldpath, newpath );
+                if( tr_moveFile( oldpath, newpath ) ) {
+                    err = 1;
+                    tr_torerr( tor, "error moving \"%s\" to \"%s\": %s",
+                                    oldpath, newpath, tr_strerror( errno ) );
+                }
             }
             else if( !stat( newpath, &sb ) )
             {
                 tr_torinf( tor, "found \"%s\"", newpath );
             }
 
+            if( data->setme_progress )
+            {
+                bytesHandled += f->length;
+                *data->setme_progress = bytesHandled / tor->info.totalSize;
+            }
+
             tr_free( newpath );
             tr_free( oldpath );
         }
 
-        /* blow away the leftover subdirectories in the old location */
-        tr_torrentDeleteLocalData( tor, unlink );
+        if( !err )
+        {
+            /* blow away the leftover subdirectories in the old location */
+            tr_torrentDeleteLocalData( tor, unlink );
 
-        /* set the new location and reverify */
-        tr_torrentSetDownloadDir( tor, location );
-        tr_torrentVerify( tor );
+            /* set the new location and reverify */
+            tr_torrentSetDownloadDir( tor, location );
+            tr_torrentVerify( tor );
+        }
     }
 
-    if( data->setme_done )
-        *data->setme_done = TRUE;
+    if( data->setme_state )
+        *data->setme_state = err ? TR_LOC_ERROR : TR_LOC_DONE;
 
     /* cleanup */
     tr_free( data->location );
@@ -2351,24 +2319,28 @@ setLocation( void * vdata )
 }
 
 void
-tr_torrentSetLocation( tr_torrent * tor,
-                       const char * location,
-                       tr_bool      move_from_old_location,
-                       tr_bool    * setme_done )
+tr_torrentSetLocation( tr_torrent  * tor,
+                       const char  * location,
+                       tr_bool       move_from_old_location,
+                       double      * setme_progress,
+                       int         * setme_state )
 {
     struct LocationData * data;
 
     assert( tr_isTorrent( tor ) );
 
-    if( setme_done )
-        *setme_done = FALSE;
+    if( setme_state )
+        *setme_state = TR_LOC_MOVING;
+    if( setme_progress )
+        *setme_progress = 0;
 
     /* run this in the libtransmission thread */
     data = tr_new( struct LocationData, 1 );
     data->tor = tor;
     data->location = tr_strdup( location );
     data->move_from_old_location = move_from_old_location;
-    data->setme_done = setme_done;
+    data->setme_state = setme_state;
+    data->setme_progress = setme_progress;
     tr_runInEventThread( tor->session, setLocation, data );
 }
 
