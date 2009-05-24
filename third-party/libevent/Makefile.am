@@ -29,7 +29,7 @@ RELEASE = 1.4
 #  Libevent 1.4.1 was 2:0:0
 #  Libevent 1.4.2 should be 3:0:0
 #  Libevent 1.4.5 is 3:0:1 (we forgot to increment in the past)
-VERSION_INFO = 3:2:1
+VERSION_INFO = 3:3:1
 
 bin_SCRIPTS = event_rpcgen.py
 
@@ -46,6 +46,7 @@ EXTRA_DIST = autogen.sh event.h event-internal.h log.h evsignal.h evdns.3 \
 	test/test-init.c test/test.sh \
 	compat/sys/queue.h compat/sys/_time.h \
 	WIN32-Code/config.h \
+	WIN32-Code/event-config.h \
 	WIN32-Code/win32.c \
 	WIN32-Code/tree.h \
 	WIN32-Prj/event_test/event_test.dsp \
@@ -105,7 +106,9 @@ libevent_extra_la_SOURCES = $(EXTRA_SRC)
 libevent_extra_la_LIBADD = @LTLIBOBJS@ $(SYS_LIBS)
 libevent_extra_la_LDFLAGS = -release $(RELEASE) -version-info $(VERSION_INFO)
 
-include_HEADERS = event.h evhttp.h evdns.h evrpc.h evutil.h event-config.h
+include_HEADERS = event.h evhttp.h evdns.h evrpc.h evutil.h
+
+nodist_include_HEADERS = event-config.h
 
 INCLUDES = -I$(srcdir)/compat $(SYS_INCLUDES)
 

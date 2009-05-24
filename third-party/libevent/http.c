@@ -378,16 +378,14 @@ static void
 evhttp_make_header_request(struct evhttp_connection *evcon,
     struct evhttp_request *req)
 {
-	char line[1024];
 	const char *method;
 	
 	evhttp_remove_header(req->output_headers, "Proxy-Connection");
 
 	/* Generate request line */
 	method = evhttp_method(req->type);
-	evutil_snprintf(line, sizeof(line), "%s %s HTTP/%d.%d\r\n",
+	evbuffer_add_printf(evcon->output_buffer, "%s %s HTTP/%d.%d\r\n",
 	    method, req->uri, req->major, req->minor);
-	evbuffer_add(evcon->output_buffer, line, strlen(line));
 
 	/* Add the content length on a post request if missing */
 	if (req->type == EVHTTP_REQ_POST &&
@@ -464,11 +462,9 @@ evhttp_make_header_response(struct evhttp_connection *evcon,
     struct evhttp_request *req)
 {
 	int is_keepalive = evhttp_is_connection_keepalive(req->input_headers);
-	char line[1024];
-	evutil_snprintf(line, sizeof(line), "HTTP/%d.%d %d %s\r\n",
+	evbuffer_add_printf(evcon->output_buffer, "HTTP/%d.%d %d %s\r\n",
 	    req->major, req->minor, req->response_code,
 	    req->response_code_line);
-	evbuffer_add(evcon->output_buffer, line, strlen(line));
 
 	if (req->major == 1) {
 		if (req->minor == 1)
@@ -515,7 +511,6 @@ evhttp_make_header_response(struct evhttp_connection *evcon,
 void
 evhttp_make_header(struct evhttp_connection *evcon, struct evhttp_request *req)
 {
-	char line[1024];
 	struct evkeyval *header;
 
 	/*
@@ -529,9 +524,8 @@ evhttp_make_header(struct evhttp_connection *evcon, struct evhttp_request *req)
 	}
 
 	TAILQ_FOREACH(header, req->output_headers, next) {
-		evutil_snprintf(line, sizeof(line), "%s: %s\r\n",
+		evbuffer_add_printf(evcon->output_buffer, "%s: %s\r\n",
 		    header->key, header->value);
-		evbuffer_add(evcon->output_buffer, line, strlen(line));
 	}
 	evbuffer_add(evcon->output_buffer, "\r\n", 2);
 
@@ -828,8 +822,8 @@ evhttp_handle_chunked_read(struct evhttp_request *req, struct evbuffer *buf)
 
 		/* Completed chunk */
 		evbuffer_add(req->input_buffer,
-		    EVBUFFER_DATA(buf), req->ntoread);
-		evbuffer_drain(buf, req->ntoread);
+		    EVBUFFER_DATA(buf), (size_t)req->ntoread);
+		evbuffer_drain(buf, (size_t)req->ntoread);
 		req->ntoread = -1;
 		if (req->chunk_cb != NULL) {
 			(*req->chunk_cb)(req, req->cb_arg);
@@ -893,8 +887,8 @@ evhttp_read_body(struct evhttp_connection *evcon, struct evhttp_request *req)
 	} else if (EVBUFFER_LENGTH(buf) >= req->ntoread) {
 		/* Completed content length */
 		evbuffer_add(req->input_buffer, EVBUFFER_DATA(buf),
-		    req->ntoread);
-		evbuffer_drain(buf, req->ntoread);
+		    (size_t)req->ntoread);
+		evbuffer_drain(buf, (size_t)req->ntoread);
 		req->ntoread = 0;
 		evhttp_connection_done(evcon);
 		return;
