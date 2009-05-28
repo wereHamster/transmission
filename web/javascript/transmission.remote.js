@@ -43,6 +43,7 @@ TransmissionRemote.prototype =
 	 * or on a 409, globally set the X-Transmission-Session-Id and resend
 	 */
 	ajaxError: function(request, error_string, exception, ajaxObject) {
+		var token;
 		remote = this;
 
 		// set the Transmission-Session-Id on a 409
@@ -136,7 +137,7 @@ TransmissionRemote.prototype =
 		var tr = this._controller;
 		this.sendRequest( {
 			method: 'torrent-get',
-			arguments: { fields: [ 'id', 'fileStats'], ids: torrent_ids },
+			arguments: { fields: [ 'id', 'fileStats'], ids: torrent_ids }
 		}, function(data) {
 			tr.updateTorrentsFileData( data.arguments.torrents );
 		} );
