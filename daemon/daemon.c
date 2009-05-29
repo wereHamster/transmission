@@ -91,6 +91,7 @@ static const struct tr_option options[] =
     { 'i', "bind-address-ipv4", "Where to listen for peer connections", "i", 1, "<ipv4 address>" },
     { 'I', "bind-address-ipv6", "Where to listen for peer connections", "I", 1, "<ipv6 address>" },
     { 'r', "rpc-bind-address", "Where to listen for RPC connections", "r", 1, "<ipv4 address>" },
+    { 'o', "option", "Set the raw option in the settings file", "o", 1, "<option>=<type>:<value>" },
     { 0, NULL, NULL, NULL, 0, NULL }
 };
 
@@ -271,6 +272,41 @@ pumpLogMessages( tr_bool foreground )
     tr_freeMessageList( list );
 }
 
+/* generic option parser */
+static void
+parseOption( tr_benc * settings, const char * optarg )
+{
+	char option[strlen(optarg) + 1];
+	char * sep, type, * value;
+
+	sep = strchr( optarg, '=' );
+	if( !sep || strlen( sep ) < 4 || sep[2] != ':' ) {
+		printf( "GenOp: Malformed option: %s\n", optarg );
+		return;
+	}
+
+	strcpy(option, optarg);
+	option[sep - optarg] = 0;
+
+	type = sep[1];
+	value = sep + 3;
+
+	switch( type ) {
+	case 'b':
+		tr_bencDictAddBool( settings, option, strcmp( value, "true" ) == 0 );
+		break;
+	case 'i':
+		tr_bencDictAddInt( settings, option, atoi( value ) );
+		break;
+	case 's':
+		tr_bencDictAddStr( settings, option, value );
+		break;
+	default:
+		printf( "GenOp: Unknown type '%c'\n", type );
+		break;
+	}
+}
+
 int
 main( int argc, char ** argv )
 {
@@ -359,6 +395,9 @@ main( int argc, char ** argv )
                       break;
             case 'r':
                       tr_bencDictAddStr( &settings, TR_PREFS_KEY_RPC_BIND_ADDRESS, optarg );
+                      break;
+            case 'o':
+                      parseOption( &settings, optarg );
                       break;
             default:  showUsage( );
                       break;
