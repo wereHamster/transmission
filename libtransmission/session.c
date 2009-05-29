@@ -69,6 +69,9 @@ getRandomPort( tr_session * s )
    characters, where x is the major version number, y is the
    minor version number, z is the maintenance number, and b
    designates beta (Azureus-style) */
+
+static char peerIdPrefix[9] = PEERID_PREFIX;
+
 uint8_t*
 tr_peerIdNew( void )
 {
@@ -79,7 +82,7 @@ tr_peerIdNew( void )
     const char * pool = "0123456789abcdefghijklmnopqrstuvwxyz";
     const int    base = 36;
 
-    memcpy( buf, PEERID_PREFIX, 8 );
+    memcpy( buf, peerIdPrefix, 8 );
 
     for( i = 8; i < 19; ++i )
     {
@@ -521,9 +524,17 @@ tr_sessionInit( const char  * tag,
     tr_session * session;
     struct init_data data;
 
+    const char * str;
+    tr_bool found;
+
     tr_msgInit( );
 
     assert( tr_bencIsDict( clientSettings ) );
+
+    /* when requested, patch the peer id prefix */
+    found = tr_bencDictFindStr( clientSettings, "peer-id-prefix", &str );
+    if( found && strlen(str) == 8 )
+	strcpy( peerIdPrefix, str );
 
     /* initialize the bare skeleton of the session object */
     session = tr_new0( tr_session, 1 );
