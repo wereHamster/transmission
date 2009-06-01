@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include <locale.h>
+#include <unistd.h> /* close() */
 
 #include <event.h> /* evbuffer */
 
@@ -26,6 +27,7 @@
 
 #include "transmission.h"
 #include "bencode.h"
+#include "fdlimit.h" /* tr_open_file_for_writing() */
 #include "json.h"
 #include "list.h"
 #include "ptrarray.h"
@@ -1403,9 +1405,9 @@ static const struct WalkFuncs jsonWalkFuncs = { jsonIntFunc,
                                                 jsonDictBeginFunc,
                                                 jsonListBeginFunc,
                                                 jsonContainerEndFunc };
-                                            
-char*
-tr_bencSaveAsJSON( const tr_benc * top, struct evbuffer * out, tr_bool doIndent )
+
+static void
+tr_bencSaveAsJSONImpl( const tr_benc * top, struct evbuffer * out, tr_bool doIndent )
 {
     struct jsonWalk data;
 
@@ -1419,7 +1421,12 @@ tr_bencSaveAsJSON( const tr_benc * top, struct evbuffer * out, tr_bool doIndent 
 
     if( EVBUFFER_LENGTH( out ) )
         evbuffer_add_printf( out, "\n" );
+}
 
+char*
+tr_bencSaveAsJSON( const tr_benc * top, struct evbuffer * out, tr_bool doIndent )
+{
+    tr_bencSaveAsJSONImpl( top, out, doIndent );
     return (char*) EVBUFFER_DATA( out );
 }
 
@@ -1449,8 +1456,8 @@ tr_bencDictSize( const tr_benc * dict )
     return count;
 }
 
-static tr_bool
-tr_bencDictChild( const tr_benc * dict, size_t n, const char ** key, const tr_benc ** val )
+tr_bool
+tr_bencDictChild( tr_benc * dict, size_t n, const char ** key, tr_benc ** val )
 {
     tr_bool success = 0;
 
@@ -1479,10 +1486,10 @@ tr_bencMergeDicts( tr_benc * target, const tr_benc * source )
     for( i=0; i<sourceCount; ++i )
     {
         const char * key;
-        const tr_benc * val;
+        tr_benc * val;
         tr_benc * t;
 
-        if( tr_bencDictChild( source, i, &key, &val ) )
+        if( tr_bencDictChild( (tr_benc*)source, i, &key, &val ) )
         {
             if( tr_bencIsBool( val ) )
             {
@@ -1525,22 +1532,18 @@ tr_bencMergeDicts( tr_benc * target, const tr_benc * source )
 ***/ 
 
 static int
-saveFile( const char * filename,
-          const char * content,
-          size_t       len )
+saveFile( const char * filename, struct evbuffer * buf )
 {
-    int    err = 0;
-    FILE * out = NULL;
+    int err = 0;
+    int fd = tr_open_file_for_writing( filename );
 
-    out = fopen( filename, "wb+" );
-
-    if( !out )
+    if( fd < 0 )
     {
         err = errno;
         tr_err( _( "Couldn't open \"%1$s\": %2$s" ),
                 filename, tr_strerror( errno ) );
     }
-    else if( fwrite( content, sizeof( char ), len, out ) != (size_t)len )
+    else if( evbuffer_write( buf, fd ) == -1 )
     {
         err = errno;
         tr_err( _( "Couldn't save file \"%1$s\": %2$s" ),
@@ -1549,31 +1552,31 @@ saveFile( const char * filename,
 
     if( !err )
         tr_dbg( "tr_bencSaveFile saved \"%s\"", filename );
-    if( out )
-        fclose( out );
+    if( fd >= 0 )
+        close( fd );
+
     return err;
 }
 
 int
-tr_bencSaveFile( const char *    filename,
-                 const tr_benc * b )
+tr_bencSaveFile( const char * filename, const tr_benc * top )
 {
-    int       len;
-    char *    content = tr_bencSave( b, &len );
-    const int err = saveFile( filename, content, len );
-
-    tr_free( content );
+    int err;
+    struct evbuffer * buf = evbuffer_new( );
+    bencWalk( top, &saveFuncs, buf );
+    err = saveFile( filename, buf );
+    evbuffer_free( buf );
     return err;
 }
 
 int
-tr_bencSaveJSONFile( const char *    filename,
-                     const tr_benc * b )
+tr_bencSaveJSONFile( const char * filename, const tr_benc * top )
 {
-    struct evbuffer * buf = tr_getBuffer( );
-    const char * json = tr_bencSaveAsJSON( b, buf, TRUE );
-    const int err = saveFile( filename, json, EVBUFFER_LENGTH( buf ) );
-    tr_releaseBuffer( buf );
+    int err;
+    struct evbuffer * buf = evbuffer_new( );
+    tr_bencSaveAsJSONImpl( top, buf, TRUE );
+    err = saveFile( filename, buf );
+    evbuffer_free( buf );
     return err;
 }
 
@@ -1613,7 +1616,7 @@ tr_bencLoadJSONFile( const char * filename, tr_benc * b )
     else if( !content )
         err = ENODATA;
     else
-        err = tr_jsonParse( content, contentLen, b, NULL );
+        err = tr_jsonParse( filename, content, contentLen, b, NULL );
 
     tr_free( content );
     return err;

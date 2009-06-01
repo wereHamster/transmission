@@ -7,7 +7,7 @@
  * This exemption does not extend to derived works not owned by
  * the Transmission project.
  *
- * $Id:$
+ * $Id$
  */
 
 #include <cassert>
@@ -182,7 +182,7 @@ Prefs :: ~Prefs( )
     file.open( QIODevice::ReadOnly | QIODevice::Text );
     const QByteArray oldPrefs = file.readAll( );
     file.close( );
-    if( tr_jsonParse( oldPrefs.data(), oldPrefs.length(), &top, NULL ) )
+    if( tr_jsonParse( "settings.json", oldPrefs.data(), oldPrefs.length(), &top, NULL ) )
         tr_bencInitDict( &top, PREFS_COUNT );
 
     /* merge our own settings with the ones already in the file */

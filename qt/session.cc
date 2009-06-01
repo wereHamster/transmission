@@ -7,7 +7,7 @@
  * This exemption does not extend to derived works not owned by
  * the Transmission project.
  *
- * $Id:$
+ * $Id$
  */
 
 #include <cassert>
@@ -613,6 +613,7 @@ Session :: onRequestFinished( int id, bool error )
         parseResponse( json, jsonLength );
     }
 
+    delete sourceDevice;
     myBuffer.buffer( ).clear( );
     myBuffer.reset( );
     assert( myBuffer.bytesAvailable( ) < 1 );
@@ -623,7 +624,7 @@ Session :: parseResponse( const char * json, size_t jsonLength )
 {
     tr_benc top;
     const uint8_t * end( 0 );
-    const int err( tr_jsonParse( json, jsonLength, &top, &end ) );
+    const int err( tr_jsonParse( "rpc", json, jsonLength, &top, &end ) );
     if( !err )
     {
         int64_t tag = -1;
