@@ -145,7 +145,7 @@ struct tr_peermsgs
     tr_bool         peerSupportsPex;
     tr_bool         clientSentLtepHandshake;
     tr_bool         peerSentLtepHandshake;
-    tr_bool         haveFastSet;
+    /*tr_bool         haveFastSet;*/
 
     uint8_t         state;
     uint8_t         ut_pex_id;
@@ -153,8 +153,10 @@ struct tr_peermsgs
     uint16_t        pexCount6;
     uint16_t        maxActiveRequests;
 
+#if 0
     size_t                 fastsetSize;
     tr_piece_index_t       fastset[MAX_FAST_SET_SIZE];
+#endif
 
     /* how long the outMessages batch should be allowed to grow before
      * it's flushed -- some messages (like requests >:) should be sent
@@ -178,7 +180,7 @@ struct tr_peermsgs
     tr_pex               * pex;
     tr_pex               * pex6;
 
-    time_t                 clientSentPexAt;
+    /*time_t                 clientSentPexAt;*/
     time_t                 clientSentAnythingAt;
 
     /* when we started batching the outMessages */
@@ -219,6 +221,7 @@ myDebug( const char * file, int line,
         evbuffer_add_vprintf( buf, fmt, args );
         va_end( args );
         evbuffer_add_printf( buf, " (%s:%d)\n", base, line );
+        /* FIXME(libevent2) tr_getLog() should return an fd, then use evbuffer_write() here */
         fwrite( EVBUFFER_DATA( buf ), 1, EVBUFFER_LENGTH( buf ), fp );
 
         tr_free( base );
@@ -991,7 +994,7 @@ sendLtepHandshake( tr_peermsgs * msgs )
     m  = tr_bencDictAddDict( &val, "m", 1 );
     if( pex )
         tr_bencDictAddInt( m, "ut_pex", TR_LTEP_PEX );
-    buf = tr_bencSave( &val, &len );
+    buf = tr_bencToStr( &val, TR_FMT_BENC, &len );
 
     tr_peerIoWriteUint32( msgs->peer->io, out, 2 * sizeof( uint8_t ) + len );
     tr_peerIoWriteUint8 ( msgs->peer->io, out, BT_LTEP );
@@ -1718,28 +1721,42 @@ fillOutputBuffer( tr_peermsgs * msgs, time_t now )
         if( requestIsValid( msgs, &req )
             && tr_cpPieceIsComplete( &msgs->torrent->completion, req.index ) )
         {
+            /* FIXME(libevent2) use evbuffer_reserve_space() + evbuffer_commit_space() */
             int err;
-            static uint8_t buf[MAX_BLOCK_SIZE];
+            const uint32_t msglen = 4 + 1 + 4 + 4 + req.length;
+            struct evbuffer * out;
+            tr_peerIo * io = msgs->peer->io;
 
-            /* send a block */
-            if(( err = tr_ioRead( msgs->torrent, req.index, req.offset, req.length, buf ))) {
-                fireError( msgs, err );
-                bytesWritten = 0;
-                msgs = NULL;
-            } else {
-                tr_peerIo * io = msgs->peer->io;
-                struct evbuffer * out = tr_getBuffer( );
-                dbgmsg( msgs, "sending block %u:%u->%u", req.index, req.offset, req.length );
-                tr_peerIoWriteUint32( io, out, sizeof( uint8_t ) + 2 * sizeof( uint32_t ) + req.length );
-                tr_peerIoWriteUint8 ( io, out, BT_PIECE );
-                tr_peerIoWriteUint32( io, out, req.index );
-                tr_peerIoWriteUint32( io, out, req.offset );
-                /* FIXME(libevent2): use evbuffer_add_reference() */
-                tr_peerIoWriteBytes ( io, out, buf, req.length );
+            out = evbuffer_new( );
+            evbuffer_expand( out, msglen );
+
+            tr_peerIoWriteUint32( io, out, sizeof( uint8_t ) + 2 * sizeof( uint32_t ) + req.length );
+            tr_peerIoWriteUint8 ( io, out, BT_PIECE );
+            tr_peerIoWriteUint32( io, out, req.index );
+            tr_peerIoWriteUint32( io, out, req.offset );
+
+            err = tr_ioRead( msgs->torrent, req.index, req.offset, req.length, EVBUFFER_DATA(out)+EVBUFFER_LENGTH(out) );
+            if( err ) /* peer needs a reject message */
+            {
+                protocolSendReject( msgs, &req );
+            }
+            else
+            {
+                dbgmsg( msgs, "sending block %u:%u->%u", req.index, req.offset, req.length ); 
+                EVBUFFER_LENGTH(out) += req.length;
+                assert( EVBUFFER_LENGTH( out ) == msglen );
                 tr_peerIoWriteBuf( io, out, TRUE );
                 bytesWritten += EVBUFFER_LENGTH( out );
                 msgs->clientSentAnythingAt = now;
-                tr_releaseBuffer( out );
+            }
+
+            evbuffer_free( out );
+
+            if( err )
+            {
+                fireError( msgs, err );
+                bytesWritten = 0;
+                msgs = NULL;
             }
         }
         else if( fext ) /* peer needs a reject message */
@@ -2066,7 +2083,7 @@ sendPex( tr_peermsgs * msgs )
             tr_free( tmp );
 
             /* write the pex message */
-            benc = tr_bencSave( &val, &bencLen );
+            benc = tr_bencToStr( &val, TR_FMT_BENC, &bencLen );
             tr_peerIoWriteUint32( io, out, 2 * sizeof( uint8_t ) + bencLen );
             tr_peerIoWriteUint8 ( io, out, BT_LTEP );
             tr_peerIoWriteUint8 ( io, out, msgs->ut_pex_id );
@@ -2087,7 +2104,7 @@ sendPex( tr_peermsgs * msgs )
         tr_free( diffs6.dropped );
         tr_free( newPex6 );
 
-        msgs->clientSentPexAt = time( NULL );
+        /*msgs->clientSentPexAt = time( NULL );*/
     }
 }
 

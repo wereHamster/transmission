@@ -24,8 +24,8 @@
  #include <zlib.h>
 #endif
 
-#include <libevent/event.h>
-#include <libevent/evhttp.h>
+#include <event.h>
+#include <evhttp.h>
 
 #include "transmission.h"
 #include "bencode.h"
@@ -253,7 +253,7 @@ handle_upload( struct evhttp_request * req,
                 b64 = tr_base64_encode( body, body_len, NULL );
                 tr_bencDictAddStr( args, "metainfo", b64 );
                 tr_bencDictAddBool( args, "paused", paused );
-                tr_bencSaveAsJSON( &top, json, FALSE );
+                tr_bencToBuf( &top, TR_FMT_JSON_LEAN, json );
                 tr_rpc_request_exec_json( server->session,
                                           EVBUFFER_DATA( json ),
                                           EVBUFFER_LENGTH( json ),
@@ -323,6 +323,9 @@ add_response( struct evhttp_request * req,
     else
     {
         int state;
+
+        /* FIXME(libevent2): this won't compile under libevent2.
+           but we can use evbuffer_reserve_space() + evbuffer_commit_space() instead */
 
         server->stream.next_in = (Bytef*) content;
         server->stream.avail_in = content_len;
@@ -478,6 +481,7 @@ struct rpc_response_data
     struct tr_rpc_server  * server;
 };
 
+/* FIXME(libevent2): make "response" an evbuffer and remove response_len */
 static void
 rpc_response_func( tr_session      * session UNUSED,
                    const char      * response,

@@ -3,8 +3,8 @@ dnl STATUS: "X" for prerelease beta builds,
 dnl         "Z" for unsupported trunk builds,
 dnl         "0" for stable, supported releases
 dnl these should be the only two lines you need to change
-m4_define([user_agent_prefix],[1.61+])
-m4_define([peer_id_prefix],[-TR161Z-])
+m4_define([user_agent_prefix],[1.70])
+m4_define([peer_id_prefix],[-TR1700-])
 
 AC_INIT([transmission],
         [user_agent_prefix],
@@ -22,8 +22,8 @@ AC_PROG_LIBTOOL
 if test m4_substr(peer_id_prefix,6,1) = "0"; then
   supported_build=yes
   if test "x$GCC" = "xyes" ; then
-    CFLAGS="$CFLAGS -g -O3 -funroll-loops "
-    CXXFLAGS="$CXXFLAGS -g -O3 -funroll-loops "
+    CFLAGS="$CFLAGS -g -O3 "
+    CXXFLAGS="$CXXFLAGS -g -O3 "
   fi
   AC_DEFINE(TR_STABLE_RELEASE, 1, [Define to 1 if this is a stable release of Transmission])
 else
@@ -45,17 +45,17 @@ CURL_MINIMUM=7.16.3
 GIO_MINIMUM=2.15.5
 GLIB_MINIMUM=2.6.0
 GTK_MINIMUM=2.6.0
-WX_MINIMUM=2.6.0
 LIBNOTIFY_MINIMUM=0.4.3
 DBUS_GLIB_MINIMUM=0.70
+LIBEVENT_MINIMUM=1.4.5
 AC_SUBST(OPENSSL_MINIMUM)
 AC_SUBST(CURL_MINIMUM)
 AC_SUBST(GIO_MINIMUM)
 AC_SUBST(GLIB_MINIMUM)
 AC_SUBST(GTK_MINIMUM)
-AC_SUBST(WX_MINIMUM)
 AC_SUBST(LIBNOTIFY_MINIMUM)
 AC_SUBST(DBUS_GLIB_MINIMUM)
+AC_SUBST(LIBEVENT_MINIUM)
 
 AC_PROG_CC
 AC_PROG_CXX
@@ -165,17 +165,23 @@ AC_TRY_LINK([#include <stdarg.h>], [va_list ap1, ap2; va_copy(ap1, ap2);],
     )
 ])
 
-dnl ----------------------------------------------------------------------------
-dnl
-dnl  libevent fun
-dnl
-dnl  we have to add the builddir into the include path because event-config.h
-dnl  is generated when libevent is build
 
+dnl build our copy of libevent whether we use it or not,
+dnl because "make dist" needs its Makefiles to exist, and
+dnl AM_CONDITIONAL + AC_CONFIG_SUBDIRS don't seem to play nice
 AC_CONFIG_SUBDIRS([third-party/libevent])
-AC_MSG_NOTICE([invoking libevent's configure script])
-LIBEVENT_CPPFLAGS="-I\$(top_srcdir)/third-party/libevent -I\$(top_builddir)/third-party/libevent"
+
+AC_CHECK_HEADER([event-config.h],
+                [libevent_source=system
+                 LIBEVENT_CPPFLAGS=""
+                 LIBEVENT_LIBS="-levent -lrt"],
+                [libevent_source=bundled
+                 AC_MSG_NOTICE([couldn't find event-config.h, so using our own copy of libevent from third-party/libevent/.])
+                 AC_MSG_NOTICE([if you are cross-compiling this is probably NOT what you want.])
+                 LIBEVENT_CPPFLAGS="-I\$(top_srcdir)/third-party/libevent -I\$(top_builddir)/third-party/libevent"
+                 LIBEVENT_LIBS="\$(top_builddir)/third-party/libevent/libevent.la"])
 AC_SUBST(LIBEVENT_CPPFLAGS)
+AC_SUBST(LIBEVENT_LIBS)
 
 
 dnl ----------------------------------------------------------------------------
@@ -371,14 +377,16 @@ echo "
 
 Configuration:
 
-        Source code location:       ${srcdir}
-        Compiler:                   ${CXX}
-        Build Command-Line client:  ${build_cli}
-        Build Daemon:               ${build_daemon}
-        Build GTK+ client:          ${build_gtk}
-          ... gio support:          ${use_gio}
-          ... dbus-glib support:    ${use_dbus_glib}
-          ... libnotify support:    ${use_libnotify}
-        Build OS X client:          ${build_mac}
+        Source code location:          ${srcdir}
+        Compiler:                      ${CXX}
+        System or bundled libevent:    ${libevent_source}
+
+        Build OS X client:             ${build_mac}
+        Build GTK+ client:             ${build_gtk}
+          ... with gio support:        ${use_gio}
+          ... with dbus-glib support:  ${use_dbus_glib}
+          ... with libnotify support:  ${use_libnotify}
+        Build Command-Line client:     ${build_cli}
+        Build Daemon:                  ${build_daemon}
 
 "
