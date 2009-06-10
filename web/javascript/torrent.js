@@ -635,17 +635,6 @@ Torrent.indexOf = function( torrents, id )
 	}
 };
 
-/**
- * @param torrents an array of torrents sorted by Id
- * @param id the id to search for
- * @return the torrent, or null
- */
-Torrent.lookup = function( torrents, id )
-{
-	var pos = Torrent.indexOf( torrents, id );
-	return pos >= 0 ? torrents[pos] : null;
-};
-
 function TorrentFile(file_data) {
 	this.initialize(file_data);
 }

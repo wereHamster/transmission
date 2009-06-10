@@ -156,7 +156,7 @@ tr_bencParseStr( const uint8_t *  buf,
 }
 
 /* set to 1 to help expose bugs with tr_bencListAdd and tr_bencDictAdd */
-#define LIST_SIZE 8 /* number of items to increment list/dict buffer by */
+#define LIST_SIZE 4 /* number of items to increment list/dict buffer by */
 
 static int
 makeroom( tr_benc * val,
@@ -1544,22 +1544,17 @@ tr_bencToFile( const tr_benc * top, tr_fmt_mode mode, const char * filename )
     }
     else
     {
-        struct evbuffer * buf = evbuffer_new( );
-        tr_bencToBuf( top, mode, buf );
+        int len;
+        char * str = tr_bencToStr( top, mode, &len );
 
-        while( !err && EVBUFFER_LENGTH( buf ) )
-        {
-            if( evbuffer_write( buf, fileno(fp) ) == -1 )
-            {
-                err = errno;
-                tr_err( _( "Couldn't save file \"%1$s\": %2$s" ),
-                       filename, tr_strerror( errno ) );
-            }
+        if( fwrite( str, 1, len, fp ) == (size_t)len )
+            tr_dbg( "tr_bencToFile saved \"%s\"", filename );
+        else {
+            err = errno;
+            tr_err( _( "Couldn't save file \"%1$s\": %2$s" ), filename, tr_strerror( errno ) );
         }
 
-        if( !err )
-            tr_dbg( "tr_bencToFile saved \"%s\"", filename );
-        evbuffer_free( buf );
+        tr_free( str );
         fclose( fp );
     }
 
