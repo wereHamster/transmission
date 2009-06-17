@@ -22,10 +22,9 @@
 
 #ifndef HAVE_LIBNOTIFY
 
-void
-tr_notify_init( void ) { }
-void
-tr_notify_send( TrTorrent * tor UNUSED ) { }
+void tr_notify_init( void ) { }
+void tr_notify_send( TrTorrent * tor UNUSED ) { }
+void tr_notify_added( const char * name UNUSED ) { }
 
 #else
  #include <libnotify/notify.h>
@@ -49,13 +48,15 @@ notifyCallback( NotifyNotification * n UNUSED,
     }
     else if( !strcmp( action, "file" ) )
     {
-        tr_torrent *    tor = tr_torrent_handle( gtor );
+        tr_torrent * tor = tr_torrent_handle( gtor );
         const tr_info * info = tr_torrent_info( gtor );
-        char *          path =
-            g_build_filename( tr_torrentGetDownloadDir(
-                                  tor ), info->files[0].name, NULL );
-        gtr_open_file( path );
-        g_free( path );
+        if( tor && info )
+        {
+            const char * dir = tr_torrentGetDownloadDir( tor );
+            char * path = g_build_filename( dir, info->files[0].name, NULL );
+            gtr_open_file( path );
+            g_free( path );
+        }
     }
 }
 
@@ -107,6 +108,18 @@ tr_notify_send( TrTorrent *tor )
                 NOTIFY_ACTION_CALLBACK( notifyCallback ), tor, NULL );
         }
 
+        notify_notification_show( n, NULL );
+    }
+}
+
+void
+tr_notify_added( const char * name )
+{
+    if( pref_flag_get( PREF_KEY_SHOW_DESKTOP_NOTIFICATION ) )
+    {
+        NotifyNotification * n = notify_notification_new(
+            _( "Torrent Added" ), name, "transmission", NULL );
+        notify_notification_set_timeout( n, NOTIFY_EXPIRES_DEFAULT );
         notify_notification_show( n, NULL );
     }
 }

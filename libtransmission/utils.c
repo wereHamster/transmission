@@ -259,7 +259,7 @@ tr_deepLog( const char  * file,
     {
         va_list           args;
         char              timestr[64];
-        struct evbuffer * buf = tr_getBuffer( );
+        struct evbuffer * buf = evbuffer_new( );
         char *            base = tr_basename( file );
 
         evbuffer_add_printf( buf, "[%s] ",
@@ -276,7 +276,7 @@ tr_deepLog( const char  * file,
             (void) fwrite( EVBUFFER_DATA( buf ), 1, EVBUFFER_LENGTH( buf ), fp );
 
         tr_free( base );
-        tr_releaseBuffer( buf );
+        evbuffer_free( buf );
     }
 }
 
@@ -457,6 +457,14 @@ tr_strip_positional_args( const char* str )
 ***
 **/
 
+tr_bool
+tr_isTimeval( const struct timeval * tv )
+{
+    return tv && ( tv->tv_sec >= 0 )
+              && ( tv->tv_usec >= 0 )
+              && ( tv->tv_usec < 1000000 );
+}
+
 void
 tr_timevalMsec( uint64_t milliseconds, struct timeval * setme )
 {
@@ -464,7 +472,28 @@ tr_timevalMsec( uint64_t milliseconds, struct timeval * setme )
     assert( setme != NULL );
     setme->tv_sec  = microseconds / 1000000;
     setme->tv_usec = microseconds % 1000000;
+    assert( tr_isTimeval( setme ) );
 }
+
+void
+tr_timevalSet( struct timeval * setme, int seconds, int microseconds )
+{
+    setme->tv_sec = seconds;
+    setme->tv_usec = microseconds;
+    assert( tr_isTimeval( setme ) );
+}
+
+void
+tr_timerAdd( struct event * timer, int seconds, int milliseconds )
+{
+    struct timeval tv;
+    tr_timevalSet( &tv, seconds, milliseconds );
+    event_add( timer, &tv );
+}
+
+/**
+***
+**/
 
 uint8_t *
 tr_loadFile( const char * path,
@@ -710,18 +739,23 @@ tr_memmem( const char * haystack, size_t haystacklen,
 char*
 tr_strdup_printf( const char * fmt, ... )
 {
-    char *            ret = NULL;
-    struct evbuffer * buf;
-    va_list           ap;
+    va_list ap;
+    char * ret;
+    size_t len;
+    char statbuf[2048];
 
-    buf = tr_getBuffer( );
     va_start( ap, fmt );
-
-    if( evbuffer_add_vprintf( buf, fmt, ap ) != -1 )
-        ret = tr_strdup( EVBUFFER_DATA( buf ) );
-
+    len = evutil_vsnprintf( statbuf, sizeof( statbuf ), fmt, ap );
     va_end( ap );
-    tr_releaseBuffer( buf );
+    if( len < sizeof( statbuf ) )
+        ret = tr_strndup( statbuf, len );
+    else {
+        ret = tr_new( char, len + 1 );
+        va_start( ap, fmt );
+        evutil_vsnprintf( ret, len + 1, fmt, ap );
+        va_end( ap );
+    }
+
     return ret;
 }
 
@@ -766,232 +800,6 @@ tr_strstrip( char * str )
 /****
 *****
 ****/
-
-tr_bitfield*
-tr_bitfieldConstruct( tr_bitfield * b, size_t bitCount )
-{
-    b->bitCount = bitCount;
-    b->byteCount = ( bitCount + 7u ) / 8u;
-    b->bits = tr_new0( uint8_t, b->byteCount );
-    return b;
-}
-
-tr_bitfield*
-tr_bitfieldDestruct( tr_bitfield * b )
-{
-    if( b )
-        tr_free( b->bits );
-    return b;
-}
-
-tr_bitfield*
-tr_bitfieldDup( const tr_bitfield * in )
-{
-    tr_bitfield * ret = tr_new0( tr_bitfield, 1 );
-
-    ret->bitCount = in->bitCount;
-    ret->byteCount = in->byteCount;
-    ret->bits = tr_memdup( in->bits, in->byteCount );
-    return ret;
-}
-
-void
-tr_bitfieldClear( tr_bitfield * bitfield )
-{
-    memset( bitfield->bits, 0, bitfield->byteCount );
-}
-
-int
-tr_bitfieldIsEmpty( const tr_bitfield * bitfield )
-{
-    size_t i;
-
-    for( i = 0; i < bitfield->byteCount; ++i )
-        if( bitfield->bits[i] )
-            return 0;
-
-    return 1;
-}
-
-int
-tr_bitfieldAdd( tr_bitfield * bitfield,
-                size_t        nth )
-{
-    assert( bitfield );
-    assert( bitfield->bits );
-
-    if( nth >= bitfield->bitCount )
-        return -1;
-
-    bitfield->bits[nth >> 3u] |= ( 0x80 >> ( nth & 7u ) );
-    return 0;
-}
-
-/* Sets bit range [begin, end) to 1 */
-int
-tr_bitfieldAddRange( tr_bitfield * b,
-                     size_t        begin,
-                     size_t        end )
-{
-    size_t        sb, eb;
-    unsigned char sm, em;
-
-    end--;
-
-    if( ( end >= b->bitCount ) || ( begin > end ) )
-        return -1;
-
-    sb = begin >> 3;
-    sm = ~( 0xff << ( 8 - ( begin & 7 ) ) );
-    eb = end >> 3;
-    em = 0xff << ( 7 - ( end & 7 ) );
-
-    if( sb == eb )
-    {
-        b->bits[sb] |= ( sm & em );
-    }
-    else
-    {
-        b->bits[sb] |= sm;
-        b->bits[eb] |= em;
-        if( ++sb < eb )
-            memset ( b->bits + sb, 0xff, eb - sb );
-    }
-
-    return 0;
-}
-
-int
-tr_bitfieldRem( tr_bitfield * bitfield,
-                size_t        nth )
-{
-    assert( bitfield );
-    assert( bitfield->bits );
-
-    if( nth >= bitfield->bitCount )
-        return -1;
-
-    bitfield->bits[nth >> 3u] &= ( 0xff7f >> ( nth & 7u ) );
-    return 0;
-}
-
-/* Clears bit range [begin, end) to 0 */
-int
-tr_bitfieldRemRange( tr_bitfield * b,
-                     size_t        begin,
-                     size_t        end )
-{
-    size_t        sb, eb;
-    unsigned char sm, em;
-
-    end--;
-
-    if( ( end >= b->bitCount ) || ( begin > end ) )
-        return -1;
-
-    sb = begin >> 3;
-    sm = 0xff << ( 8 - ( begin & 7 ) );
-    eb = end >> 3;
-    em = ~( 0xff << ( 7 - ( end & 7 ) ) );
-
-    if( sb == eb )
-    {
-        b->bits[sb] &= ( sm | em );
-    }
-    else
-    {
-        b->bits[sb] &= sm;
-        b->bits[eb] &= em;
-        if( ++sb < eb )
-            memset ( b->bits + sb, 0, eb - sb );
-    }
-
-    return 0;
-}
-
-tr_bitfield*
-tr_bitfieldOr( tr_bitfield *       a,
-               const tr_bitfield * b )
-{
-    uint8_t *      ait;
-    const uint8_t *aend, *bit;
-
-    assert( a->bitCount == b->bitCount );
-
-    for( ait = a->bits, bit = b->bits, aend = ait + a->byteCount;
-         ait != aend; )
-        *ait++ |= *bit++;
-
-    return a;
-}
-
-/* set 'a' to all the flags that were in 'a' but not 'b' */
-void
-tr_bitfieldDifference( tr_bitfield *       a,
-                       const tr_bitfield * b )
-{
-    uint8_t *      ait;
-    const uint8_t *aend, *bit;
-
-    assert( a->bitCount == b->bitCount );
-
-    for( ait = a->bits, bit = b->bits, aend = ait + a->byteCount;
-         ait != aend; )
-        *ait++ &= ~( *bit++ );
-}
-
-size_t
-tr_bitfieldCountTrueBits( const tr_bitfield* b )
-{
-    size_t           ret = 0;
-    const uint8_t *  it, *end;
-    static const int trueBitCount[512] = {
-        0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 1, 2, 2, 3, 2, 3, 3,
-        4, 2, 3, 3, 4, 3, 4, 4, 5,
-        1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4,
-        5, 3, 4, 4, 5, 4, 5, 5, 6,
-        1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4,
-        5, 3, 4, 4, 5, 4, 5, 5, 6,
-        2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5,
-        6, 4, 5, 5, 6, 5, 6, 6, 7,
-        1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4,
-        5, 3, 4, 4, 5, 4, 5, 5, 6,
-        2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5,
-        6, 4, 5, 5, 6, 5, 6, 6, 7,
-        2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5,
-        6, 4, 5, 5, 6, 5, 6, 6, 7,
-        3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 4, 5, 5, 6, 5, 6, 6,
-        7, 5, 6, 6, 7, 6, 7, 7, 8,
-        1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4,
-        5, 3, 4, 4, 5, 4, 5, 5, 6,
-        2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5,
-        6, 4, 5, 5, 6, 5, 6, 6, 7,
-        2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5,
-        6, 4, 5, 5, 6, 5, 6, 6, 7,
-        3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 4, 5, 5, 6, 5, 6, 6,
-        7, 5, 6, 6, 7, 6, 7, 7, 8,
-        2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5,
-        6, 4, 5, 5, 6, 5, 6, 6, 7,
-        3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 4, 5, 5, 6, 5, 6, 6,
-        7, 5, 6, 6, 7, 6, 7, 7, 8,
-        3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 4, 5, 5, 6, 5, 6, 6,
-        7, 5, 6, 6, 7, 6, 7, 7, 8,
-        4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8, 5, 6, 6, 7, 6, 7, 7,
-        8, 6, 7, 7, 8, 7, 8, 8, 9
-    };
-
-    if( !b )
-        return 0;
-
-    for( it = b->bits, end = it + b->byteCount; it != end; ++it )
-        ret += trueBitCount[*it];
-
-    return ret;
-}
-
-/***
-****
-***/
 
 uint64_t
 tr_date( void )
@@ -1283,49 +1091,6 @@ void*
 tr_int2ptr( int i )
 {
     return (void*)(intptr_t)i;
-}
-
-/***
-****
-***/
-
-static tr_list * _bufferList = NULL;
-
-static tr_lock *
-getBufferLock( void )
-{
-    static tr_lock * lock = NULL;
-    if( lock == NULL )
-        lock = tr_lockNew( );
-    return lock;
-}
-
-struct evbuffer*
-tr_getBuffer( void )
-{
-    struct evbuffer * buf;
-    tr_lock * l = getBufferLock( );
-    tr_lockLock( l );
-
-    buf = tr_list_pop_front( &_bufferList );
-    if( buf == NULL )
-        buf = evbuffer_new( );
-
-    tr_lockUnlock( l );
-    return buf;
-}
-
-void
-tr_releaseBuffer( struct evbuffer * buf )
-{
-    tr_lock * l = getBufferLock( );
-    tr_lockLock( l );
-
-    evbuffer_drain( buf, EVBUFFER_LENGTH( buf ) );
-    assert( EVBUFFER_LENGTH( buf ) == 0 );
-    tr_list_prepend( &_bufferList, buf );
-
-    tr_lockUnlock( l );
 }
 
 /***

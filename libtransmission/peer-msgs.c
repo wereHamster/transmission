@@ -37,7 +37,6 @@
 #include "stats.h"
 #include "torrent.h"
 #include "tr-dht.h"
-#include "trevent.h"
 #include "utils.h"
 #include "version.h"
 
@@ -77,7 +76,7 @@ enum
     /* idle seconds before we send a keepalive */
     KEEPALIVE_INTERVAL_SECS = 100,
 
-    PEX_INTERVAL            = ( 90 * 1000 ), /* msec between sendPex() calls */
+    PEX_INTERVAL_SECS       = 90, /* sec between sendPex() calls */
 
 
     MAX_BLOCK_SIZE          = ( 1024 * 16 ),
@@ -176,7 +175,6 @@ struct tr_peermsgs
     struct request_list    clientAskedFor;
     struct request_list    clientWillAskFor;
 
-    tr_timer             * pexTimer;
     tr_pex               * pex;
     tr_pex               * pex6;
 
@@ -192,6 +190,8 @@ struct tr_peermsgs
        supplied a reqq argument, it's stored here.  otherwise the
        value is zero and should be ignored. */
     int64_t               reqq;
+
+    struct event          pexTimer;
 };
 
 /**
@@ -209,7 +209,7 @@ myDebug( const char * file, int line,
     {
         va_list           args;
         char              timestr[64];
-        struct evbuffer * buf = tr_getBuffer( );
+        struct evbuffer * buf = evbuffer_new( );
         char *            base = tr_basename( file );
 
         evbuffer_add_printf( buf, "[%s] %s - %s [%s]: ",
@@ -225,7 +225,7 @@ myDebug( const char * file, int line,
         fwrite( EVBUFFER_DATA( buf ), 1, EVBUFFER_LENGTH( buf ), fp );
 
         tr_free( base );
-        tr_releaseBuffer( buf );
+        evbuffer_free( buf );
     }
 }
 
@@ -543,12 +543,16 @@ tr_generateAllowedSet( tr_piece_index_t * setmePieces,
 
     if( addr->type == TR_AF_INET )
     {
-        uint8_t w[SHA_DIGEST_LENGTH + 4];
+        uint8_t w[SHA_DIGEST_LENGTH + 4], *walk=w;
         uint8_t x[SHA_DIGEST_LENGTH];
 
-        *(uint32_t*)w = ntohl( htonl( addr->addr.addr4.s_addr ) & 0xffffff00 );   /* (1) */
-        memcpy( w + 4, infohash, SHA_DIGEST_LENGTH );                /* (2) */
-        tr_sha1( x, w, sizeof( w ), NULL );                          /* (3) */
+        uint32_t ui32 = ntohl( htonl( addr->addr.addr4.s_addr ) & 0xffffff00 );   /* (1) */
+        memcpy( w, &ui32, sizeof( uint32_t ) );
+        walk += sizeof( uint32_t );
+        memcpy( walk, infohash, SHA_DIGEST_LENGTH );                 /* (2) */
+        walk += SHA_DIGEST_LENGTH;
+        tr_sha1( x, w, walk-w, NULL );                               /* (3) */
+        assert( sizeof( w ) == walk-w );
 
         while( setSize<desiredSetSize )
         {
@@ -1736,9 +1740,10 @@ fillOutputBuffer( tr_peermsgs * msgs, time_t now )
             tr_peerIoWriteUint32( io, out, req.offset );
 
             err = tr_ioRead( msgs->torrent, req.index, req.offset, req.length, EVBUFFER_DATA(out)+EVBUFFER_LENGTH(out) );
-            if( err ) /* peer needs a reject message */
+            if( err )
             {
-                protocolSendReject( msgs, &req );
+                if( fext )
+                    protocolSendReject( msgs, &req );
             }
             else
             {
@@ -2108,11 +2113,14 @@ sendPex( tr_peermsgs * msgs )
     }
 }
 
-static TR_INLINE int
-pexPulse( void * vpeer )
+static void
+pexPulse( int foo UNUSED, short bar UNUSED, void * vmsgs )
 {
-    sendPex( vpeer );
-    return TRUE;
+    struct tr_peermsgs * msgs = vmsgs;
+
+    sendPex( msgs );
+
+    tr_timerAdd( &msgs->pexTimer, PEX_INTERVAL_SECS, 0 );
 }
 
 /**
@@ -2142,7 +2150,6 @@ tr_peerMsgsNew( struct tr_torrent * torrent,
     m->peer->peerIsInterested = 0;
     m->peer->have = tr_bitfieldNew( torrent->info.pieceCount );
     m->state = AWAITING_BT_LENGTH;
-    m->pexTimer = tr_timerNew( m->session, pexPulse, m, PEX_INTERVAL );
     m->outMessages = evbuffer_new( );
     m->outMessagesBatchedAt = 0;
     m->outMessagesBatchPeriod = LOW_PRIORITY_INTERVAL_SECS;
@@ -2150,6 +2157,8 @@ tr_peerMsgsNew( struct tr_torrent * torrent,
     m->peerAskedFor = REQUEST_LIST_INIT;
     m->clientAskedFor = REQUEST_LIST_INIT;
     m->clientWillAskFor = REQUEST_LIST_INIT;
+    evtimer_set( &m->pexTimer, pexPulse, m );
+    tr_timerAdd( &m->pexTimer, PEX_INTERVAL_SECS, 0 );
     peer->msgs = m;
 
     *setme = tr_publisherSubscribe( &m->publisher, func, userData );
@@ -2173,7 +2182,7 @@ tr_peerMsgsFree( tr_peermsgs* msgs )
 {
     if( msgs )
     {
-        tr_timerFree( &msgs->pexTimer );
+        evtimer_del( &msgs->pexTimer );
         tr_publisherDestruct( &msgs->publisher );
         reqListClear( &msgs->clientWillAskFor );
         reqListClear( &msgs->clientAskedFor );

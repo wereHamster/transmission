@@ -1,5 +1,24 @@
 NEWS file for Transmission <http://www.transmissionbt.com/>
 
+1.72 (2009/06/16)
+<http://trac.transmissionbt.com/query?milestone=1.72&group=component&groupdesc=1&order=severity>
+- All Platforms
+   + Fix 1.70 crash with assertion "tv->tv_usec >= 0"
+   + Fix 1.70 crash with assertion "tr_peerIoSupportsFEXT( msgs->peer->io )"
+   + Better DHT announce management
+   + Fix error in reporting webseed counts via RPC
+   + Better file preallocation on embedded systems
+- Mac
+   + Fix problem where a small set of users could not add torrents
+- GTK+
+   + Fix 1.70 crash when setting options in the Properties dialog
+   + Fix a rare crash in desktop notifications
+   + Can now sort the file list by priority, download, and completeness
+   + Adding a torrent from a browser sometimes didn't work.
+   + Various usability improvements
+- Daemon
+   + Remote didn't always send the right Encoding header in requests
+
 1.71 (2009/06/07)
 <http://trac.transmissionbt.com/query?milestone=1.71&group=component&groupdesc=1&order=severity>
 - All Platforms

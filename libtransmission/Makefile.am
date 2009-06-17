@@ -1,9 +1,7 @@
-AM_CPPFLAGS = \
-	-I. -I$(top_srcdir) -I$(top_srcdir)/third-party/ \
-	-D__TRANSMISSION__ $(LIBEVENT_CPPFLAGS) \
-	-DPACKAGE_DATA_DIR=\""$(datadir)"\"
+AM_CPPFLAGS = -I. -I$(top_srcdir) -I$(top_srcdir)/third-party/ -D__TRANSMISSION__ -DPACKAGE_DATA_DIR=\""$(datadir)"\"
 
 AM_CFLAGS = \
+    $(LIBEVENT_CFLAGS) \
     $(LIBCURL_CFLAGS) \
     $(OPENSSL_CFLAGS) \
     $(PTHREAD_CFLAGS) \
@@ -14,6 +12,7 @@ noinst_LIBRARIES = libtransmission.a
 libtransmission_a_SOURCES = \
     bandwidth.c \
     bencode.c \
+    bitfield.c \
     blocklist.c \
     clients.c \
     completion.c \
@@ -61,6 +60,7 @@ libtransmission_a_SOURCES = \
 noinst_HEADERS = \
     bandwidth.h \
     bencode.h \
+    bitfield.h \
     blocklist.h \
     clients.h \
     ConvertUTF.h \

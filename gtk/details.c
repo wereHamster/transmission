@@ -115,14 +115,20 @@ getTorrents( struct DetailsImpl * d, int * setmeCount )
     int n = g_slist_length( d->ids );
     int torrentCount = 0;
     tr_session * session = tr_core_session( d->core );
-    tr_torrent ** torrents = g_new( tr_torrent*, n );
-    GSList * l;
+    tr_torrent ** torrents = NULL;
 
-    for( l=d->ids; l!=NULL; l=l->next ) {
-        const int id = GPOINTER_TO_INT( l->data );
-        tr_torrent * tor = tr_torrentFindFromId( session, id );
-        if( tor )
-            torrents[torrentCount++] = tor;
+    if( session != NULL )
+    {
+        GSList * l;
+
+        torrents = g_new( tr_torrent*, n );
+
+        for( l=d->ids; l!=NULL; l=l->next ) {
+            const int id = GPOINTER_TO_INT( l->data );
+            tr_torrent * tor = tr_torrentFindFromId( session, id );
+            if( tor )
+                torrents[torrentCount++] = tor;
+        }
     }
 
     *setmeCount = torrentCount;
@@ -1529,6 +1535,7 @@ peer_page_new( struct DetailsImpl * di )
     GtkListStore *store;
     GtkWidget *v, *w, *ret, *sw, *l, *vbox, *hbox;
     GtkWidget *webtree = NULL;
+    GtkTreeModel * m;
     GtkTreeViewColumn * c;
     GtkCellRenderer *   r;
     int view_columns[] = { PEER_COL_ENCRYPTION_STOCK_ID,
@@ -1576,8 +1583,12 @@ peer_page_new( struct DetailsImpl * di )
     /* peers */
 
     store  = di->peer_store = peer_store_new( );
+    m = gtk_tree_model_sort_new_with_model( GTK_TREE_MODEL( store ) );
+    gtk_tree_sortable_set_sort_column_id( GTK_TREE_SORTABLE( m ),
+                                          PEER_COL_PROGRESS,
+                                          GTK_SORT_DESCENDING );
     v = GTK_WIDGET( g_object_new( GTK_TYPE_TREE_VIEW,
-                                  "model",  gtk_tree_model_sort_new_with_model( GTK_TREE_MODEL( store ) ),
+                                  "model",  m,
                                   "rules-hint", TRUE,
 #if GTK_CHECK_VERSION( 2,12,0 )
                                   "has-tooltip", TRUE,
@@ -1713,7 +1724,6 @@ peer_page_new( struct DetailsImpl * di )
                                               g_str_equal,
                                               (GDestroyNotify)g_free,
                                               (GDestroyNotify)gtk_tree_row_reference_free );
-                           
     ret = vbox;
     return ret;
 }
@@ -1969,6 +1979,7 @@ details_free( gpointer gdata )
     struct DetailsImpl * data = gdata;
     g_signal_handler_disconnect( data->core, data->prefs_changed_tag );
     g_source_remove( data->periodic_refresh_tag );
+    g_hash_table_destroy( data->webseed_hash );
     g_slist_free( data->ids );
     g_free( data );
 }
@@ -1978,7 +1989,7 @@ response_cb( GtkDialog * dialog, int a UNUSED, gpointer b UNUSED )
 {
     GtkWidget * w = GTK_WIDGET( dialog );
     torrent_inspector_set_torrents( w, NULL );
-    gtk_widget_hide( w );
+    gtk_widget_destroy( w );
 }
 
 GtkWidget*

@@ -40,6 +40,7 @@
 #include <libtransmission/utils.h> /* tr_free */
 
 #include "conf.h"
+#include "notify.h"
 #include "tr-core.h"
 #ifdef HAVE_DBUS_GLIB
  #include "tr-core-dbus.h"
@@ -469,7 +470,7 @@ watchFolderIdle( gpointer gcore )
     TrCore * core = TR_CORE( gcore );
 
     core->priv->adding_from_watch_dir = TRUE;
-    tr_core_add_list_defaults( core, core->priv->monitor_files );
+    tr_core_add_list_defaults( core, core->priv->monitor_files, TRUE );
     core->priv->adding_from_watch_dir = FALSE;
 
     /* cleanup */
@@ -784,8 +785,9 @@ doCollate( const char * in )
 }
 
 void
-tr_core_add_torrent( TrCore *    self,
-                     TrTorrent * gtor )
+tr_core_add_torrent( TrCore     * self,
+                     TrTorrent  * gtor,
+                     gboolean     doNotify )
 {
     const tr_info * inf = tr_torrent_info( gtor );
     const tr_stat * torStat = tr_torrent_stat( gtor );
@@ -801,6 +803,9 @@ tr_core_add_torrent( TrCore *    self,
                                        MC_TORRENT_RAW,   tor,
                                        MC_ACTIVITY,      torStat->activity,
                                        -1 );
+
+    if( doNotify )
+        tr_notify_added( inf->name );
 
     /* cleanup */
     g_object_unref( G_OBJECT( gtor ) );
@@ -824,7 +829,7 @@ tr_core_load( TrCore * self,
 
     torrents = tr_sessionLoadTorrents ( tr_core_session( self ), ctor, &count );
     for( i = 0; i < count; ++i )
-        tr_core_add_torrent( self, tr_torrent_new_preexisting( torrents[i] ) );
+        tr_core_add_torrent( self, tr_torrent_new_preexisting( torrents[i] ), FALSE );
 
     tr_free( torrents );
     tr_ctorFree( ctor );
@@ -852,73 +857,101 @@ tr_core_errsig( TrCore *         core,
     g_signal_emit( core, TR_CORE_GET_CLASS( core )->errsig, 0, type, msg );
 }
 
-static void
-add_filename( TrCore *     core,
-              const char * filename,
-              gboolean     doStart,
-              gboolean     doPrompt )
+static int
+add_ctor( TrCore * core, tr_ctor * ctor, gboolean doPrompt, gboolean doNotify )
+{
+    tr_info inf;
+    int err = tr_torrentParse( ctor, &inf );
+
+    switch( err )
+    {
+        case TR_EINVALID:
+            break;
+
+        case TR_EDUPLICATE:
+            g_message( "it's a duplicate" );
+            /* don't complain about .torrent files in the watch directory
+             * that have already been added... that gets annoying and we
+             * don't want to be nagging users to clean up their watch dirs */
+            if( !tr_ctorGetSourceFile(ctor) || !core->priv->adding_from_watch_dir )
+                tr_core_errsig( core, err, inf.name );
+            tr_metainfoFree( &inf );
+            break;
+
+        default:
+            if( doPrompt )
+                g_signal_emit( core, TR_CORE_GET_CLASS( core )->promptsig, 0, ctor );
+            else {
+                tr_session * session = tr_core_session( core );
+                TrTorrent * gtor = tr_torrent_new_ctor( session, ctor, &err );
+                if( !err )
+                    tr_core_add_torrent( core, gtor, doNotify );
+            }
+            tr_metainfoFree( &inf );
+            break;
+    }
+
+    return err;
+}
+
+/* invoked remotely via dbus. */
+gboolean
+tr_core_add_metainfo( TrCore      * core,
+                      const char  * base64_metainfo,
+                      gboolean    * setme_success,
+                      GError     ** gerr UNUSED )
 {
     tr_session * session = tr_core_session( core );
 
+    if( !session )
+    {
+        *setme_success = FALSE;
+    }
+    else
+    {
+        int err;
+        int file_length;
+        tr_ctor * ctor;
+        char * file_contents;
+        gboolean do_prompt = pref_flag_get( PREF_KEY_OPTIONS_PROMPT );
+
+        ctor = tr_ctorNew( session );
+        tr_core_apply_defaults( ctor );
+
+        file_contents = tr_base64_decode( base64_metainfo, -1, &file_length );
+        err = tr_ctorSetMetainfo( ctor, (const uint8_t*)file_contents, file_length );
+
+        if( !err )
+            err = add_ctor( core, ctor, do_prompt, TRUE );
+
+        tr_free( file_contents );
+        tr_core_torrents_added( core );
+        *setme_success = TRUE;
+    }
+
+    return TRUE;
+}
+
+static void
+add_filename( TrCore      * core,
+              const char  * filename,
+              gboolean      doStart,
+              gboolean      doPrompt,
+              gboolean      doNotify )
+{
+    tr_session * session = tr_core_session( core );
     if( filename && session )
     {
+        int err;
         tr_ctor * ctor = tr_ctorNew( session );
         tr_core_apply_defaults( ctor );
         tr_ctorSetPaused( ctor, TR_FORCE, !doStart );
+        tr_ctorSetMetainfoFromFile( ctor, filename );
 
-        if( tr_ctorSetMetainfoFromFile( ctor, filename ) )
-        {
+        err = add_ctor( core, ctor, doPrompt, doNotify );
+        if( err == TR_EINVALID )
             tr_core_errsig( core, TR_EINVALID, filename );
-            tr_ctorFree( ctor );
-        }
-        else
-        {
-            tr_info inf;
-            int err = tr_torrentParse( ctor, &inf );
-
-            switch( err )
-            {
-                case TR_EINVALID:
-                    tr_core_errsig( core, err, filename );
-                    break;
-
-                case TR_EDUPLICATE:
-                    /* don't complain about .torrent files in the watch directory
-                     * that have already been added... that gets annoying and we
-                     * don't want to be naggign users to clean up their watch dirs */
-                    if( !core->priv->adding_from_watch_dir )
-                        tr_core_errsig( core, err, inf.name );
-                    tr_metainfoFree( &inf );
-                    break;
-
-                default:
-                    if( doPrompt )
-                        g_signal_emit( core, TR_CORE_GET_CLASS( core )->promptsig, 0, ctor );
-                    else {
-                        TrTorrent * gtor = tr_torrent_new_ctor( session, ctor, &err );
-                        if( err )
-                            tr_core_errsig( core, err, filename );
-                        else
-                            tr_core_add_torrent( core, gtor );
-                    }
-                    tr_metainfoFree( &inf );
-                    break;
-            }
-        }
     }
-}
-
-gboolean
-tr_core_add_file( TrCore *          core,
-                  const char *      filename,
-                  gboolean *        success,
-                  GError     ** err UNUSED )
-{
-    add_filename( core, filename,
-                  pref_flag_get( PREF_KEY_START ),
-                  pref_flag_get( PREF_KEY_OPTIONS_PROMPT ) );
-    *success = TRUE;
-    return TRUE;
 }
 
 gboolean
@@ -932,17 +965,18 @@ tr_core_present_window( TrCore      * core UNUSED,
 }
 
 void
-tr_core_add_list( TrCore *    core,
-                  GSList *    torrentFiles,
-                  pref_flag_t start,
-                  pref_flag_t prompt )
+tr_core_add_list( TrCore       * core,
+                  GSList       * torrentFiles,
+                  pref_flag_t    start,
+                  pref_flag_t    prompt,
+                  gboolean       doNotify )
 {
     const gboolean doStart = pref_flag_eval( start, PREF_KEY_START );
     const gboolean doPrompt = pref_flag_eval( prompt, PREF_KEY_OPTIONS_PROMPT );
     GSList * l;
 
     for( l = torrentFiles; l != NULL; l = l->next )
-        add_filename( core, l->data, doStart, doPrompt );
+        add_filename( core, l->data, doStart, doPrompt, doNotify );
 
     tr_core_torrents_added( core );
     freestrlist( torrentFiles );
@@ -1297,7 +1331,6 @@ typedef void ( server_response_func )( TrCore * core, tr_benc * response, gpoint
 
 struct pending_request_data
 {
-    int tag;
     TrCore * core;
     server_response_func * responseFunc;
     gpointer responseFuncUserData;
@@ -1320,7 +1353,7 @@ readResponseIdle( void * vresponse )
     tag = (int)intVal;
 
     data = g_hash_table_lookup( pendingRequests, &tag );
-    if( data )
+    if( data && data->responseFunc )
         (*data->responseFunc)(data->core, &top, data->responseFuncUserData );
 
     tr_bencFree( &top );
@@ -1351,7 +1384,7 @@ sendRequest( TrCore * core, const char * json, int tag,
 
     if( pendingRequests == NULL )
     {
-        pendingRequests = g_hash_table_new_full( g_int_hash, g_int_equal, NULL, g_free );
+        pendingRequests = g_hash_table_new_full( g_int_hash, g_int_equal, g_free, g_free );
     }
 
     if( session == NULL )
@@ -1364,10 +1397,9 @@ sendRequest( TrCore * core, const char * json, int tag,
         struct pending_request_data * data;
         data = g_new0( struct pending_request_data, 1 );
         data->core = core;
-        data->tag = tag;
         data->responseFunc = responseFunc;
         data->responseFuncUserData = responseFuncUserData;
-        g_hash_table_insert( pendingRequests, &data->tag, data );
+        g_hash_table_insert( pendingRequests, g_memdup( &tag, sizeof( int ) ), data );
 
         /* make the request */
 #ifdef DEBUG_RPC
@@ -1437,7 +1469,8 @@ tr_core_blocklist_update( TrCore * core )
 void
 tr_core_exec_json( TrCore * core, const char * json )
 {
-    sendRequest( core, json, 0, NULL, NULL );
+    const int tag = nextTag++;
+    sendRequest( core, json, tag, NULL, NULL );
 }
 
 void

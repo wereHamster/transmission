@@ -91,9 +91,8 @@ dht_bootstrap(void *closure)
         if(status == TR_DHT_STOPPED || status >= TR_DHT_FIREWALLED)
             break;
         tr_dhtAddNode(cl->session, &addr, port, 1);
-        tv.tv_sec = 2 + tr_cryptoWeakRandInt( 5 );
-        tv.tv_usec = tr_cryptoWeakRandInt( 1000000 );
-        select(0, NULL, NULL, NULL, &tv);
+        tr_timevalSet( &tv, 2 + tr_cryptoWeakRandInt( 5 ), tr_cryptoWeakRandInt( 1000000 ) );
+        select( 0, NULL, NULL, NULL, &tv );
     }
     tr_free( cl->nodes );
     tr_free( closure );
@@ -103,7 +102,6 @@ int
 tr_dhtInit(tr_session *ss)
 {
     struct sockaddr_in sin;
-    struct timeval tv;
     tr_benc benc;
     int rc;
     tr_bool have_id = FALSE;
@@ -169,10 +167,8 @@ tr_dhtInit(tr_session *ss)
         tr_threadNew( dht_bootstrap, cl );
     }
 
-    tv.tv_sec = 0;
-    tv.tv_usec = tr_cryptoWeakRandInt( 1000000 );
     event_set( &dht_event, dht_socket, EV_READ, event_callback, NULL );
-    event_add( &dht_event, &tv );
+    tr_timerAdd( &dht_event, 0, tr_cryptoWeakRandInt( 1000000 ) );
 
     return 1;
 
@@ -361,7 +357,6 @@ static void
 event_callback(int s, short type, void *ignore UNUSED )
 {
     time_t tosleep;
-    struct timeval tv;
 
     if( dht_periodic(s, type == EV_READ, &tosleep, callback, NULL) < 0 ) {
         if(errno == EINTR) {
@@ -376,9 +371,7 @@ event_callback(int s, short type, void *ignore UNUSED )
 
     /* Being slightly late is fine,
        and has the added benefit of adding some jitter. */
-    tv.tv_sec = tosleep;
-    tv.tv_usec = tr_cryptoWeakRandInt( 1000000 );
-    event_add(&dht_event, &tv);
+    tr_timerAdd( &dht_event, tosleep, tr_cryptoWeakRandInt( 1000000 ) );
 }
 
 void

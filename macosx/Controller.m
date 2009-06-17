@@ -947,7 +947,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     [panel setCanChooseFiles: YES];
     [panel setCanChooseDirectories: NO];
 
-    [panel beginSheetForDirectory: nil file: nil types: [NSArray arrayWithObject: @"org.bittorrent.torrent"]
+    [panel beginSheetForDirectory: nil file: nil types: [NSArray arrayWithObjects: @"org.bittorrent.torrent", @"torrent", nil]
         modalForWindow: fWindow modalDelegate: self didEndSelector: @selector(openSheetClosed:returnCode:contextInfo:)
         contextInfo: [NSNumber numberWithBool: sender == fOpenIgnoreDownloadFolder]];
 }
@@ -1369,7 +1369,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     else
     {
         NSSavePanel * panel = [NSSavePanel savePanel];
-        [panel setRequiredFileType: @"org.bittorrent.torrent"];
+        [panel setAllowedFileTypes: [NSArray arrayWithObjects: @"org.bittorrent.torrent", @"torrent", nil]];
         [panel setCanSelectHiddenExtension: YES];
         
         [panel beginSheetForDirectory: nil file: [torrent name] modalForWindow: fWindow modalDelegate: self
@@ -2456,7 +2456,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         
         NSString * fullFile = [path stringByAppendingPathComponent: file];
         
-        if (![[[NSWorkspace sharedWorkspace] typeOfFile: fullFile error: NULL] isEqualToString: @"org.bittorrent.torrent"])
+        if (!([[[NSWorkspace sharedWorkspace] typeOfFile: fullFile error: NULL] isEqualToString: @"org.bittorrent.torrent"]
+                || [[fullFile pathExtension] caseInsensitiveCompare: @"torrent"] == NSOrderedSame))
             continue;
         
         tr_ctor * ctor = tr_ctorNew(fLib);
@@ -2698,7 +2699,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         NSArray * files = [pasteboard propertyListForType: NSFilenamesPboardType];
         for (NSString * file in files)
         {
-            if ([[[NSWorkspace sharedWorkspace] typeOfFile: file error: NULL] isEqualToString: @"org.bittorrent.torrent"])
+            if ([[[NSWorkspace sharedWorkspace] typeOfFile: file error: NULL] isEqualToString: @"org.bittorrent.torrent"]
+                    || [[file pathExtension] caseInsensitiveCompare: @"torrent"] == NSOrderedSame)
             {
                 torrent = YES;
                 tr_ctor * ctor = tr_ctorNew(fLib);
@@ -2759,7 +2761,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         NSMutableArray * filesToOpen = [NSMutableArray arrayWithCapacity: [files count]];
         for (NSString * file in files)
         {
-            if ([[[NSWorkspace sharedWorkspace] typeOfFile: file error: NULL] isEqualToString: @"org.bittorrent.torrent"])
+            if ([[[NSWorkspace sharedWorkspace] typeOfFile: file error: NULL] isEqualToString: @"org.bittorrent.torrent"]
+                    || [[file pathExtension] caseInsensitiveCompare: @"torrent"] == NSOrderedSame)
             {
                 torrent = YES;
                 tr_ctor * ctor = tr_ctorNew(fLib);

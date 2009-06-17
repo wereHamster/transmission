@@ -238,7 +238,15 @@ char* tr_buildPath( const char * first_element, ... ) TR_GNUC_NULL_TERMINATED
 
 struct timeval;
 
-void tr_timevalMsec( uint64_t milliseconds, struct timeval   * setme );
+tr_bool tr_isTimeval( const struct timeval * tv );
+
+void tr_timevalMsec( uint64_t milliseconds, struct timeval * setme );
+
+void tr_timevalSet( struct timeval * setme, int seconds, int microseconds );
+
+struct event;
+
+void tr_timerAdd( struct event * timer, int seconds, int milliseconds );
 
 
 /** @brief return the current date in milliseconds */
@@ -254,21 +262,6 @@ void           tr_wait( uint64_t delay_milliseconds );
  * @param err if an error occurs and err is non-NULL, it's set to TRUE.
  */
 char* tr_utf8clean( const char * str, int len, tr_bool * err ) TR_GNUC_MALLOC;
-
-
-/***
-****
-***/
-
-struct evbuffer;
-
-/** @brief pool of reusable buffers
-    @see tr_releaseBuffer() */
-struct evbuffer * tr_getBuffer( void );
-
-/** @brief return a buffer to the pool
-    @see tr_getBuffer() */
-void tr_releaseBuffer( struct evbuffer * buf );
 
 
 /***
@@ -389,76 +382,6 @@ int  tr_httpParseURL( const char * url,
                       char **      setme_host,
                       int *        setme_port,
                       char **      setme_path );
-
-
-/***
-****
-***/
-
-typedef struct tr_bitfield
-{
-    uint8_t *  bits;
-    size_t     bitCount;
-    size_t     byteCount;
-}
-tr_bitfield;
-
-tr_bitfield* tr_bitfieldConstruct( tr_bitfield*, size_t bitcount );
-
-tr_bitfield* tr_bitfieldDestruct( tr_bitfield* );
-
-static TR_INLINE tr_bitfield* tr_bitfieldNew( size_t bitcount )
-{
-    return tr_bitfieldConstruct( tr_new0( tr_bitfield, 1 ), bitcount );
-}
-
-static TR_INLINE void tr_bitfieldFree( tr_bitfield * b )
-{
-    tr_free( tr_bitfieldDestruct( b ) );
-}
-
-tr_bitfield* tr_bitfieldDup( const tr_bitfield* ) TR_GNUC_MALLOC;
-
-void         tr_bitfieldClear( tr_bitfield* );
-
-int          tr_bitfieldAdd( tr_bitfield*, size_t bit );
-
-int          tr_bitfieldRem( tr_bitfield*, size_t bit );
-
-int          tr_bitfieldAddRange( tr_bitfield *, size_t begin, size_t end );
-
-int          tr_bitfieldRemRange( tr_bitfield*, size_t begin, size_t end );
-
-void         tr_bitfieldDifference( tr_bitfield *, const tr_bitfield * );
-
-int          tr_bitfieldIsEmpty( const tr_bitfield* );
-
-size_t       tr_bitfieldCountTrueBits( const tr_bitfield* );
-
-tr_bitfield* tr_bitfieldOr( tr_bitfield*, const tr_bitfield* );
-
-/** A stripped-down version of bitfieldHas to be used
-    for speed when you're looping quickly.  This version
-    has none of tr_bitfieldHas()'s safety checks, so you
-    need to call tr_bitfieldTestFast() first before you
-    start looping. */
-static TR_INLINE tr_bool tr_bitfieldHasFast( const tr_bitfield * b, const size_t nth )
-{
-    return ( b->bits[nth>>3u] << ( nth & 7u ) & 0x80 ) != 0;
-}
-
-/** @param high the highest nth bit you're going to access */
-static TR_INLINE tr_bool tr_bitfieldTestFast( const tr_bitfield * b, const size_t high )
-{
-    return ( b != NULL )
-        && ( b->bits != NULL )
-        && ( high < b->bitCount );
-}
-
-static TR_INLINE tr_bool tr_bitfieldHas( const tr_bitfield * b, size_t nth )
-{
-    return tr_bitfieldTestFast( b, nth ) && tr_bitfieldHasFast( b, nth );
-}
 
 double tr_getRatio( double numerator, double denominator );
 

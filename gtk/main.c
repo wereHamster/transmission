@@ -84,8 +84,8 @@ struct cbdata
     GtkWidget         * prefs;
     GSList            * errqueue;
     GSList            * dupqueue;
+    GSList            * details;
     GtkTreeSelection  * sel;
-    gpointer            details;
 };
 
 #define CBDATA_PTR "callback-data-pointer"
@@ -205,16 +205,13 @@ refreshActions( struct cbdata * data )
 }
 
 static void
-refreshDetailsDialog( struct cbdata * data )
+refreshDetailsDialog( struct cbdata * data, GtkWidget * details )
 {
     GtkTreeSelection * s = tr_window_get_selection( data->wind );
     GtkTreeModel * model;
     GSList * ids = NULL;
     GList * selrows = NULL;
     GList * l;
-
-    if( data->details == NULL )
-        return;
 
     /* build a list of the selected torrents' ids */
     s = tr_window_get_selection( data->wind );
@@ -227,7 +224,7 @@ refreshDetailsDialog( struct cbdata * data )
         }
     }
 
-    torrent_inspector_set_torrents( GTK_WIDGET( data->details ), ids );
+    torrent_inspector_set_torrents( details, ids );
 
     /* cleanup */
     g_slist_free( ids );
@@ -239,7 +236,6 @@ static void
 selectionChangedCB( GtkTreeSelection * s UNUSED, gpointer data )
 {
     refreshActions( data );
-    refreshDetailsDialog( data );
 }
 
 static void
@@ -250,6 +246,8 @@ onMainWindowSizeAllocated( GtkWidget *            window,
     const gboolean isMaximized = window->window
                             && ( gdk_window_get_state( window->window )
                                  & GDK_WINDOW_STATE_MAXIMIZED );
+
+    pref_int_set( PREF_KEY_MAIN_WINDOW_IS_MAXIMIZED, isMaximized );
 
     if( !isMaximized )
     {
@@ -304,8 +302,7 @@ onRPCChanged( tr_session            * session UNUSED,
     switch( type )
     {
         case TR_RPC_TORRENT_ADDED:
-            tr_core_add_torrent( cbdata->core,
-                                 tr_torrent_new_preexisting( tor ) );
+            tr_core_add_torrent( cbdata->core, tr_torrent_new_preexisting( tor ), TRUE );
             break;
 
         case TR_RPC_TORRENT_STARTED:
@@ -335,7 +332,6 @@ main( int     argc,
       char ** argv )
 {
     char *              err = NULL;
-    struct cbdata *     cbdata;
     GSList *            argfiles;
     GError *            gerr;
     gboolean            didinit = FALSE;
@@ -361,8 +357,6 @@ main( int     argc,
           _( "Where to look for configuration files" ), NULL },
         { NULL, 0,   0, 0, NULL, NULL, NULL }
     };
-
-    cbdata = g_new0( struct cbdata, 1 );
 
     /* bind the gettext domain */
     setlocale( LC_ALL, "" );
@@ -396,39 +390,51 @@ main( int     argc,
     tr_notify_init( );
     didinit = cf_init( configDir, NULL ); /* must come before actions_init */
 
-    myUIManager = gtk_ui_manager_new ( );
-    actions_init ( myUIManager, cbdata );
-    gtk_ui_manager_add_ui_from_string ( myUIManager, fallback_ui_file, -1, NULL );
-    gtk_ui_manager_ensure_update ( myUIManager );
-    gtk_window_set_default_icon_name ( MY_NAME );
-
     setupsighandlers( ); /* set up handlers for fatal signals */
 
-    /* either get a lockfile s.t. this is the one instance of
-     * transmission that's running, OR if there are files to
-     * be added, delegate that to the running instance via dbus */
     didlock = cf_lock( &tr_state, &err );
     argfiles = checkfilenames( argc - 1, argv + 1 );
+
     if( !didlock && argfiles )
     {
+        /* We have torrents to add but there's another copy of Transmsision
+         * running... chances are we've been invoked from a browser, etc.
+         * So send the files over to the "real" copy of Transmission, and
+         * if that goes well, then our work is done. */
         GSList * l;
         gboolean delegated = FALSE;
+
         for( l = argfiles; l; l = l->next )
             delegated |= gtr_dbus_add_torrent( l->data );
-        if( delegated )
-            err = NULL;
+
+        if( delegated ) {
+            g_slist_foreach( argfiles, (GFunc)g_free, NULL );
+            g_slist_free( argfiles );
+            argfiles = NULL;
+
+            if( err ) {
+                g_free( err );
+                err = NULL;
+            }
+        }
     }
     else if( ( !didlock ) && ( tr_state == TR_LOCKFILE_ELOCK ) )
     {
+        /* There's already another copy of Transmission running,
+         * so tell it to present its window to the user */
         gtr_dbus_present_window( );
         err = NULL;
     }
 
     if( didlock && ( didinit || cf_init( configDir, &err ) ) )
     {
+        /* No other copy of Transmission running...
+         * so we're going to be the primary. */
+
         const char * str;
         GtkWindow * win;
         tr_session * session;
+        struct cbdata * cbdata = g_new0( struct cbdata, 1 );
 
         /* ensure the directories are created */
        if(( str = pref_string_get( PREF_KEY_DIR_WATCH )))
@@ -441,6 +447,13 @@ main( int     argc,
         pref_flag_set( TR_PREFS_KEY_ALT_SPEED_ENABLED, tr_sessionUsesAltSpeed( session ) );
         pref_int_set( TR_PREFS_KEY_PEER_PORT, tr_sessionGetPeerPort( session ) );
         cbdata->core = tr_core_new( session );
+
+        /* init the ui manager */
+        myUIManager = gtk_ui_manager_new ( );
+        actions_init ( myUIManager, cbdata );
+        gtk_ui_manager_add_ui_from_string ( myUIManager, fallback_ui_file, -1, NULL );
+        gtk_ui_manager_ensure_update ( myUIManager );
+        gtk_window_set_default_icon_name ( MY_NAME );
 
         /* create main window now to be a parent to any error dialogs */
         win = GTK_WINDOW( tr_window_new( myUIManager, cbdata->core ) );
@@ -505,7 +518,7 @@ appsetup( TrWindow *      wind,
 
     /* add torrents from command-line and saved state */
     tr_core_load( cbdata->core, forcepause );
-    tr_core_add_list( cbdata->core, torrentFiles, start, prompt );
+    tr_core_add_list( cbdata->core, torrentFiles, start, prompt, TRUE );
     torrentFiles = NULL;
     tr_core_torrents_added( cbdata->core );
 
@@ -621,8 +634,10 @@ quitThreadFunc( gpointer gdata )
     tr_core_close( cbdata->core );
 
     /* shutdown the gui */
-    if( cbdata->details )
-        gtk_widget_destroy( GTK_WIDGET( cbdata->details ) );
+    if( cbdata->details ) {
+        g_slist_foreach( cbdata->details, (GFunc)gtk_widget_destroy, NULL );
+        g_slist_free( cbdata->details );
+    }
     if( cbdata->prefs )
         gtk_widget_destroy( GTK_WIDGET( cbdata->prefs ) );
     if( cbdata->wind )
@@ -697,6 +712,14 @@ wannaquit( void * vdata )
 
     /* clear the UI */
     gtk_list_store_clear( GTK_LIST_STORE( tr_core_model( cbdata->core ) ) );
+
+    /* ensure the window is in its previous position & size.
+     * this seems to be necessary because changing the main window's
+     * child seems to unset the size */
+    gtk_window_resize( cbdata->wind, pref_int_get( PREF_KEY_MAIN_WINDOW_WIDTH ),
+                                     pref_int_get( PREF_KEY_MAIN_WINDOW_HEIGHT ) );
+    gtk_window_move( cbdata->wind, pref_int_get( PREF_KEY_MAIN_WINDOW_X ),
+                                   pref_int_get( PREF_KEY_MAIN_WINDOW_Y ) );
 
     /* shut down libT */
     g_thread_create( quitThreadFunc, vdata, TRUE, NULL );
@@ -779,7 +802,7 @@ gotdrag( GtkWidget         * widget UNUSED,
         if( paths )
         {
             paths = g_slist_reverse( paths );
-            tr_core_add_list_defaults( data->core, paths );
+            tr_core_add_list_defaults( data->core, paths, TRUE );
             tr_core_torrents_added( data->core );
         }
 
@@ -895,7 +918,8 @@ on_main_window_focus_in( GtkWidget      * widget UNUSED,
 {
     struct cbdata * cbdata = gdata;
 
-    gtk_window_set_urgency_hint( GTK_WINDOW( cbdata->wind ), FALSE );
+    if( cbdata->wind )
+        gtk_window_set_urgency_hint( GTK_WINDOW( cbdata->wind ), FALSE );
 }
 
 #endif
@@ -911,7 +935,8 @@ onAddTorrent( TrCore *  core,
 #if GTK_CHECK_VERSION( 2, 8, 0 )
     g_signal_connect( w, "focus-in-event",
                       G_CALLBACK( on_main_window_focus_in ),  cbdata );
-    gtk_window_set_urgency_hint( cbdata->wind, TRUE );
+    if( cbdata->wind )
+        gtk_window_set_urgency_hint( cbdata->wind, TRUE );
 #endif
 }
 
@@ -925,9 +950,7 @@ prefschanged( TrCore * core UNUSED,
 
     if( !strcmp( key, TR_PREFS_KEY_ENCRYPTION ) )
     {
-        const int encryption = pref_int_get( key );
-        g_message( "setting encryption to %d", encryption );
-        tr_sessionSetEncryption( tr, encryption );
+        tr_sessionSetEncryption( tr, pref_int_get( key ) );
     }
     else if( !strcmp( key, TR_PREFS_KEY_DOWNLOAD_DIR ) )
     {
@@ -1283,6 +1306,13 @@ getFirstSelectedTorrent( struct cbdata * data )
     return tor;
 }
 
+static void
+detailsClosed( gpointer gdata, GObject * dead )
+{
+    struct cbdata * data = gdata;
+    data->details = g_slist_remove( data->details, dead );
+}
+
 void
 doAction( const char * action_name, gpointer user_data )
 {
@@ -1342,12 +1372,11 @@ doAction( const char * action_name, gpointer user_data )
     }
     else if( !strcmp( action_name, "show-torrent-properties" ) )
     {
-        if( data->details == NULL ) {
-            data->details = torrent_inspector_new( GTK_WINDOW( data->wind ), data->core );
-            g_object_add_weak_pointer( G_OBJECT( data->details ), &data->details );
-        }
-        refreshDetailsDialog( data );
-        gtk_widget_show( GTK_WIDGET( data->details ) );
+        GtkWidget * w = torrent_inspector_new( GTK_WINDOW( data->wind ), data->core );
+        data->details = g_slist_prepend( data->details, w );
+        g_object_weak_ref( G_OBJECT( w ), detailsClosed, data );
+        refreshDetailsDialog( data, w );
+        gtk_widget_show( w );
     }
     else if( !strcmp( action_name, "update-tracker" ) )
     {

@@ -43,10 +43,6 @@
  #include <fcntl.h>
 #endif
 
-#ifdef HAVE_FALLOCATE
- #include <linux/falloc.h>
-#endif
-
 #ifdef HAVE_XFS_XFS_H
  #include <xfs/xfs.h>
 #endif
@@ -180,18 +176,25 @@ preallocateFileFull( const char * filename, uint64_t length )
             success = !fcntl( fd, F_PREALLOCATE, &fst );
         }
 # endif
-# ifdef HAVE_FALLOCATE
-        if( !success )
-        {
-            success = !fallocate( fd, FALLOC_FL_KEEP_SIZE, 0, length );
-        }
-# endif
 # ifdef HAVE_POSIX_FALLOCATE
         if( !success )
         {
             success = !posix_fallocate( fd, 0, length );
         }
 # endif
+
+        if( !success ) /* if nothing else works, do it the old-fashioned way */
+        {
+            uint8_t buf[ 4096 ]; 
+            memset( buf, 0, sizeof( buf ) ); 
+            success = TRUE; 
+            while ( success && ( length > 0 ) ) 
+            { 
+                const int thisPass = MIN( length, sizeof( buf ) ); 
+                success = write( fd, buf, thisPass ) == thisPass; 
+                length -= thisPass; 
+            } 
+        }
 
         close( fd );
     }
@@ -621,18 +624,24 @@ tr_fdSocketAccept( int           b,
         /* "The ss_family field of the sockaddr_storage structure will always 
          * align with the family field of any protocol-specific structure." */ 
         if( sock.ss_family == AF_INET ) 
-        { 
-            struct sockaddr_in * sock4 = (struct sockaddr_in *)&sock; 
+        {
+            struct sockaddr_in *si;
+            union { struct sockaddr_storage dummy; struct sockaddr_in si; } s;
+            s.dummy = sock;
+            si = &s.si;
             addr->type = TR_AF_INET; 
-            addr->addr.addr4.s_addr = sock4->sin_addr.s_addr; 
-            *port = sock4->sin_port; 
+            addr->addr.addr4.s_addr = si->sin_addr.s_addr; 
+            *port = si->sin_port; 
         } 
         else 
         { 
-            struct sockaddr_in6 * sock6 = (struct sockaddr_in6 *)&sock; 
+            struct sockaddr_in6 *si;
+            union { struct sockaddr_storage dummy; struct sockaddr_in6 si; } s;
+            s.dummy = sock;
+            si = &s.si;
             addr->type = TR_AF_INET6; 
-            addr->addr.addr6 = sock6->sin6_addr;
-            *port = sock6->sin6_port; 
+            addr->addr.addr6 = si->sin6_addr;
+            *port = si->sin6_port; 
         } 
         ++gFd->socketCount;
     }

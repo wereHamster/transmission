@@ -61,7 +61,7 @@ getOldTorrentFilename( const tr_session * session,
                        const tr_info *   inf )
 {
     char *            ret;
-    struct evbuffer * buf = tr_getBuffer( );
+    struct evbuffer * buf = evbuffer_new( );
 
     evbuffer_add_printf( buf, "%s%c%s", tr_getTorrentDir( session ),
                          TR_PATH_DELIMITER,
@@ -70,7 +70,7 @@ getOldTorrentFilename( const tr_session * session,
         evbuffer_add_printf( buf, "-%s", session->tag );
 
     ret = tr_strndup( EVBUFFER_DATA( buf ), EVBUFFER_LENGTH( buf ) );
-    tr_releaseBuffer( buf );
+    evbuffer_free( buf );
     return ret;
 }
 
@@ -137,7 +137,7 @@ getfile( char        ** setme,
     }
     else
     {
-        struct evbuffer * buf = tr_getBuffer( );
+        struct evbuffer * buf = evbuffer_new( );
         int               n = tr_bencListSize( path );
         int               i;
 
@@ -155,7 +155,7 @@ getfile( char        ** setme,
 
         *setme = tr_utf8clean( (char*)EVBUFFER_DATA( buf ), EVBUFFER_LENGTH( buf ), NULL );
         /* fprintf( stderr, "[%s]\n", *setme ); */
-        tr_releaseBuffer( buf );
+        evbuffer_free( buf );
         err = 0;
     }
 
@@ -231,15 +231,19 @@ announceToScrape( const char * announce )
      * it will be taken as a sign that that tracker doesn't support
      * the scrape convention. If it does, substitute 'scrape' for
      * 'announce' to find the scrape page.  */
-    if( ( ( s =
-               strrchr( announce, '/' ) ) ) && !strncmp( ++s, "announce", 8 ) )
+    if( ( ( s = strrchr( announce, '/' ) ) ) && !strncmp( ++s, "announce", 8 ) )
     {
-        struct evbuffer * buf = tr_getBuffer( );
-        evbuffer_add( buf, announce, s - announce );
-        evbuffer_add( buf, "scrape", 6 );
-        evbuffer_add_printf( buf, "%s", s + 8 );
-        scrape = tr_strdup( EVBUFFER_DATA( buf ) );
-        tr_releaseBuffer( buf );
+        const char * prefix = announce;
+        const size_t prefix_len = s - announce;
+        const char * suffix = s + 8;
+        const size_t suffix_len = strlen( suffix );
+        const size_t alloc_len = prefix_len + 6 + suffix_len + 1;
+        char * walk = scrape = tr_new( char, alloc_len );
+        memcpy( walk, prefix, prefix_len ); walk += prefix_len;
+        memcpy( walk, "scrape", 6 );        walk += 6;
+        memcpy( walk, suffix, suffix_len ); walk += suffix_len;
+        *walk++ = '\0';
+        assert( walk - scrape == (int)alloc_len );
     }
 
     return scrape;
