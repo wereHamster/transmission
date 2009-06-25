@@ -303,12 +303,12 @@ torrentPage( GObject * core )
     hig_workarea_add_wide_control( t, &row, w );
 
     w = new_path_chooser_button( TR_PREFS_KEY_DOWNLOAD_DIR, core );
-    hig_workarea_add_row( t, &row, _( "_Destination folder:" ), w, NULL );
+    hig_workarea_add_row( t, &row, _( "Save to _Location:" ), w, NULL );
 
     hig_workarea_add_section_divider( t, &row );
     hig_workarea_add_section_title( t, &row, _( "Limits" ) );
 
-    s = _( "_Stop seeding torrents at ratio:" );
+    s = _( "_Seed torrent until its ratio reaches:" );
     w = new_check_button( s, TR_PREFS_KEY_RATIO_ENABLED, core );
     w2 = new_spin_button_double( TR_PREFS_KEY_RATIO, core, 0, INT_MAX, .05 );
     gtk_widget_set_sensitive( GTK_WIDGET( w2 ), pref_flag_get( TR_PREFS_KEY_RATIO_ENABLED ) );
@@ -332,17 +332,17 @@ desktopPage( GObject * core )
     GtkWidget *  w;
 
     t = hig_workarea_create( );
-    hig_workarea_add_section_title( t, &row, _( "Options" ) );
+    hig_workarea_add_section_title( t, &row, _( "Desktop" ) );
 
-    s = _( "Inhibit desktop _hibernation when torrents are active" );
+    s = _( "Inhibit _hibernation when torrents are active" );
     w = new_check_button( s, PREF_KEY_INHIBIT_HIBERNATION, core );
     hig_workarea_add_wide_control( t, &row, w );
 
-    s = _( "Show _icon in the desktop Notification Area" );
+    s = _( "Show Transmission in the system _tray" );
     w = new_check_button( s, PREF_KEY_SHOW_TRAY_ICON, core );
     hig_workarea_add_wide_control( t, &row, w );
 
-    s = _( "Show desktop _notifications" );
+    s = _( "Show popup _notifications" );
     w = new_check_button( s, PREF_KEY_SHOW_DESKTOP_NOTIFICATION, core );
     hig_workarea_add_wide_control( t, &row, w );
 
@@ -418,9 +418,9 @@ onBlocklistUpdate( GtkButton * w, gpointer gdata )
                                 GTK_DIALOG_DESTROY_WITH_PARENT,
                                 GTK_MESSAGE_INFO,
                                 GTK_BUTTONS_CLOSE,
-                               _( "Update Blocklist" ) );
+                                "%s", _( "Update Blocklist" ) );
     gtk_widget_set_sensitive( data->updateBlocklistButton, FALSE );
-    gtk_message_dialog_format_secondary_text( GTK_MESSAGE_DIALOG( d ), _( "Getting new blocklist..." ) );
+    gtk_message_dialog_format_secondary_text( GTK_MESSAGE_DIALOG( d ), "%s", _( "Getting new blocklist..." ) );
     data->updateBlocklistDialog = d;
     g_signal_connect( d, "response", G_CALLBACK(onBlocklistUpdateResponse), data );
     gtk_widget_show( d );
@@ -455,9 +455,9 @@ new_encryption_combo( GObject * core, const char * key )
         int value;
         const char * text;
     } items[] = {
-        { TR_CLEAR_PREFERRED,      N_( "Plaintext Preferred" )  },
-        { TR_ENCRYPTION_PREFERRED, N_( "Encryption Preferred" ) },
-        { TR_ENCRYPTION_REQUIRED,  N_( "Encryption Required" )  }
+        { TR_CLEAR_PREFERRED,      N_( "Plaintext preferred" )  },
+        { TR_ENCRYPTION_PREFERRED, N_( "Encryption preferred" ) },
+        { TR_ENCRYPTION_REQUIRED,  N_( "Encryption required" )  }
     };
 
     /* build a store for encryption */
@@ -524,17 +524,9 @@ peerPage( GObject * core )
     target_cb( data->check, w );
 
     hig_workarea_add_section_divider( t, &row );
-    hig_workarea_add_section_title( t, &row, _( "Limits" ) );
-
-    w = new_spin_button( TR_PREFS_KEY_PEER_LIMIT_GLOBAL, core, 1, 3000, 5 );
-    hig_workarea_add_row( t, &row, _( "Maximum peers _overall:" ), w, NULL );
-    w = new_spin_button( TR_PREFS_KEY_PEER_LIMIT_TORRENT, core, 1, 300, 5 );
-    hig_workarea_add_row( t, &row, _( "Maximum peers per _torrent:" ), w, NULL );
-
-    hig_workarea_add_section_divider( t, &row );
     hig_workarea_add_section_title ( t, &row, _( "Privacy" ) );
 
-    s = _( "_Encryption mode" );
+    s = _( "_Encryption mode:" );
     w = new_encryption_combo( core, "encryption" );
     hig_workarea_add_row( t, &row, s, w, NULL );
 
@@ -544,11 +536,21 @@ peerPage( GObject * core )
     gtr_widget_set_tooltip_text( w, s );
     hig_workarea_add_wide_control( t, &row, w );
 
+#ifndef WITHOUT_DHT
     s = _( "Use _DHT to find more peers" );
     w = new_check_button( s, TR_PREFS_KEY_DHT_ENABLED, core );
     s = _( "DHT is a tool for finding peers without a tracker." );
     gtr_widget_set_tooltip_text( w, s );
     hig_workarea_add_wide_control( t, &row, w );
+#endif
+
+    hig_workarea_add_section_divider( t, &row );
+    hig_workarea_add_section_title( t, &row, _( "Limits" ) );
+
+    w = new_spin_button( TR_PREFS_KEY_PEER_LIMIT_TORRENT, core, 1, 300, 5 );
+    hig_workarea_add_row( t, &row, _( "Maximum peers per _torrent:" ), w, NULL );
+    w = new_spin_button( TR_PREFS_KEY_PEER_LIMIT_GLOBAL, core, 1, 3000, 5 );
+    hig_workarea_add_row( t, &row, _( "Maximum peers _overall:" ), w, NULL );
 
     hig_workarea_finish( t, &row );
     g_object_weak_ref( G_OBJECT( t ), peerPageDestroyed, data );
@@ -756,16 +758,16 @@ webPage( GObject * core )
     t = hig_workarea_create( );
     g_object_set_data_full( G_OBJECT( t ), "page", page, g_free );
 
-    hig_workarea_add_section_title( t, &row, _( "Web Interface" ) );
+    hig_workarea_add_section_title( t, &row, _( "Web Client" ) );
 
     /* "enabled" checkbutton */
-    s = _( "_Enable web interface" );
+    s = _( "_Enable web client" );
     w = new_check_button( s, TR_PREFS_KEY_RPC_ENABLED, core );
     page->rpc_tb = GTK_TOGGLE_BUTTON( w );
     g_signal_connect( w, "clicked", G_CALLBACK( onRPCToggled ), page );
     h = gtk_hbox_new( FALSE, GUI_PAD_BIG );
     gtk_box_pack_start( GTK_BOX( h ), w, TRUE, TRUE, 0 );
-    w = gtr_button_new_from_stock( GTK_STOCK_OPEN, _( "_Open web interface" ) );
+    w = gtr_button_new_from_stock( GTK_STOCK_OPEN, _( "_Open web client" ) );
     page->widgets = g_slist_append( page->widgets, w );
     g_signal_connect( w, "clicked", G_CALLBACK( onLaunchClutchCB ), NULL );
     gtk_box_pack_start( GTK_BOX( h ), w, FALSE, FALSE, 0 );
@@ -778,7 +780,7 @@ webPage( GObject * core )
     page->widgets = g_slist_append( page->widgets, w );
 
     /* require authentication */
-    s = _( "_Require username" );
+    s = _( "Use _authentication" );
     w = new_check_button( s, TR_PREFS_KEY_RPC_AUTH_REQUIRED, core );
     hig_workarea_add_wide_control( t, &row, w );
     page->auth_tb = GTK_TOGGLE_BUTTON( w );
@@ -801,7 +803,7 @@ webPage( GObject * core )
     page->auth_widgets = g_slist_append( page->auth_widgets, w );
 
     /* require authentication */
-    s = _( "Only allow the following IP _addresses to connect:" );
+    s = _( "Only allow these IP a_ddresses to connect:" );
     w = new_check_button( s, TR_PREFS_KEY_RPC_WHITELIST_ENABLED, core );
     hig_workarea_add_wide_control( t, &row, w );
     page->whitelist_tb = GTK_TOGGLE_BUTTON( w );
@@ -964,7 +966,7 @@ trackerPage( GObject * core )
     page->core = TR_CORE( core );
 
     t = hig_workarea_create( );
-    hig_workarea_add_section_title ( t, &row, _( "Tracker Proxy" ) );
+    hig_workarea_add_section_title ( t, &row, _( "Tracker" ) );
 
     s = _( "Connect to tracker via a pro_xy" );
     w = new_check_button( s, TR_PREFS_KEY_PROXY_ENABLED, core );
@@ -995,7 +997,7 @@ trackerPage( GObject * core )
     w = hig_workarea_add_row( t, &row, s, w, NULL );
     page->proxy_widgets = g_slist_append( page->proxy_widgets, w );
 
-    s = _( "_Authentication is required" );
+    s = _( "Use _authentication" );
     w = new_check_button( s, TR_PREFS_KEY_PROXY_AUTH_ENABLED, core );
     g_signal_connect( w, "toggled", G_CALLBACK( onProxyToggled ), page );
     hig_workarea_add_wide_control( t, &row, w );
@@ -1170,17 +1172,18 @@ bandwidthPageFree( gpointer gpage )
 static GtkWidget*
 bandwidthPage( GObject * core )
 {
-    int                    row = 0;
-    const char *           s;
-    GtkWidget *            t;
-    GtkWidget *            w, * w2, * h;
+    int row = 0;
+    const char * s;
+    GtkWidget * t;
+    GtkWidget * l;
+    GtkWidget * w, * w2, * h;
     char buf[512];
     struct BandwidthPage * page = tr_new0( struct BandwidthPage, 1 );
 
     page->core = TR_CORE( core );
 
     t = hig_workarea_create( );
-    hig_workarea_add_section_title( t, &row, _( "Global Bandwidth Limits" ) );
+    hig_workarea_add_section_title( t, &row, _( "Speed Limits" ) );
 
         s = _( "Limit _download speed (KB/s):" );
         w = new_check_button( s, TR_PREFS_KEY_DSPEED_ENABLED, core );
@@ -1200,12 +1203,19 @@ bandwidthPage( GObject * core )
     h = gtk_hbox_new( FALSE, GUI_PAD );
     w = gtk_image_new_from_stock( "alt-speed-off", -1 );
     gtk_box_pack_start( GTK_BOX( h ), w, FALSE, FALSE, 0 );
-    g_snprintf( buf, sizeof( buf ), "<b>%s</b>", _( "Speed Limit Mode" ) );
+    g_snprintf( buf, sizeof( buf ), "<b>%s</b>", _( "Temporary Speed Limits" ) );
     w = gtk_label_new( buf );
     gtk_misc_set_alignment( GTK_MISC( w ), 0.0f, 0.5f );
     gtk_label_set_use_markup( GTK_LABEL( w ), TRUE );
     gtk_box_pack_start( GTK_BOX( h ), w, FALSE, FALSE, 0 );
     hig_workarea_add_section_title_widget( t, &row, h );
+
+        s = _( "Override normal speed limits manually or at scheduled times" );
+        g_snprintf( buf, sizeof( buf ), "<small>%s</small>", s );
+        w = gtk_label_new( buf );
+        gtk_label_set_use_markup( GTK_LABEL( w ), TRUE );
+        gtk_misc_set_alignment( GTK_MISC( w ), 0.5f, 0.5f );
+        hig_workarea_add_wide_control( t, &row, w );
 
         s = _( "Limit do_wnload speed (KB/s):" );
         w = new_spin_button( TR_PREFS_KEY_ALT_SPEED_DOWN, core, 0, INT_MAX, 5 );
@@ -1215,21 +1225,16 @@ bandwidthPage( GObject * core )
         w = new_spin_button( TR_PREFS_KEY_ALT_SPEED_UP, core, 0, INT_MAX, 5 );
         hig_workarea_add_row( t, &row, s, w, NULL );
 
-        g_snprintf( buf, sizeof( buf ), "<small>%s</small>", _( "When enabled, Speed Limit Mode overrides the Global Bandwidth Limits" ) );
-        w = gtk_label_new( buf );
-        gtk_label_set_use_markup( GTK_LABEL( w ), TRUE );
-        gtk_misc_set_alignment( GTK_MISC( w ), 0.5f, 0.5f );
-        hig_workarea_add_wide_control( t, &row, w );
-
-        s = _( "Use Speed Limit Mode _between:" ); 
+        s = _( "_Scheduled times:" ); 
         h = gtk_hbox_new( FALSE, 0 );
         w2 = new_time_combo( core, TR_PREFS_KEY_ALT_SPEED_TIME_BEGIN );
         page->sched_widgets = g_slist_append( page->sched_widgets, w2 );
         gtk_box_pack_start( GTK_BOX( h ), w2, TRUE, TRUE, 0 );
-        w2 = gtk_label_new ( _( " and " ) );
+        w2 = l = gtk_label_new_with_mnemonic ( _( " _to " ) );
         page->sched_widgets = g_slist_append( page->sched_widgets, w2 );
         gtk_box_pack_start( GTK_BOX( h ), w2, FALSE, FALSE, 0 );
         w2 = new_time_combo( core, TR_PREFS_KEY_ALT_SPEED_TIME_END );
+        gtk_label_set_mnemonic_widget( GTK_LABEL( l ), w2 );
         page->sched_widgets = g_slist_append( page->sched_widgets, w2 );
         gtk_box_pack_start( GTK_BOX( h ), w2, TRUE, TRUE, 0 );
         w = new_check_button( s, TR_PREFS_KEY_ALT_SPEED_TIME_ENABLED, core );
@@ -1341,12 +1346,12 @@ networkPage( GObject * core )
     data->prefsTag = g_signal_connect( TR_CORE( core ), "prefs-changed", G_CALLBACK( onCorePrefsChanged ), data );
     g_object_weak_ref( G_OBJECT( t ), networkPageDestroyed, data );
 
-    s = _( "_Randomize the port every launch" );
-    w = new_check_button( s, TR_PREFS_KEY_PEER_PORT_RANDOM_ON_START, core );
-    hig_workarea_add_wide_control( t, &row, w );
-
     s = _( "Use UPnP or NAT-PMP port _forwarding from my router" );
     w = new_check_button( s, TR_PREFS_KEY_PORT_FORWARDING, core );
+    hig_workarea_add_wide_control( t, &row, w );
+
+    s = _( "Pick a _random port every time Transmission is started" );
+    w = new_check_button( s, TR_PREFS_KEY_PEER_PORT_RANDOM_ON_START, core );
     hig_workarea_add_wide_control( t, &row, w );
 
     hig_workarea_finish( t, &row );
@@ -1398,7 +1403,7 @@ tr_prefs_dialog_new( GObject *   core,
                               gtk_label_new ( _( "Web" ) ) );
     gtk_notebook_append_page( GTK_NOTEBOOK( n ),
                               trackerPage( core ),
-                              gtk_label_new ( _( "Trackers" ) ) );
+                              gtk_label_new ( _( "Proxy" ) ) );
 
     g_signal_connect( d, "response", G_CALLBACK( response_cb ), core );
     gtk_box_pack_start( GTK_BOX( GTK_DIALOG( d )->vbox ), n, TRUE, TRUE, 0 );

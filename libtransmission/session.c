@@ -392,7 +392,7 @@ tr_sessionGetDefaultSettings( tr_benc * d )
     tr_bencDictAddInt ( d, TR_PREFS_KEY_ALT_SPEED_TIME_DAY,       TR_SCHED_ALL );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_USPEED,                   100 );
     tr_bencDictAddBool( d, TR_PREFS_KEY_USPEED_ENABLED,           FALSE );
-    tr_bencDictAddInt ( d, TR_PREFS_KEY_UPLOAD_SLOTS_PER_TORRENT, 14 );
+    tr_bencDictAddInt ( d, TR_PREFS_KEY_UPLOAD_SLOTS_PER_TORRENT, 10 );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_BIND_ADDRESS_IPV4,        TR_DEFAULT_BIND_ADDRESS_IPV4 );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_BIND_ADDRESS_IPV6,        TR_DEFAULT_BIND_ADDRESS_IPV6 );
 }
@@ -837,7 +837,13 @@ tr_sessionInitImpl( void * vdata )
     dbgmsg( "returning session %p; session->tracker is %p", session, session->tracker );
 
     if( session->isDHTEnabled )
-        tr_dhtInit(session);
+    {
+#ifdef WITHOUT_DHT
+        tr_inf( "DHT disabled by packager." );
+#else
+        tr_dhtInit( session );
+#endif
+    }
 }
 
 /***
@@ -1585,6 +1591,16 @@ tr_sessionIsPexEnabled( const tr_session * session )
     assert( tr_isSession( session ) );
 
     return session->isPexEnabled;
+}
+
+tr_bool
+tr_sessionAllowsDHT( const tr_session * session UNUSED )
+{
+#ifdef WITHOUT_DHT
+    return 0;
+#else
+    return tr_sessionIsDHTEnabled( session );
+#endif
 }
 
 tr_bool

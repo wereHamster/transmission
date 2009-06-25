@@ -3,8 +3,8 @@ dnl STATUS: "X" for prerelease beta builds,
 dnl         "Z" for unsupported trunk builds,
 dnl         "0" for stable, supported releases
 dnl these should be the only two lines you need to change
-m4_define([user_agent_prefix],[1.72])
-m4_define([peer_id_prefix],[-TR1720-])
+m4_define([user_agent_prefix],[1.72+])
+m4_define([peer_id_prefix],[-TR172Z-])
 
 AC_INIT([transmission],
         [user_agent_prefix],
@@ -193,6 +193,28 @@ AC_SUBST(LIBEVENT_LIBS)
 
 dnl ----------------------------------------------------------------------------
 dnl
+dnl  dht
+
+
+AC_ARG_ENABLE([dht], 
+              AS_HELP_STRING([--disable-dht],[omit DHT support]), 
+              [enable_dht=${enableval}], 
+              [enable_dht=yes]) 
+if test "x$enable_dht" = "xno" ; then 
+    AC_DEFINE([WITHOUT_DHT], 1) 
+    DHT_CFLAGS=""
+    DHT_LIBS=""
+else
+    DHT_CFLAGS="-I\$(top_srcdir)/third-party/dht"
+    DHT_LIBS="\$(top_builddir)/third-party/dht/libdht.a"
+fi
+AM_CONDITIONAL(DHT, test "x$enable_dht" = "xyes") 
+AC_SUBST(DHT_CFLAGS)
+AC_SUBST(DHT_LIBS)
+
+
+dnl ----------------------------------------------------------------------------
+dnl
 dnl  detection for the GTK+ client
 
 PKG_CHECK_MODULES(GTK,
@@ -275,6 +297,16 @@ AC_ARG_ENABLE([nls],
 if test "x$build_gtk" = "xyes" -a  "x$enable_nls" = "xno" ; then
     AC_MSG_ERROR("The gtk client cannot be built without nls support.  Try adding either --enable-nls or --disable-gtk" )
 fi
+
+dnl This section is only used for internationalization.
+dnl If you don't need translations and this section gives you trouble --
+dnl such as if you're building for a headless system --
+dnl it's okay to tear this section out and re-build the configure script.
+dnl
+dnl Note to packagers: the bump to intltool 0.40 was made to fix
+dnl a "make check" failure on some systems.  if upgrading to 0.40 is
+dnl a problem and the old version was working fine for you,
+dnl it should be safe to re-edit 0.40 back down to 0.23
 
 use_nls=no
 if test "x$enable_nls" = "xyes" ; then
@@ -387,6 +419,7 @@ Configuration:
         Source code location:          ${srcdir}
         Compiler:                      ${CXX}
         System or bundled libevent:    ${libevent_source}
+        DHT support:                   ${enable_dht}
 
         Build OS X client:             ${build_mac}
         Build GTK+ client:             ${build_gtk}

@@ -393,7 +393,7 @@ addTorrentErrorDialog( GtkWidget *  child,
                                GTK_DIALOG_DESTROY_WITH_PARENT,
                                GTK_MESSAGE_ERROR,
                                GTK_BUTTONS_CLOSE,
-                               _( "Error opening torrent" ) );
+                               "%s", _( "Error opening torrent" ) );
     gtk_message_dialog_format_secondary_text( GTK_MESSAGE_DIALOG( w ),
                                               "%s", secondary );
     g_signal_connect_swapped( w, "response",
@@ -687,5 +687,16 @@ gtr_widget_set_tooltip_text( GtkWidget * w, const char * tip )
     if( tips == NULL )
         tips = gtk_tooltips_new( );
     gtk_tooltips_set_tip( tips, w, tip, NULL );
+#endif
+}
+
+void
+gtr_toolbar_set_orientation( GtkToolbar      * toolbar,
+                             GtkOrientation    orientation )
+{
+#if GTK_CHECK_VERSION( 2,16,0 )
+    gtk_orientable_set_orientation( GTK_ORIENTABLE( toolbar ), orientation );
+#else
+    gtk_toolbar_set_orientation( toolbar, orientation );
 #endif
 }
