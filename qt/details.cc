@@ -269,14 +269,14 @@ Details :: refresh( )
     else {
         QString pct = locale.toString( 100.0*((sizeWhenDone-leftUntilDone)/sizeWhenDone), 'f', 2 );
         if( !haveUnverified )
-            string = tr( "%1 (%2 verified)" )
-                     .arg( pct )
-                     .arg( Utils :: sizeToString( haveVerified ) );
+            string = tr( "%1 (%2%)" )
+                         .arg( Utils :: sizeToString( haveVerified + haveUnverified ) )
+                         .arg( pct );
         else
-            string = tr( "%1 (%2 verified, %3 unverified)" )
-                     .arg( pct )
-                     .arg( Utils :: sizeToString( haveVerified ) )
-                     .arg( Utils :: sizeToString( haveUnverified ) );
+            string = tr( "%1 (%2%); %3 Unverified" )
+                         .arg( Utils :: sizeToString( haveVerified + haveUnverified ) )
+                         .arg( pct )
+                         .arg( Utils :: sizeToString( haveUnverified ) );
     }
     myHaveLabel->setText( string );
 
@@ -292,7 +292,7 @@ Details :: refresh( )
         const QString dstr = Utils::sizeToString( d );
         const QString fstr = Utils::sizeToString( f );
         if( f )
-            string = tr( "%1 (+%2s corrupt)" ).arg( dstr ).arg( fstr );
+            string = tr( "%1 (+%2 corrupt)" ).arg( dstr ).arg( fstr );
         else
             string = dstr;
     }
@@ -934,9 +934,9 @@ Details :: createOptionsTab( )
     connect( s, SIGNAL(valueChanged(int)), this, SLOT(onUploadLimitChanged(int)));
 
     m = new QComboBox;
-    m->addItem( tr( "Low" ),    TR_PRI_LOW );
-    m->addItem( tr( "Normal" ), TR_PRI_NORMAL );
     m->addItem( tr( "High" ),   TR_PRI_HIGH );
+    m->addItem( tr( "Normal" ), TR_PRI_NORMAL );
+    m->addItem( tr( "Low" ),    TR_PRI_LOW );
     connect( m, SIGNAL(currentIndexChanged(int)), this, SLOT(onBandwidthPriorityChanged(int)));
     hig->addRow( tr( "Torrent &priority:" ), m );
     myBandwidthPriorityCombo = m;
