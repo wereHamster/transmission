@@ -17,6 +17,7 @@
 
 #include <assert.h>
 #include <limits.h> /* INT_MAX */
+#include <math.h> /* fabs */
 #include <string.h> /* memcmp */
 #include <stdlib.h> /* qsort */
 
@@ -947,8 +948,19 @@ tr_torrentStat( tr_torrent * tor )
                 s->eta = TR_ETA_NOT_AVAIL;
             else if( s->pieceDownloadSpeed < 0.1 )
                 s->eta = TR_ETA_UNKNOWN;
-            else
-                s->eta = s->leftUntilDone / s->pieceDownloadSpeed / 1024.0;
+            else {
+                /* etaSpeed exists because if we pieceDownloadSpeed directly,
+                 * brief fluctuations cause the ETA to jump all over the place.
+                 * so, etaSpeed is a smoothed-out version of pieceDownloadSpeed
+                 * to dampen the effect of fluctuations */
+                if( ( tor->etaSpeedCalculatedAt + 800 ) < now ) {
+                    tor->etaSpeedCalculatedAt = now;
+                    tor->etaSpeed = (fabs(tor->etaSpeed)<0.0001)
+                        ? s->pieceDownloadSpeed /* if no previous speed, no need to smooth */
+                        : 0.8*tor->etaSpeed + 0.2*s->pieceDownloadSpeed; /* smooth across 5 readings */
+                }
+                s->eta = s->leftUntilDone / tor->etaSpeed / 1024.0;
+            }
             break;
 
         case TR_STATUS_SEED:
@@ -2284,7 +2296,7 @@ setLocation( void * vdata )
         if( !err )
         {
             /* blow away the leftover subdirectories in the old location */
-            tr_torrentDeleteLocalData( tor, unlink );
+            tr_torrentDeleteLocalData( tor, remove );
 
             /* set the new location and reverify */
             tr_torrentSetDownloadDir( tor, location );

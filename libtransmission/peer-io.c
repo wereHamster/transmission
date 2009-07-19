@@ -267,6 +267,12 @@ tr_evbuffer_write( tr_peerIo * io, int fd, size_t howmuch )
     if( n > 0 )
         evbuffer_drain( buffer, n );
 
+    /* keep the iobuf's excess capacity from growing too large */
+    if( EVBUFFER_LENGTH( io->outbuf ) == 0 ) {
+        evbuffer_free( io->outbuf );
+        io->outbuf = evbuffer_new( );
+    }
+
     return n;
 }
 

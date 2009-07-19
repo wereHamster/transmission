@@ -42,7 +42,10 @@ body.landscape div#dialog_container, body.landscape div#torrent_inspector {
 	min-height: 143px;
 }
 
-body.inspector_showing #torrent_filter_bar, body.inspector_showing #torrent_container, body.dialog_showing #torrent_filter_bar, body.dialog_showing #torrent_container, body.dialog_showing #torrent_inspector, body.dialog_showing #prefs_container, body.prefs_showing #torrent_inspector, body.prefs_showing #torrent_filter_bar, body.prefs_showing #torrent_container {
+body.inspector_showing #torrent_filter_bar, body.inspector_showing #torrent_container,
+body.dialog_showing #torrent_filter_bar, body.dialog_showing #torrent_container, body.dialog_showing #torrent_inspector, body.dialog_showing #prefs_container,
+body.prefs_showing #torrent_inspector, body.prefs_showing #torrent_filter_bar, body.prefs_showing #torrent_container,
+body.open_showing #torrent_filter_bar, body.open_showing #torrent_container {
 	display: none !important;
 }
 
@@ -81,7 +84,7 @@ div.torrent_global_menu ul li {
 	display: inline-block;
 }
 
-li#remove, li#removedata {
+li#remove, li#open {
 	float: left;
 }
 
@@ -106,10 +109,6 @@ div.torrent_global_menu ul li.disabled {
 	opacity: 0.25;
 }
 
-div.torrent_global_menu ul li#open {
-	display: none;
-}
-
 div.torrent_global_menu ul li div div.toolbar_image {
 	width: 32px;
 	height: 32px;
@@ -118,10 +117,6 @@ div.torrent_global_menu ul li div div.toolbar_image {
 }
 
 div.torrent_global_menu ul li#remove div div.toolbar_image {
-	background-position: left -32px;
-}
-
-div.torrent_global_menu ul li#removedata div div.toolbar_image {
 	background-position: left -32px;
 }
 
@@ -182,7 +177,7 @@ div.torrent_global_details div#torrent_global_transfer {
 	float: left;
 }
 
-div.torrent_global_details div#torrent_global_upload, 
+div.torrent_global_details div#torrent_global_upload,
 div.torrent_global_details div#torrent_global_download {
 	float: right;
 }
@@ -398,6 +393,10 @@ div#dialog_message.dialog_message {
 	padding-bottom: 0;
 }
 
+#torrent_upload_file, label[for="torrent_upload_file"]{
+  display:none;
+}
+
 h2.dialog_heading {
 	text-align: center;
 	width: 300px;
@@ -411,12 +410,11 @@ div.dialog_container a {
 	background: #222;
 	text-decoration: none;
 	border: 2px solid white;
-	margin: 0 0 0;
+	margin: 5px 5px 0;
 	font-weight: bold;
 	-webkit-border-radius: 16px;
-	display: block;
+	display: inline-block;
 	width: 90px;
-	position: absolute;
 	font-size: 12px;
 	text-align: center;
 }
@@ -722,21 +720,12 @@ div.file_priority_control {
 	cursor: pointer;
 }
 div.file_priority_control.normal {
-	background-position: left top;
-}
-div.file_priority_control.normal:hover {
 	background-position: right top;
 }
 div.file_priority_control.high {
-	background-position: left -19px;
-}
-div.file_priority_control.high:hover {
 	background-position: right -19px;
 }
 div.file_priority_control.low {
-	background-position: left -38px;
-}
-div.file_priority_control.low:hover {
 	background-position: right -38px;
 }
 ul.single_file li.inspector_torrent_file_list_entry>.file_priority_control, li.inspector_torrent_file_list_entry.complete div.file_priority_control {

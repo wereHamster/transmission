@@ -108,7 +108,7 @@ TransmissionRemote.prototype =
 				'peersConnected', 'peersGettingFromUs', 'peersSendingToUs',
 				'rateDownload', 'rateUpload', 'seeders', 'sizeWhenDone',
 				'status', 'swarmSpeed', 'totalSize', 'uploadedEver',
-				'downloadDir', 'torrentFile', 'files', 'fileStats' ]
+				'downloadDir', 'files', 'fileStats' ]
 			}
 		};
 
@@ -154,7 +154,7 @@ TransmissionRemote.prototype =
 		};
 		o.arguments[command] = [ file._index ];
 		this.sendRequest( o, function( ) {
-			remote.loadTorrentFiles( torrent_ids );
+			remote._controller.refreshTorrents( torrent_ids );
 		} );
 	},
 	

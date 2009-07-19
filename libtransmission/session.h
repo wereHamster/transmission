@@ -54,6 +54,8 @@ struct tr_session
 
     tr_benc                      removedTorrents;
     
+    int                          umask;
+
     int                          speedLimit[2];
     tr_bool                      speedLimitEnabled[2];
 
@@ -139,10 +141,6 @@ struct tr_session
 };
 
 tr_bool      tr_sessionAllowsDHT( const tr_session * session );
-
-tr_bool      tr_sessionGetActiveSpeedLimit( const tr_session  * session,
-                                            tr_direction        dir,
-                                            int               * setme );
 
 const char * tr_sessionFindTorrentFile( const tr_session * session,
                                         const char *       hashString );

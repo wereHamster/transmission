@@ -29,6 +29,7 @@
 #include <glib/gi18n.h>
 
 #include <libtransmission/transmission.h>
+#include <libtransmission/utils.h> /* tr_truncd() */
 
 #include "tr-prefs.h"
 #include "tr-torrent.h"
@@ -167,7 +168,7 @@ completenessChangedCallback( tr_torrent       * tor,
                              void *             user_data )
 {
     if( ( completeness != TR_LEECH ) && ( tr_torrentStat( tor )->sizeWhenDone != 0 ) )
-        g_idle_add( notifyInMainThread, user_data );
+        gtr_idle_add( notifyInMainThread, user_data );
 }
 
 static TrTorrent *
@@ -229,16 +230,14 @@ tr_torrent_status_str( TrTorrent * gtor )
     {
         case TR_STATUS_CHECK_WAIT:
             top =
-                g_strdup_printf( _(
-                                     "Waiting to verify local data (%.1f%% tested)" ),
-                                 st->recheckProgress * 100.0 );
+                g_strdup_printf( _( "Waiting to verify local data (%.1f%% tested)" ),
+                                 tr_truncd( 100 * st->recheckProgress, 1 ) );
             break;
 
         case TR_STATUS_CHECK:
             top =
-                g_strdup_printf( _(
-                                     "Verifying local data (%.1f%% tested)" ),
-                                 st->recheckProgress * 100.0 );
+                g_strdup_printf( _( "Verifying local data (%.1f%% tested)" ),
+                                 tr_truncd( 100 * st->recheckProgress, 1 ) );
             break;
 
         case TR_STATUS_DOWNLOAD:

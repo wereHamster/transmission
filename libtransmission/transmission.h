@@ -202,6 +202,7 @@ const char* tr_getDefaultDownloadDir( void );
 #define TR_PREFS_KEY_DSPEED_ENABLED             "speed-limit-down-enabled"
 #define TR_PREFS_KEY_USPEED_ENABLED             "speed-limit-up-enabled"
 #define TR_PREFS_KEY_USPEED                     "speed-limit-up"
+#define TR_PREFS_KEY_UMASK                      "umask"
 #define TR_PREFS_KEY_UPLOAD_SLOTS_PER_TORRENT   "upload-slots-per-torrent"
 
 
@@ -628,6 +629,12 @@ tr_sched_day tr_sessionGetAltSpeedDay ( const tr_session * );
 typedef void ( tr_altSpeedFunc )      ( tr_session *, tr_bool active, tr_bool userDriven, void * );
 void     tr_sessionClearAltSpeedFunc  ( tr_session * );
 void     tr_sessionSetAltSpeedFunc    ( tr_session *, tr_altSpeedFunc *, void * );
+
+
+tr_bool      tr_sessionGetActiveSpeedLimit( const tr_session  * session,
+                                            tr_direction        dir,
+                                            int               * setme );
+
 
 /***
 ****

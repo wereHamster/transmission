@@ -1600,6 +1600,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = BE11834C0CE160A80002D0F3 /* Build configuration list for PBXNativeTarget "miniupnp" */;
 			buildPhases = (
+				A2305097100C0293003FDB0C /* ShellScript */,
 				BE1183440CE160960002D0F3 /* Headers */,
 				BE1183450CE160960002D0F3 /* Sources */,
 				BE1183460CE160960002D0F3 /* Frameworks */,
@@ -1824,7 +1825,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "sh macosx/version.sh";
+			shellScript = "sh update-version-h.sh";
+		};
+		A2305097100C0293003FDB0C /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/third-party/miniupnp/miniupnpcstrings.h.in",
+			);
+			outputPaths = (
+				"$(SRCROOT)/third-party/miniupnp/miniupnpcstrings.h",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "sh third-party/miniupnp/updateminiupnpcstrings.sh $SCRIPT_INPUT_FILE_0 $SCRIPT_OUTPUT_FILE_0";
 		};
 		BE75C3510C729EE100DBEFE0 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -2353,6 +2369,7 @@
 				PRELINK_LIBS = "";
 				SDKROOT = macosx10.5;
 				STRIP_INSTALLED_PRODUCT = NO;
+				VALID_ARCHS = "i386 ppc ppc7400 ppc970 x86_64";
 			};
 			name = Debug;
 		};
@@ -2457,7 +2474,7 @@
 		4DF0C59D089918A300DD8943 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
+				ARCHS = "$(ARCHS_STANDARD_32_64_BIT)";
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEPLOYMENT_POSTPROCESSING = YES;
@@ -2489,6 +2506,7 @@
 				OTHER_LDFLAGS = "";
 				PREBINDING = NO;
 				SDKROOT = macosx10.5;
+				VALID_ARCHS = "i386 ppc ppc7400 ppc970 x86_64";
 			};
 			name = Release;
 		};
@@ -2546,7 +2564,7 @@
 		A250CFEB0CDA19680068B4B6 /* Release - Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
+				ARCHS = "$(ARCHS_STANDARD_32_64_BIT)";
 				COPY_PHASE_STRIP = NO;
 				DEAD_CODE_STRIPPING = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
@@ -2579,6 +2597,7 @@
 				PREBINDING = NO;
 				SDKROOT = macosx10.5;
 				STRIP_INSTALLED_PRODUCT = NO;
+				VALID_ARCHS = "i386 ppc ppc7400 ppc970 x86_64";
 			};
 			name = "Release - Debug";
 		};

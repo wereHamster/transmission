@@ -20,12 +20,21 @@ noinst_HEADERS = \
     minisoap.h \
     minissdpc.h \
     miniupnpc.h \
-    miniupnpcstrings.h \
     miniwget.h \
     minixml.h \
     upnpcommands.h \
     upnpreplyparse.h
 
-extra_DIST = \
+EXTRA_DIST = \
     README \
-    LICENSE
+    LICENCE \
+    miniupnpcstrings.h.in \
+    updateminiupnpcstrings.sh
+
+BUILT_SOURCES = \
+    miniupnpcstrings.h
+
+miniupnpcstrings.h: Makefile
+	$(srcdir)/updateminiupnpcstrings.sh $(srcdir)/miniupnpcstrings.h.in $(builddir)/miniupnpcstrings.h
+
+DISTCLEANFILES = $(builddir)/miniupnpcstrings.h

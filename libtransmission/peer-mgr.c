@@ -19,7 +19,6 @@
 #include <event.h>
 
 #include "transmission.h"
-#include "session.h"
 #include "bandwidth.h"
 #include "bencode.h"
 #include "blocklist.h"
@@ -34,6 +33,7 @@
 #include "peer-mgr.h"
 #include "peer-msgs.h"
 #include "ptrarray.h"
+#include "session.h"
 #include "stats.h" /* tr_statsAddUploaded, tr_statsAddDownloaded */
 #include "torrent.h"
 #include "trevent.h"
@@ -1946,7 +1946,7 @@ isSame( const tr_peer * peer )
 **/
 
 static void
-rechokeTorrent( Torrent * t )
+rechokeTorrent( Torrent * t, const uint64_t now )
 {
     int i, size, unchokedInterested;
     const int peerCount = tr_ptrArraySize( &t->peers );
@@ -1954,7 +1954,6 @@ rechokeTorrent( Torrent * t )
     struct ChokeData * choke = tr_new0( struct ChokeData, peerCount );
     const tr_session * session = t->manager->session;
     const int chokeAll = !tr_torrentIsPieceTransferAllowed( t->tor, TR_CLIENT_TO_PEER );
-    const uint64_t now = tr_date( );
 
     assert( torrentIsLocked( t ) );
 
@@ -2048,13 +2047,15 @@ rechokeTorrent( Torrent * t )
 static int
 rechokePulse( void * vmgr )
 {
+    uint64_t now;
     tr_torrent * tor = NULL;
     tr_peerMgr * mgr = vmgr;
     managerLock( mgr );
 
+    now = tr_date( );
     while(( tor = tr_torrentNext( mgr->session, tor )))
         if( tor->isRunning )
-            rechokeTorrent( tor->torrentPeers );
+            rechokeTorrent( tor->torrentPeers, now );
 
     managerUnlock( mgr );
     return TRUE;
@@ -2157,8 +2158,7 @@ getPeersToClose( Torrent * t, tr_close_type_t closeType, int * setmeSize )
 }
 
 static int
-compareCandidates( const void * va,
-                   const void * vb )
+compareCandidates( const void * va, const void * vb )
 {
     const struct peer_atom * a = *(const struct peer_atom**) va;
     const struct peer_atom * b = *(const struct peer_atom**) vb;
@@ -2409,13 +2409,156 @@ reconnectTorrent( Torrent * t )
     }
 }
 
+struct peer_liveliness
+{
+    tr_peer * peer;
+    void * clientData;
+    time_t pieceDataTime;
+    time_t time;
+    int speed;
+    tr_bool doPurge;
+};
+
+static int
+comparePeerLiveliness( const void * va, const void * vb )
+{
+    const struct peer_liveliness * a = va;
+    const struct peer_liveliness * b = vb;
+
+    if( a->doPurge != b->doPurge )
+        return a->doPurge ? 1 : -1;
+
+    if( a->speed != b->speed ) /* faster goes first */
+        return a->speed > b->speed ? -1 : 1;
+
+    /* the one to give us data more recently goes first */
+    if( a->pieceDataTime != b->pieceDataTime )
+        return a->pieceDataTime > b->pieceDataTime ? -1 : 1;
+
+    /* the one we connected to most recently goes first */
+    if( a->time != b->time )
+        return a->time > b->time ? -1 : 1;
+
+    return 0;
+}
+
+/* FIXME: getPeersToClose() should use this */
+static void
+sortPeersByLiveliness( tr_peer ** peers, void** clientData, int n, uint64_t now )
+{
+    int i;
+    struct peer_liveliness *lives, *l;
+
+    /* build a sortable array of peer + extra info */
+    lives = l = tr_new0( struct peer_liveliness, n );
+    for( i=0; i<n; ++i, ++l ) {
+        tr_peer * p = peers[i];
+        l->peer = p;
+        l->doPurge = p->doPurge;
+        l->pieceDataTime = p->atom->piece_data_time;
+        l->time = p->atom->time;
+        l->speed = 1024.0 * (   tr_peerGetPieceSpeed( p, now, TR_UP )
+                              + tr_peerGetPieceSpeed( p, now, TR_DOWN ) );
+        if( clientData )
+            l->clientData = clientData[i];
+    }
+
+    /* sort 'em */
+    assert( n == ( l - lives ) );
+    qsort( lives, n, sizeof( struct peer_liveliness ), comparePeerLiveliness );
+
+    /* build the peer array */
+    for( i=0, l=lives; i<n; ++i, ++l ) {
+        peers[i] = l->peer;
+        if( clientData )
+            clientData[i] = l->clientData;
+    }
+    assert( n == ( l - lives ) );
+
+    /* cleanup */
+    tr_free( lives );
+}
+
+static void
+enforceTorrentPeerLimit( Torrent * t, uint64_t now )
+{
+    int n = tr_ptrArraySize( &t->peers );
+    const int max = tr_sessionGetPeerLimitPerTorrent( t->tor->session );
+    if( n > max )
+    {
+        void * base = tr_ptrArrayBase( &t->peers );
+        tr_peer ** peers = tr_memdup( base, n*sizeof( tr_peer* ) );
+        sortPeersByLiveliness( peers, NULL, n, now );
+        while( n > max )
+            closePeer( t, peers[--n] );
+        tr_free( peers );
+    }
+}
+
+static void
+enforceSessionPeerLimit( tr_session * session, uint64_t now )
+{
+    int n = 0;
+    tr_torrent * tor = NULL;
+    const int max = tr_sessionGetPeerLimit( session );
+
+    /* count the total number of peers */
+    while(( tor = tr_torrentNext( session, tor )))
+        n += tr_ptrArraySize( &tor->torrentPeers->peers );
+
+    /* if there are too many, prune out the worst */ 
+    if( n > max )
+    {
+        tr_peer ** peers = tr_new( tr_peer*, n );
+        Torrent ** torrents = tr_new( Torrent*, n );
+
+        /* populate the peer array */
+        n = 0;
+        tor = NULL;
+        while(( tor = tr_torrentNext( session, tor ))) {
+            int i;
+            Torrent * t = tor->torrentPeers;
+            const int tn = tr_ptrArraySize( &t->peers );
+            for( i=0; i<tn; ++i, ++n ) {
+                peers[n] = tr_ptrArrayNth( &t->peers, i );
+                torrents[n] = t;
+            }
+        }
+        
+        /* sort 'em */
+        sortPeersByLiveliness( peers, (void**)torrents, n, now );
+
+        /* cull out the crappiest */
+        while( n-- > max )
+            closePeer( torrents[n], peers[n] );
+
+        /* cleanup */
+        tr_free( torrents );
+        tr_free( peers );
+    }
+}
+
+
 static int
 reconnectPulse( void * vmgr )
 {
-    tr_torrent * tor = NULL;
+    tr_torrent * tor;
     tr_peerMgr * mgr = vmgr;
+    uint64_t now;
     managerLock( mgr );
 
+    now = tr_date( );
+
+    /* if we're over the per-torrent peer limits, cull some peers */
+    tor = NULL;
+    while(( tor = tr_torrentNext( mgr->session, tor )))
+        if( tor->isRunning )
+            enforceTorrentPeerLimit( tor->torrentPeers, now );
+
+    /* if we're over the per-session peer limits, cull some peers */
+    enforceSessionPeerLimit( mgr->session, now );
+
+    tor = NULL;
     while(( tor = tr_torrentNext( mgr->session, tor )))
         if( tor->isRunning )
             reconnectTorrent( tor->torrentPeers );

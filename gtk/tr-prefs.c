@@ -146,7 +146,7 @@ spun_cb( GtkSpinButton * w,
         data->isDouble = isDouble;
         g_object_set_data_full( o, IDLE_DATA, data, spin_idle_data_free );
         g_object_ref( G_OBJECT( o ) );
-        g_timeout_add( 100, spun_cb_idle, w );
+        gtr_timeout_add_seconds( 1, spun_cb_idle, w );
     }
     g_timer_start( data->last_change );
 }
@@ -455,9 +455,9 @@ new_encryption_combo( GObject * core, const char * key )
         int value;
         const char * text;
     } items[] = {
-        { TR_CLEAR_PREFERRED,      N_( "Plaintext preferred" )  },
-        { TR_ENCRYPTION_PREFERRED, N_( "Encryption preferred" ) },
-        { TR_ENCRYPTION_REQUIRED,  N_( "Encryption required" )  }
+        { TR_CLEAR_PREFERRED,      N_( "Allow encryption" )  },
+        { TR_ENCRYPTION_PREFERRED, N_( "Prefer encryption" ) },
+        { TR_ENCRYPTION_REQUIRED,  N_( "Require encryption" )  }
     };
 
     /* build a store for encryption */
@@ -1398,7 +1398,7 @@ tr_prefs_dialog_new( GObject *   core,
                               gtk_label_new ( _( "Privacy" ) ) );
     gtk_notebook_append_page( GTK_NOTEBOOK( n ),
                               peerPage( core ),
-                              gtk_label_new ( _( "Peers" ) ) );
+                              gtk_label_new ( _( "Network" ) ) );
     gtk_notebook_append_page( GTK_NOTEBOOK( n ),
                               desktopPage( core ),
                               gtk_label_new ( _( "Desktop" ) ) );

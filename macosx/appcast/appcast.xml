@@ -5,18 +5,18 @@
     <link>http://www.transmissionbt.com/appcast.xml</link>
     <description>Most recent version available.</description>
     <language>en</language>
-    <pubDate>Tue, 16 June 2009 18:00:00 -0400</pubDate>
+    <pubDate>Sat, 18 July 2009 07:00:00 -0400</pubDate>
 
 	<item>
-		<title>Transmission 1.72</title>
+		<title>Transmission 1.73</title>
 		<sparkle:releaseNotesLink>http://www.transmissionbt.com/appcast/releasenotes.html</sparkle:releaseNotesLink>
-      	<pubDate>Tue, 16 June 2009 18:00:00 -0400</pubDate>
+      	<pubDate>Sat, 18 July 2009 07:00:00 -0400</pubDate>
       	<enclosure
-      	url="http://mirrors.m0k.org/transmission/files/Transmission-1.72.dmg" 
-      	sparkle:version="8709"
-      	sparkle:shortVersionString="1.72"
-      	sparkle:dsaSignature="MCwCFHPwXBQfWVMitQluu5Q6IR+ukjyCAhQP1YbdJehPNaHELAiWJH7BTcBvJg=="
-      	length="4402194"
+      	url="http://mirrors.m0k.org/transmission/files/Transmission-1.73.dmg" 
+      	sparkle:version="8832"
+      	sparkle:shortVersionString="1.73"
+      	sparkle:dsaSignature="MC0CFQCNPFeMx5QKhkP3XXUhRHTb8c45BgIUUfUT+HjcXdNbVQvphxeQ0YrLBoI="
+      	length="9140218"
       	type="application/octet-stream"/>
       	<sparkle:minimumSystemVersion>10.5.0</sparkle:minimumSystemVersion>
     </item>
@@ -30,7 +30,7 @@
       	sparkle:version="8615"
       	sparkle:shortVersionString="1.54"
       	sparkle:dsaSignature="MCwCFCfR8NXqspNkW4xCtFWXLLE8OegiAhR28nofs7rwHU5gSNRZzg40PBvJYw=="
-      	length="3832592"
+      	length="7902366"
       	type="application/octet-stream"/>
       	<sparkle:minimumSystemVersion>10.4.11</sparkle:minimumSystemVersion>
     </item>

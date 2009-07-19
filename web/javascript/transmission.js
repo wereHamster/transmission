@@ -40,7 +40,6 @@ Transmission.prototype =
 		$('#pause_selected_link').bind('click', function(e){ tr.stopSelectedClicked(e); } );
 		$('#resume_selected_link').bind('click', function(e){ tr.startSelectedClicked(e); });
 		$('#remove_link').bind('click',  function(e){ tr.removeClicked(e); });
-		$('#removedata_link').bind('click',  function(e){ tr.removeDataClicked(e); });
 		$('#filter_all_link').parent().bind('click', function(e){ tr.showAllClicked(e); });
 		$('#filter_downloading_link').parent().bind('click', function(e){ tr.showDownloadingClicked(e); });
 		$('#filter_seeding_link').parent().bind('click', function(e){ tr.showSeedingClicked(e); });
@@ -50,17 +49,17 @@ Transmission.prototype =
 		$('.inspector_tab').bind('click', function(e){ tr.inspectorTabClicked(e, this); });
 		$('.file_wanted_control').live('click', function(e){ tr.fileWantedClicked(e, this); });
 		$('.file_priority_control').live('click', function(e){ tr.filePriorityClicked(e, this); });
+		$('#open_link').bind('click', function(e){ tr.openTorrentClicked(e); });
+		$('#upload_confirm_button').bind('click', function(e){ tr.confirmUploadClicked(e); return false;});
+		$('#upload_cancel_button').bind('click', function(e){ tr.cancelUploadClicked(e); return false; });
 		if (iPhone) {
 			$('#inspector_close').bind('click', function(e){ tr.hideInspector(); });
 			$('#preferences_link').bind('click', function(e){ tr.releaseClutchPreferencesButton(e); });
 		} else {
 			$(document).bind('keydown',  function(e){ tr.keyDown(e); });
 			$('#torrent_container').bind('click', function(e){ tr.deselectAll( true ); });
-			$('#open_link').bind('click', function(e){ tr.openTorrentClicked(e); });
 			$('#filter_toggle_link').bind('click', function(e){ tr.toggleFilterClicked(e); });
 			$('#inspector_link').bind('click', function(e){ tr.toggleInspectorClicked(e); });
-			$('#upload_confirm_button').bind('click', function(e){ tr.confirmUploadClicked(e); return false;});
-			$('#upload_cancel_button').bind('click', function(e){ tr.cancelUploadClicked(e); return false; });
 		
 			this.setupSearchBox();
 			this.createContextMenu();
@@ -76,7 +75,6 @@ Transmission.prototype =
 		this._toolbar_start_button     = $('li#resume_selected')[0];
 		this._toolbar_start_all_button = $('li#resume_all')[0];
 		this._toolbar_remove_button    = $('li#remove')[0];
-		this._toolbar_delete_button    = $('li#removedata')[0];
 		this._context_pause_button     = $('li#context_pause_selected')[0];
 		this._context_start_button     = $('li#context_resume_selected')[0];
 
@@ -87,7 +85,6 @@ Transmission.prototype =
 		this._inspector._info_tab.creator_date = $(ti+'creator_date')[0];
 		this._inspector._info_tab.creator = $(ti+'creator')[0];
 		this._inspector._info_tab.download_dir = $(ti+'download_dir')[0];
-		this._inspector._info_tab.torrent_file = $(ti+'torrent_file')[0];
 		this._inspector._info_tab.downloaded = $(ti+'downloaded')[0];
 		this._inspector._info_tab.download_from = $(ti+'download_from')[0];
 		this._inspector._info_tab.download_speed = $(ti+'download_speed')[0];
@@ -614,14 +611,6 @@ Transmission.prototype =
 		}
 	},
 
-	removeDataClicked: function( event ) {	
-		var tr = this;
-		if( tr.isButtonEnabled( event ) ) {
-			tr.removeSelectedTorrentsAndData( );
-			tr.hideiPhoneAddressbar( );
-		}
-	},
-
 	toggleInspectorClicked: function( event ) {
 		var tr = this;
 		if( tr.isButtonEnabled( event ) )
@@ -921,7 +910,6 @@ Transmission.prototype =
 		var creator = 'N/A';
 		var comment = 'N/A';
 		var download_dir = 'N/A';
-		var torrent_file = 'N/A';
 		var date_created = 'N/A';
 		var error = '';
 		var hash = 'N/A';
@@ -994,8 +982,6 @@ Transmission.prototype =
 				creator = t._creator ;
 			if( t._download_dir)
 				download_dir = t._download_dir;
-			if( t._torrent_file )
-				torrent_file = t._torrent_file;
 
 			hash = t.hash();
 			date_created = Math.formatTimestamp( t._creator_date );
@@ -1058,7 +1044,6 @@ Transmission.prototype =
 		setInnerHTML( tab.comment, comment.replace(/\//g, '/&#8203;') );
 		setInnerHTML( tab.creator, creator );
 		setInnerHTML( tab.download_dir, download_dir.replace(/([\/_\.])/g, "$1&#8203;") );
-		setInnerHTML( tab.torrent_file, torrent_file.replace(/([\/_\.])/g, "$1&#8203;") );
 		setInnerHTML( tab.error, error );
 		
 		$(".inspector_row > div:contains('N/A')").css('color', '#666');
@@ -1151,16 +1136,19 @@ Transmission.prototype =
 		this.setFilter( Prefs._FilterAll );
 	},
 
-	refreshTorrents: function() {
+	refreshTorrents: function(ids) {
 		var tr = this;
-		this.remote.getUpdatedDataFor('recently-active', function(active, removed){ tr.updateTorrentsData(active, removed); });
+		if (!ids)
+		  ids = 'recently-active';
+
+		this.remote.getUpdatedDataFor(ids, function(active, removed){ tr.updateTorrentsData(active, removed); });
 	},
 
-	updateTorrentsData: function( active, removed_ids ) {
+	updateTorrentsData: function( updated, removed_ids ) {
 		var tr = this;
 		var new_torrent_ids = [];
 		var refresh_files_for = [];
-		jQuery.each( active, function() {
+		jQuery.each( updated, function() {
 			var t = tr._torrents[this.id];
 			if (t){
 		    t.refresh(this);
@@ -1518,7 +1506,6 @@ Transmission.prototype =
 			this.setEnabled( this._toolbar_start_button, havePausedSelection );
 			this.setEnabled( this._context_start_button, havePausedSelection );
 			this.setEnabled( this._toolbar_remove_button, haveSelection );
-			this.setEnabled( this._toolbar_delete_button, haveSelection );
 			this.setEnabled( this._toolbar_pause_all_button, haveActive );
 			this.setEnabled( this._toolbar_start_all_button, havePaused );
 		}

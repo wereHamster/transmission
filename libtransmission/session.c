@@ -15,15 +15,14 @@
 #include <string.h> /* memcpy */
 
 #include <signal.h>
-#include <sys/types.h> /* stat */
-#include <sys/stat.h> /* stat */
+#include <sys/types.h> /* stat(), umask() */
+#include <sys/stat.h> /* stat(), umask() */
 #include <unistd.h> /* stat */
 #include <dirent.h> /* opendir */
 
 #include <event.h>
 
 #include "transmission.h"
-#include "session.h"
 #include "bandwidth.h"
 #include "bencode.h"
 #include "blocklist.h"
@@ -37,15 +36,16 @@
 #include "platform.h" /* tr_lock */
 #include "port-forwarding.h"
 #include "rpc-server.h"
+#include "session.h"
 #include "stats.h"
 #include "torrent.h"
 #include "tracker.h"
+#include "tr-dht.h"
 #include "trevent.h"
 #include "utils.h"
-#include "version.h"
 #include "verify.h"
+#include "version.h"
 #include "web.h"
-#include "tr-dht.h"
 
 #define dbgmsg( ... ) \
     do { \
@@ -364,8 +364,7 @@ tr_sessionGetDefaultSettings( tr_benc * d )
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_SOCKET_TOS,          atoi( TR_DEFAULT_PEER_SOCKET_TOS_STR ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_PEX_ENABLED,              TRUE );
     tr_bencDictAddBool( d, TR_PREFS_KEY_PORT_FORWARDING,          TRUE );
-    tr_bencDictAddInt ( d, TR_PREFS_KEY_PREALLOCATION,            TR_PREALLOCATE_FULL );
-    /* tr_bencDictAddInt ( d, TR_PREFS_KEY_PREALLOCATION,            TR_PREALLOCATE_SPARSE ); */
+    tr_bencDictAddInt ( d, TR_PREFS_KEY_PREALLOCATION,            TR_PREALLOCATE_SPARSE );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_PROXY,                    "" );
     tr_bencDictAddBool( d, TR_PREFS_KEY_PROXY_AUTH_ENABLED,       FALSE );
     tr_bencDictAddBool( d, TR_PREFS_KEY_PROXY_ENABLED,            FALSE );
@@ -392,7 +391,8 @@ tr_sessionGetDefaultSettings( tr_benc * d )
     tr_bencDictAddInt ( d, TR_PREFS_KEY_ALT_SPEED_TIME_DAY,       TR_SCHED_ALL );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_USPEED,                   100 );
     tr_bencDictAddBool( d, TR_PREFS_KEY_USPEED_ENABLED,           FALSE );
-    tr_bencDictAddInt ( d, TR_PREFS_KEY_UPLOAD_SLOTS_PER_TORRENT, 10 );
+    tr_bencDictAddInt ( d, TR_PREFS_KEY_UMASK,                    022 );
+    tr_bencDictAddInt ( d, TR_PREFS_KEY_UPLOAD_SLOTS_PER_TORRENT, 14 );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_BIND_ADDRESS_IPV4,        TR_DEFAULT_BIND_ADDRESS_IPV4 );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_BIND_ADDRESS_IPV6,        TR_DEFAULT_BIND_ADDRESS_IPV6 );
 }
@@ -448,6 +448,7 @@ tr_sessionGetSettings( tr_session * s, struct tr_benc * d )
     tr_bencDictAddInt ( d, TR_PREFS_KEY_ALT_SPEED_TIME_DAY,       tr_sessionGetAltSpeedDay( s ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_USPEED,                   tr_sessionGetSpeedLimit( s, TR_UP ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_USPEED_ENABLED,           tr_sessionIsSpeedLimited( s, TR_UP ) );
+    tr_bencDictAddInt ( d, TR_PREFS_KEY_UMASK,                    s->umask );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_UPLOAD_SLOTS_PER_TORRENT, s->uploadSlotsPerTorrent );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_BIND_ADDRESS_IPV4,        tr_ntop_non_ts( &s->public_ipv4->addr ) );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_BIND_ADDRESS_IPV6,        tr_ntop_non_ts( &s->public_ipv6->addr ) );
@@ -609,6 +610,12 @@ tr_sessionInitImpl( void * vdata )
     /* Don't exit when writing on a broken socket */
     signal( SIGPIPE, SIG_IGN );
 #endif
+
+    /* set the session's file mode creation mask (umask) to session->umask & 0777 */
+    found = tr_bencDictFindInt( &settings, TR_PREFS_KEY_UMASK, &i );
+    assert( found );
+    session->umask = (mode_t)i;
+    umask( session->umask );
 
     found = tr_bencDictFindInt( &settings, TR_PREFS_KEY_PEER_LIMIT_TORRENT, &i );
     assert( found );
@@ -1025,6 +1032,9 @@ tr_bool
 tr_sessionGetActiveSpeedLimit( const tr_session * session, tr_direction dir, int * setme )
 {
     int isLimited = TRUE;
+
+    if( !tr_isSession( session ) )
+        return FALSE;
 
     if( tr_sessionUsesAltSpeed( session ) )
         *setme = tr_sessionGetAltSpeed( session, dir );
