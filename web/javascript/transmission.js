@@ -113,10 +113,20 @@ Transmission.prototype =
 		
 		// Get preferences & torrents from the daemon
 		var tr = this;
-		this.remote.loadDaemonPrefs( );
-		this.initalizeAllTorrents();
+		var async = false;
+		this.loadDaemonPrefs( async );
+		this.initializeAllTorrents();
 
 		this.togglePeriodicRefresh( true );
+	},
+
+	loadDaemonPrefs: function( async ){
+		var tr = this;
+		this.remote.loadDaemonPrefs( function(data){
+			var o = data.arguments;
+			Prefs.getClutchPrefs( o );
+			tr.updatePrefs( o );
+		}, async );
 	},
 
 	preloadImages: function() {
@@ -384,6 +394,13 @@ Transmission.prototype =
 			container.scrollTop( offsetTop );
 		else if( innerHeight + scrollTop < offsetTop + offsetHeight )
 			container.scrollTop( offsetTop + offsetHeight - innerHeight );
+	},
+
+	seedRatioLimit: function(){
+		if(this._prefs && this._prefs['seedRatioLimited'])
+			return this._prefs['seedRatioLimit'];
+		else
+			return -1;
 	},
 
 	/*--------------------------------------------
@@ -1188,7 +1205,7 @@ Transmission.prototype =
 		} );
 	},
 
-	initalizeAllTorrents: function(){
+	initializeAllTorrents: function(){
 		var tr = this;
 		this.remote.getInitialDataFor( null ,function(torrents) { tr.addTorrents(torrents); } );
 	},

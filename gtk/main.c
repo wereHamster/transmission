@@ -88,10 +88,6 @@ struct cbdata
     GtkTreeSelection  * sel;
 };
 
-#define CBDATA_PTR "callback-data-pointer"
-
-static GtkUIManager * myUIManager = NULL;
-
 static void           appsetup( TrWindow * wind,
                                 GSList *   args,
                                 struct     cbdata *,
@@ -101,7 +97,7 @@ static void           appsetup( TrWindow * wind,
 static void           winsetup( struct cbdata * cbdata,
                                 TrWindow *      wind );
 
-static void           wannaquit( void * vdata );
+static void           wannaquit( gpointer vdata );
 
 static void           setupdrag( GtkWidget *    widget,
                                  struct cbdata *data );
@@ -433,14 +429,15 @@ main( int     argc,
 
         const char * str;
         GtkWindow * win;
+        GtkUIManager * myUIManager;
         tr_session * session;
         struct cbdata * cbdata = g_new0( struct cbdata, 1 );
 
         /* ensure the directories are created */
        if(( str = pref_string_get( PREF_KEY_DIR_WATCH )))
-           mkdir_p( str, 0777 );
+           gtr_mkdir_with_parents( str, 0777 );
        if(( str = pref_string_get( TR_PREFS_KEY_DOWNLOAD_DIR )))
-           mkdir_p( str, 0777 );
+           gtr_mkdir_with_parents( str, 0777 );
 
         /* initialize the libtransmission session */
         session = tr_sessionInit( "gtk", configDir, TRUE, pref_get_all( ) );
@@ -471,8 +468,11 @@ main( int     argc,
     }
     else if( err )
     {
-        gtk_widget_show( errmsg_full( NULL, (callbackfunc_t)gtk_main_quit,
-                                      NULL, "%s", err ) );
+        const char * primary_text = _( "Transmission cannot be started." );
+        GtkWidget * w = gtk_message_dialog_new( NULL, 0, GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE, primary_text, NULL );
+        gtk_message_dialog_format_secondary_text( GTK_MESSAGE_DIALOG( w ), "%s", err );
+        g_signal_connect( w, "response", G_CALLBACK(gtk_main_quit), NULL );
+        gtk_widget_show( w );
         g_free( err );
         gtk_main( );
     }
@@ -670,7 +670,7 @@ do_exit_cb( GtkWidget *w  UNUSED,
 }
 
 static void
-wannaquit( void * vdata )
+wannaquit( gpointer vdata )
 {
     GtkWidget *r, *p, *b, *w, *c;
     struct cbdata *cbdata = vdata;
@@ -831,7 +831,7 @@ setupdrag( GtkWidget *    widget,
                           gotdrag ), data );
 
     gtk_drag_dest_set( widget, GTK_DEST_DEFAULT_ALL, targets,
-                       ALEN( targets ), GDK_ACTION_COPY | GDK_ACTION_MOVE );
+                       G_N_ELEMENTS( targets ), GDK_ACTION_COPY | GDK_ACTION_MOVE );
 }
 
 static void
@@ -901,10 +901,6 @@ coreerr( TrCore * core UNUSED, guint code, const char * msg, struct cbdata * c )
 
         case TR_CORE_ERR_NO_MORE_TORRENTS:
             showTorrentErrors( c );
-            break;
-
-        case TR_CORE_ERR_SAVE_STATE:
-            errmsg( c->wind, "%s", msg );
             break;
 
         default:

@@ -776,17 +776,18 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         return;
     }
     
-    torrentFileState deleteTorrentFile;
+    BOOL deleteTorrentFile, canToggleDelete = NO;
     switch (type)
     {
         case ADD_CREATED:
-            deleteTorrentFile = TORRENT_FILE_SAVE;
+            deleteTorrentFile = NO;
             break;
         case ADD_URL:
-            deleteTorrentFile = TORRENT_FILE_DELETE;
+            deleteTorrentFile = YES;
             break;
         default:
-            deleteTorrentFile = TORRENT_FILE_DEFAULT;
+            deleteTorrentFile = [fDefaults boolForKey: @"DeleteOriginalTorrent"];
+            canToggleDelete = YES;
     }
     
     tr_info info;
@@ -838,7 +839,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         
         Torrent * torrent;
         if (!(torrent = [[Torrent alloc] initWithPath: torrentPath location: location
-                            deleteTorrentFile: showWindow ? TORRENT_FILE_SAVE : deleteTorrentFile lib: fLib]))
+                            deleteTorrentFile: showWindow ? NO : deleteTorrentFile lib: fLib]))
             continue;
         
         //change the location if the group calls for it (this has to wait until after the torrent is create)
@@ -859,7 +860,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         if (showWindow || !location)
         {
             AddWindowController * addController = [[AddWindowController alloc] initWithTorrent: torrent destination: location
-                                                    lockDestination: lockDestination controller: self deleteTorrent: deleteTorrentFile];
+                                                    lockDestination: lockDestination controller: self torrentFile: torrentPath
+                                                    deleteTorrent: deleteTorrentFile canToggleDelete: canToggleDelete];
             [addController showWindow: self];
         }
         else
@@ -1145,7 +1147,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     [self updateTorrentHistory];
 }
 
-- (void) removeTorrents: (NSArray *) torrents deleteData: (BOOL) deleteData deleteTorrent: (BOOL) deleteTorrent
+- (void) removeTorrents: (NSArray *) torrents deleteData: (BOOL) deleteData
 {
     [torrents retain];
     NSInteger active = 0, downloading = 0;
@@ -1164,32 +1166,23 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         {
             NSDictionary * dict = [[NSDictionary alloc] initWithObjectsAndKeys:
                                     torrents, @"Torrents",
-                                    [NSNumber numberWithBool: deleteData], @"DeleteData",
-                                    [NSNumber numberWithBool: deleteTorrent], @"DeleteTorrent", nil];
+                                    [NSNumber numberWithBool: deleteData], @"DeleteData", nil];
             
             NSString * title, * message;
             
-            NSInteger selected = [torrents count];
+            const NSInteger selected = [torrents count];
             if (selected == 1)
             {
                 NSString * torrentName = [[torrents objectAtIndex: 0] name];
                 
-                if (!deleteData && !deleteTorrent)
-                    title = [NSString stringWithFormat:
-                                NSLocalizedString(@"Are you sure you want to remove \"%@\" from the transfer list?",
-                                "Removal confirm panel -> title"), torrentName];
-                else if (deleteData && !deleteTorrent)
+                if (deleteData)
                     title = [NSString stringWithFormat:
                                 NSLocalizedString(@"Are you sure you want to remove \"%@\" from the transfer list"
                                 " and trash the data file?", "Removal confirm panel -> title"), torrentName];
-                else if (!deleteData && deleteTorrent)
-                    title = [NSString stringWithFormat:
-                                NSLocalizedString(@"Are you sure you want to remove \"%@\" from the transfer list"
-                                " and trash the torrent file?", "Removal confirm panel -> title"), torrentName];
                 else
                     title = [NSString stringWithFormat:
-                                NSLocalizedString(@"Are you sure you want to remove \"%@\" from the transfer list"
-                                " and trash both the data and torrent files?", "Removal confirm panel -> title"), torrentName];
+                                NSLocalizedString(@"Are you sure you want to remove \"%@\" from the transfer list?",
+                                "Removal confirm panel -> title"), torrentName];
                 
                 message = NSLocalizedString(@"This transfer is active."
                             " Once removed, continuing the transfer will require the torrent file.",
@@ -1197,22 +1190,14 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
             }
             else
             {
-                if (!deleteData && !deleteTorrent)
+                if (deleteData)
+                    title = [NSString stringWithFormat:
+                                NSLocalizedString(@"Are you sure you want to remove %d transfers from the transfer list"
+                                " and trash the data files?", "Removal confirm panel -> title"), selected];
+                else
                     title = [NSString stringWithFormat:
                                 NSLocalizedString(@"Are you sure you want to remove %d transfers from the transfer list?",
                                 "Removal confirm panel -> title"), selected];
-                else if (deleteData && !deleteTorrent)
-                    title = [NSString stringWithFormat:
-                                NSLocalizedString(@"Are you sure you want to remove %d transfers from the transfer list"
-                                " and trash the data file?", "Removal confirm panel -> title"), selected];
-                else if (!deleteData && deleteTorrent)
-                    title = [NSString stringWithFormat:
-                                NSLocalizedString(@"Are you sure you want to remove %d transfers from the transfer list"
-                                " and trash the torrent file?", "Removal confirm panel -> title"), selected];
-                else
-                    title = [NSString stringWithFormat:
-                                NSLocalizedString(@"Are you sure you want to remove %d transfers from the transfer list"
-                                " and trash both the data and torrent files?", "Removal confirm panel -> title"), selected];
                 
                 if (selected == active)
                     message = [NSString stringWithFormat: NSLocalizedString(@"There are %d active transfers.",
@@ -1232,22 +1217,21 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         }
     }
     
-    [self confirmRemoveTorrents: torrents deleteData: deleteData deleteTorrent: deleteTorrent];
+    [self confirmRemoveTorrents: torrents deleteData: deleteData];
 }
 
 - (void) removeSheetDidEnd: (NSWindow *) sheet returnCode: (NSInteger) returnCode contextInfo: (NSDictionary *) dict
 {
     NSArray * torrents = [dict objectForKey: @"Torrents"];
     if (returnCode == NSAlertDefaultReturn)
-        [self confirmRemoveTorrents: torrents deleteData: [[dict objectForKey: @"DeleteData"] boolValue]
-                deleteTorrent: [[dict objectForKey: @"DeleteTorrent"] boolValue]];
+        [self confirmRemoveTorrents: torrents deleteData: [[dict objectForKey: @"DeleteData"] boolValue]];
     else
         [torrents release];
     
     [dict release];
 }
 
-- (void) confirmRemoveTorrents: (NSArray *) torrents deleteData: (BOOL) deleteData deleteTorrent: (BOOL) deleteTorrent
+- (void) confirmRemoveTorrents: (NSArray *) torrents deleteData: (BOOL) deleteData
 {
     //don't want any of these starting then stopping
     for (Torrent * torrent in torrents)
@@ -1262,8 +1246,6 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         
         if (deleteData)
             [torrent trashData];
-        if (deleteTorrent)
-            [torrent trashTorrent];
         
         [torrent closeRemoveTorrent];
     }
@@ -1277,22 +1259,12 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
 
 - (void) removeNoDelete: (id) sender
 {
-    [self removeTorrents: [fTableView selectedTorrents] deleteData: NO deleteTorrent: NO];
+    [self removeTorrents: [fTableView selectedTorrents] deleteData: NO];
 }
 
 - (void) removeDeleteData: (id) sender
 {
-    [self removeTorrents: [fTableView selectedTorrents] deleteData: YES deleteTorrent: NO];
-}
-
-- (void) removeDeleteTorrent: (id) sender
-{
-    [self removeTorrents: [fTableView selectedTorrents] deleteData: NO deleteTorrent: YES];
-}
-
-- (void) removeDeleteDataAndTorrent: (id) sender
-{
-    [self removeTorrents: [fTableView selectedTorrents] deleteData: YES deleteTorrent: YES];
+    [self removeTorrents: [fTableView selectedTorrents] deleteData: YES];
 }
 
 - (void) moveDataFilesSelected: (id) sender
@@ -3540,26 +3512,19 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         return canUseTable && [fTableView numberOfSelectedRows] > 0;
 
     //enable remove items
-    if (action == @selector(removeNoDelete:) || action == @selector(removeDeleteData:)
-        || action == @selector(removeDeleteTorrent:) || action == @selector(removeDeleteDataAndTorrent:))
+    if (action == @selector(removeNoDelete:) || action == @selector(removeDeleteData:))
     {
-        BOOL warning = NO,
-            onlyDownloading = [fDefaults boolForKey: @"CheckRemoveDownloading"],
-            canDelete = action != @selector(removeDeleteTorrent:) && action != @selector(removeDeleteDataAndTorrent:);
+        BOOL warning = NO;
         
         for (Torrent * torrent in [fTableView selectedTorrents])
         {
-            if (!warning && [torrent isActive])
+            if ([torrent isActive])
             {
-                warning = onlyDownloading ? ![torrent isSeeding] : YES;
-                if (warning && canDelete)
+                if ([fDefaults boolForKey: @"CheckRemoveDownloading"] ? ![torrent isSeeding] : YES)
+                {
+                    warning = YES;
                     break;
-            }
-            if (!canDelete && [torrent publicTorrent])
-            {
-                canDelete = YES;
-                if (warning)
-                    break;
+                }
             }
         }
     
@@ -3576,7 +3541,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
                 [menuItem setTitle: [title substringToIndex: [title rangeOfString: ellipsis].location]];
         }
         
-        return canUseTable && canDelete && [fTableView numberOfSelectedRows] > 0;
+        return canUseTable && [fTableView numberOfSelectedRows] > 0;
     }
 
     //enable pause all item
@@ -4123,7 +4088,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
 
 - (void) rpcRemoveTorrent: (Torrent *) torrent
 {
-    [self confirmRemoveTorrents: [[NSArray arrayWithObject: torrent] retain] deleteData: NO deleteTorrent: NO];
+    [self confirmRemoveTorrents: [[NSArray arrayWithObject: torrent] retain] deleteData: NO];
     [torrent release];
 }
 

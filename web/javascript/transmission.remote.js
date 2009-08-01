@@ -72,8 +72,11 @@ TransmissionRemote.prototype =
 		XHR.setRequestHeader('X-Transmission-Session-Id', this._token);
 	},
 
-	sendRequest: function( data, success ) {
+	sendRequest: function( data, success, async ) {
 		remote = this;
+		if( typeof async != 'boolean' )
+		  async = true;
+
 		$.ajax( {
 			url: RPC._Root,
 			type: 'POST',
@@ -83,18 +86,15 @@ TransmissionRemote.prototype =
 			data: $.toJSON(data),
 			beforeSend: function(XHR){ remote.appendSessionId(XHR) },
 			error: function(request, error_string, exception){ remote.ajaxError(request, error_string, exception, this) },
-			success: success
+			success: success,
+			async: async
 		} );
 	},
 
-	loadDaemonPrefs: function() {
+	loadDaemonPrefs: function( callback, async ) {
 		var tr = this._controller;
 		var o = { method: 'session-get' };
-		this.sendRequest( o, function(data) {
-			var o = data.arguments;
-			Prefs.getClutchPrefs( o );
-			tr.updatePrefs( o );
-		} );
+		this.sendRequest( o, callback, async );
 	},
 
 	getInitialDataFor: function(torrent_ids, callback) {
@@ -107,7 +107,8 @@ TransmissionRemote.prototype =
 				'isPrivate', 'leechers', 'leftUntilDone', 'name',
 				'peersConnected', 'peersGettingFromUs', 'peersSendingToUs',
 				'rateDownload', 'rateUpload', 'seeders', 'sizeWhenDone',
-				'status', 'swarmSpeed', 'totalSize', 'uploadedEver',
+				'status', 'swarmSpeed', 'totalSize',
+				'uploadedEver', 'uploadRatio', 'seedRatioLimit', 'seedRatioMode',
 				'downloadDir', 'files', 'fileStats' ]
 			}
 		};
@@ -127,7 +128,8 @@ TransmissionRemote.prototype =
 					'eta', 'haveUnchecked', 'haveValid', 'leechers', 'leftUntilDone',
 					'peersConnected', 'peersGettingFromUs', 'peersSendingToUs',
 					'rateDownload', 'rateUpload', 'recheckProgress', 'seeders',
-					'sizeWhenDone', 'status', 'swarmSpeed', 'uploadedEver',
+					'sizeWhenDone', 'status', 'swarmSpeed',
+					'uploadedEver', 'uploadRatio', 'seedRatioLimit', 'seedRatioMode',
 					'downloadDir' ]
 			}
 		};
@@ -222,7 +224,7 @@ TransmissionRemote.prototype =
 			arguments: args
 		};
 		this.sendRequest( o, function() {
-			remote.loadDaemonPrefs();
+			remote._controller.loadDaemonPrefs();
 		} );
 	}
 };
