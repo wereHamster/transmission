@@ -23,7 +23,6 @@
 #include "transmission.h"
 #include "completion.h"
 #include "fdlimit.h"
-#include "resume.h" /* tr_torrentSaveResume() */
 #include "inout.h"
 #include "list.h"
 #include "platform.h"
@@ -119,6 +118,7 @@ verifyTorrent( tr_torrent * tor, tr_bool * stopFlag )
                 changed = TRUE;
             }
             tr_torrentSetPieceChecked( tor, pieceIndex, TRUE );
+            tor->anyDate = time( NULL );
 
             SHA1_Init( &sha );
             ++pieceIndex;
@@ -218,7 +218,7 @@ verifyThreadFunc( void * unused UNUSED )
         if( !stopCurrent )
         {
             if( changed )
-                tr_torrentSaveResume( tor );
+                tr_torrentSetDirty( tor );
             fireCheckDone( tor, currentNode.verify_done_cb );
         }
     }
@@ -306,7 +306,7 @@ tr_verifyRemove( tr_torrent * tor )
     else
     {
         tr_free( tr_list_remove( &verifyList, tor, compareVerifyByTorrent ) );
-        tor->verifyState = TR_VERIFY_NONE;
+        tr_torrentSetVerifyState( tor, TR_VERIFY_NONE );
     }
 
     tr_lockUnlock( lock );

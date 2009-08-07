@@ -176,6 +176,7 @@ refreshActions( struct cbdata * data )
     action_sensitize( "remove-torrent", counts.totalCount != 0 );
     action_sensitize( "delete-torrent", counts.totalCount != 0 );
     action_sensitize( "verify-torrent", counts.totalCount != 0 );
+    action_sensitize( "show-torrent-properties", counts.totalCount != 0 );
     action_sensitize( "open-torrent-folder", counts.totalCount == 1 );
     action_sensitize( "relocate-torrent", counts.totalCount == 1 );
 
@@ -890,12 +891,12 @@ coreerr( TrCore * core UNUSED, guint code, const char * msg, struct cbdata * c )
 {
     switch( code )
     {
-        case TR_EINVALID:
+        case TR_PARSE_ERR:
             c->errqueue =
                 g_slist_append( c->errqueue, g_path_get_basename( msg ) );
             break;
 
-        case TR_EDUPLICATE:
+        case TR_PARSE_DUPLICATE:
             c->dupqueue = g_slist_append( c->dupqueue, g_strdup( msg ) );
             break;
 

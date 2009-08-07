@@ -30,7 +30,7 @@
 #include "completion.h"
 #include "crypto.h" /* for tr_sha1 */
 #include "resume.h"
-#include "fdlimit.h" /* tr_fdFileClose */
+#include "fdlimit.h" /* tr_fdTorrentClose */
 #include "metainfo.h"
 #include "peer-mgr.h"
 #include "platform.h" /* TR_PATH_DELIMITER_STR */
@@ -116,6 +116,8 @@ tr_torrentSetSpeedLimit( tr_torrent * tor, tr_direction dir, int KiB_sec )
     assert( tr_isDirection( dir ) );
 
     tr_bandwidthSetDesiredSpeed( tor->bandwidth, dir, KiB_sec );
+
+    tr_torrentSetDirty( tor );
 }
 
 int
@@ -134,6 +136,8 @@ tr_torrentUseSpeedLimit( tr_torrent * tor, tr_direction dir, tr_bool do_use )
     assert( tr_isDirection( dir ) );
 
     tr_bandwidthSetLimited( tor->bandwidth, dir, do_use );
+
+    tr_torrentSetDirty( tor );
 }
 
 tr_bool
@@ -152,6 +156,8 @@ tr_torrentUseSessionLimits( tr_torrent * tor, tr_bool doUse )
 
     tr_bandwidthHonorParentLimits( tor->bandwidth, TR_UP, doUse );
     tr_bandwidthHonorParentLimits( tor->bandwidth, TR_DOWN, doUse );
+
+    tr_torrentSetDirty( tor );
 }
 
 tr_bool
@@ -174,6 +180,8 @@ tr_torrentSetRatioMode( tr_torrent *  tor, tr_ratiolimit mode )
 
     tor->ratioLimitMode = mode;
     tor->needsSeedRatioCheck = TRUE;
+
+    tr_torrentSetDirty( tor );
 }
 
 tr_ratiolimit
@@ -192,6 +200,8 @@ tr_torrentSetRatioLimit( tr_torrent * tor, double desiredRatio )
     tor->desiredRatio = desiredRatio;
 
     tor->needsSeedRatioCheck = TRUE;
+
+    tr_torrentSetDirty( tor );
 }
 
 double
@@ -285,20 +295,18 @@ onTrackerResponse( void * tracker UNUSED,
 
         case TR_TRACKER_WARNING:
             tr_torerr( tor, _( "Tracker warning: \"%s\"" ), event->text );
-            tor->error = -1;
-            tr_strlcpy( tor->errorString, event->text,
-                       sizeof( tor->errorString ) );
+            tor->error = TR_STAT_TRACKER_WARNING;
+            tr_strlcpy( tor->errorString, event->text, sizeof( tor->errorString ) );
             break;
 
         case TR_TRACKER_ERROR:
             tr_torerr( tor, _( "Tracker error: \"%s\"" ), event->text );
-            tor->error = -2;
-            tr_strlcpy( tor->errorString, event->text,
-                       sizeof( tor->errorString ) );
+            tor->error = TR_STAT_TRACKER_ERROR;
+            tr_strlcpy( tor->errorString, event->text, sizeof( tor->errorString ) );
             break;
 
         case TR_TRACKER_ERROR_CLEAR:
-            tor->error = 0;
+            tor->error = TR_STAT_OK;
             tor->errorString[0] = '\0';
             break;
     }
@@ -604,7 +612,7 @@ torrentRealInit( tr_torrent * tor, const tr_ctor * ctor )
 
     tr_ctorInitTorrentWanted( ctor, tor );
 
-    tor->error   = 0;
+    tor->error = TR_STAT_OK;
 
     tr_bitfieldConstruct( &tor->checkedPieces, tor->info.pieceCount );
     tr_torrentUncheck( tor );
@@ -672,36 +680,36 @@ torrentRealInit( tr_torrent * tor, const tr_ctor * ctor )
         torrentStart( tor, FALSE );
 }
 
-int
-tr_torrentParse( const tr_ctor     * ctor,
-                 tr_info           * setmeInfo )
+tr_parse_result
+tr_torrentParse( const tr_ctor * ctor, tr_info * setmeInfo )
 {
-    int             err = 0;
     int             doFree;
+    tr_bool         didParse;
     tr_info         tmp;
     const tr_benc * metainfo;
     tr_session    * session = tr_ctorGetSession( ctor );
+    tr_parse_result result = TR_PARSE_OK;
 
     if( setmeInfo == NULL )
         setmeInfo = &tmp;
     memset( setmeInfo, 0, sizeof( tr_info ) );
 
-    if( !err && tr_ctorGetMetainfo( ctor, &metainfo ) )
-        return TR_EINVALID;
+    if( tr_ctorGetMetainfo( ctor, &metainfo ) )
+        return TR_PARSE_ERR;
 
-    err = tr_metainfoParse( session, setmeInfo, metainfo );
-    doFree = !err && ( setmeInfo == &tmp );
+    didParse = tr_metainfoParse( session, setmeInfo, metainfo );
+    doFree = didParse && ( setmeInfo == &tmp );
 
-    if( !err && !getBlockSize( setmeInfo->pieceSize ) )
-        err = TR_EINVALID;
+    if( didParse && !getBlockSize( setmeInfo->pieceSize ) )
+        result = TR_PARSE_ERR;
 
-    if( !err && session && tr_torrentExists( session, setmeInfo->hash ) )
-        err = TR_EDUPLICATE;
+    if( didParse && session && tr_torrentExists( session, setmeInfo->hash ) )
+        result = TR_PARSE_DUPLICATE;
 
     if( doFree )
         tr_metainfoFree( setmeInfo );
 
-    return err;
+    return result;
 }
 
 tr_torrent *
@@ -743,7 +751,7 @@ tr_torrentSetDownloadDir( tr_torrent * tor, const char * path )
     {
         tr_free( tor->downloadDir );
         tor->downloadDir = tr_strdup( path );
-        tr_torrentSaveResume( tor );
+        tr_torrentSetDirty( tor );
     }
 }
 
@@ -859,9 +867,8 @@ tr_torrentStat( tr_torrent * tor )
     s = &tor->stats;
     s->id = tor->uniqueId;
     s->activity = tr_torrentGetActivity( tor );
-    s->error  = tor->error;
-    memcpy( s->errorString, tor->errorString,
-           sizeof( s->errorString ) );
+    s->error = tor->error;
+    memcpy( s->errorString, tor->errorString, sizeof( s->errorString ) );
 
     tc = tor->tracker;
     ti = tr_trackerGetAddress( tor->tracker, tor );
@@ -1162,6 +1169,8 @@ tr_torrentResetTransferStats( tr_torrent * tor )
     tor->corruptPrev    += tor->corruptCur;
     tor->corruptCur      = 0;
 
+    tr_torrentSetDirty( tor );
+
     tr_torrentUnlock( tor );
 }
 
@@ -1247,11 +1256,11 @@ checkAndStartImpl( void * vtor )
     now = time( NULL );
     tor->isRunning = TRUE;
     tor->needsSeedRatioCheck = TRUE;
-    *tor->errorString = '\0';
-    tr_torrentResetTransferStats( tor );
+    tor->error = TR_STAT_OK;
+    tor->errorString[0] = '\0';
     tor->completeness = tr_cpGetStatus( &tor->completion );
-    tr_torrentSaveResume( tor );
     tor->startDate = tor->anyDate = now;
+    tr_torrentResetTransferStats( tor );
     tr_trackerStart( tor->tracker );
     tor->dhtAnnounceAt = now + tr_cryptoWeakRandInt( 20 );
     tr_peerMgrStartTorrent( tor );
@@ -1353,6 +1362,12 @@ stopTorrent( void * vtor )
     tr_trackerStop( tor->tracker );
 
     tr_fdTorrentClose( tor->uniqueId );
+
+    if( tor->isDirty ) {
+        tor->isDirty = 0;
+        if( !tor->isDeleting )
+            tr_torrentSaveResume( tor );
+    }
 }
 
 void
@@ -1365,8 +1380,6 @@ tr_torrentStop( tr_torrent * tor )
         tr_globalLock( tor->session );
 
         tor->isRunning = 0;
-        if( !tor->isDeleting )
-            tr_torrentSaveResume( tor );
         tr_runInEventThread( tor->session, stopTorrent, tor );
 
         tr_globalUnlock( tor->session );
@@ -1385,7 +1398,6 @@ closeTorrent( void * vtor )
     tr_bencDictAddInt( d, "id", tor->uniqueId );
     tr_bencDictAddInt( d, "date", time( NULL ) );
 
-    tr_torrentSaveResume( tor );
     tor->isRunning = 0;
     stopTorrent( tor );
     if( tor->isDeleting )
@@ -1527,7 +1539,7 @@ tr_torrentRecheckCompleteness( tr_torrent * tor )
             tor->doneDate = tor->anyDate = time( NULL );
         }
 
-        tr_torrentSaveResume( tor );
+        tr_torrentSetDirty( tor );
     }
 
     tr_torrentUnlock( tor );
@@ -1570,7 +1582,7 @@ tr_torrentSetFilePriorities( tr_torrent *      tor,
     for( i = 0; i < fileCount; ++i )
         tr_torrentInitFilePriority( tor, files[i], priority );
 
-    tr_torrentSaveResume( tor );
+    tr_torrentSetDirty( tor );
     tr_torrentUnlock( tor );
 }
 
@@ -1714,7 +1726,7 @@ tr_torrentSetFileDLs( tr_torrent *      tor,
 
     tr_torrentLock( tor );
     tr_torrentInitFileDLs( tor, files, fileCount, doDownload );
-    tr_torrentSaveResume( tor );
+    tr_torrentSetDirty( tor );
     tr_torrentUnlock( tor );
 }
 
@@ -1737,6 +1749,8 @@ tr_torrentSetPriority( tr_torrent * tor, tr_priority_t priority )
     assert( tr_isPriority( priority ) );
 
     tor->bandwidth->priority = priority;
+
+    tr_torrentSetDirty( tor );
 }
 
 /***
@@ -1962,7 +1976,7 @@ tr_torrentSetAnnounceList( tr_torrent *            tor,
 
         /* try to parse it back again, to make sure it's good */
         memset( &tmpInfo, 0, sizeof( tr_info ) );
-        if( !tr_metainfoParse( tor->session, &tmpInfo, &metainfo ) )
+        if( tr_metainfoParse( tor->session, &tmpInfo, &metainfo ) )
         {
             /* it's good, so keep these new trackers and free the old ones */
 
@@ -2005,6 +2019,7 @@ tr_torrentSetActivityDate( tr_torrent * tor,
 
     tor->activityDate = t;
     tor->anyDate = MAX( tor->anyDate, tor->activityDate );
+    tr_torrentSetDirty( tor );
 }
 
 void

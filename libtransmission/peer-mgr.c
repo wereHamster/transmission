@@ -1006,8 +1006,15 @@ peerCallbackFunc( void * vpeer, void * vevent, void * vt )
     {
         case TR_PEER_UPLOAD_ONLY:
             /* update our atom */
-            if( peer )
-                peer->atom->uploadOnly = e->uploadOnly ? UPLOAD_ONLY_YES : UPLOAD_ONLY_NO;
+            if( peer ) {
+                if( e->uploadOnly ) {
+                    peer->atom->uploadOnly = UPLOAD_ONLY_YES;
+                    peer->atom->flags |= ADDED_F_SEED_FLAG;
+                } else {
+                    peer->atom->uploadOnly = UPLOAD_ONLY_NO;
+                    peer->atom->flags &= ~ADDED_F_SEED_FLAG;
+                }
+            }
             break;
 
         case TR_PEER_NEED_REQ:
@@ -1025,8 +1032,10 @@ peerCallbackFunc( void * vpeer, void * vevent, void * vt )
 
             tr_torrentSetActivityDate( tor, now );
 
-            if( e->wasPieceData )
+            if( e->wasPieceData ) {
                 tor->uploadedCur += e->length;
+                tr_torrentSetDirty( tor );
+            }
 
             /* update the stats */
             if( e->wasPieceData )
@@ -1064,8 +1073,10 @@ peerCallbackFunc( void * vpeer, void * vevent, void * vt )
              * content distributor, not the peers, it is the tracker's job
              * to manage the swarms, not the web server and does not fit
              * into the jurisdiction of the tracker." */
-            if( peer && e->wasPieceData )
+            if( peer && e->wasPieceData ) {
                 tor->downloadedCur += e->length;
+                tr_torrentSetDirty( tor );
+            }
 
             /* update the stats */ 
             if( e->wasPieceData )
@@ -1083,13 +1094,9 @@ peerCallbackFunc( void * vpeer, void * vevent, void * vt )
             if( peer )
             {
                 struct peer_atom * atom = peer->atom;
-                const int peerIsSeed = e->progress >= 1.0;
-                if( peerIsSeed ) {
+                if( e->progress >= 1.0 ) {
                     tordbg( t, "marking peer %s as a seed", tr_peerIoAddrStr( &atom->addr, atom->port ) );
                     atom->flags |= ADDED_F_SEED_FLAG;
-                } else {
-                    tordbg( t, "marking peer %s as a non-seed", tr_peerIoAddrStr( &atom->addr, atom->port ) );
-                    atom->flags &= ~ADDED_F_SEED_FLAG;
                 }
             }
             break;
@@ -1102,6 +1109,7 @@ peerCallbackFunc( void * vpeer, void * vevent, void * vt )
             tr_block_index_t block = _tr_block( tor, e->pieceIndex, e->offset );
 
             tr_cpBlockAdd( &tor->completion, block );
+            tr_torrentSetDirty( tor );
             decrementPieceRequests( t, e->pieceIndex );
 
             broadcastGotBlock( t, e->pieceIndex, e->offset, e->length );
@@ -1172,9 +1180,9 @@ peerCallbackFunc( void * vpeer, void * vevent, void * vt )
             }
             else /* a local error, such as an IO error */
             {
-                t->tor->error = e->err;
+                t->tor->error = TR_STAT_LOCAL_ERROR;
                 tr_strlcpy( t->tor->errorString,
-                            tr_strerror( t->tor->error ),
+                            tr_strerror( e->err ),
                             sizeof( t->tor->errorString ) );
                 tr_torrentStop( t->tor );
             }
@@ -1509,6 +1517,7 @@ tr_pexCompare( const void * va, const void * vb )
     return 0;
 }
 
+#if 0
 static int
 peerPrefersCrypto( const tr_peer * peer )
 {
@@ -1520,53 +1529,46 @@ peerPrefersCrypto( const tr_peer * peer )
 
     return tr_peerIoIsEncrypted( peer->io );
 }
+#endif
 
 int
-tr_peerMgrGetPeers( tr_torrent      * tor,
-                    tr_pex         ** setme_pex,
-                    uint8_t           af)
+tr_peerMgrGetPeers( tr_torrent * tor, tr_pex ** setme_pex, uint8_t af )
 {
-    int peersReturning = 0;
+    int count = 0;
     const Torrent * t = tor->torrentPeers;
 
     managerLock( t->manager );
 
     {
         int i;
-        const tr_peer ** peers = (const tr_peer**) tr_ptrArrayBase( &t->peers );
-        const int peerCount = tr_ptrArraySize( &t->peers );
+        const struct peer_atom ** atoms = (const struct peer_atom**) tr_ptrArrayBase( &t->pool );
+        const int atomCount = tr_ptrArraySize( &t->pool );
         /* for now, this will waste memory on torrents that have both
          * ipv6 and ipv4 peers */
-        tr_pex * pex = tr_new( tr_pex, peerCount );
+        tr_pex * pex = tr_new0( tr_pex, atomCount );
         tr_pex * walk = pex;
 
-        for( i=0; i<peerCount; ++i )
+        for( i=0; i<atomCount; ++i )
         {
-            const tr_peer * peer = peers[i];
-            if( peer->addr.type == af )
+            const struct peer_atom * atom = atoms[i];
+            if( atom->addr.type == af )
             {
-                const struct peer_atom * atom = peer->atom;
-
-                assert( tr_isAddress( &peer->addr ) );
-                walk->addr = peer->addr;
-                walk->port = peer->port;
-                walk->flags = 0;
-                if( peerPrefersCrypto( peer ) )
-                    walk->flags |= ADDED_F_ENCRYPTION_FLAG;
-                if( ( atom->uploadOnly == UPLOAD_ONLY_YES ) || ( peer->progress >= 1.0 ) )
-                    walk->flags |= ADDED_F_SEED_FLAG;
-                ++peersReturning;
+                assert( tr_isAddress( &atom->addr ) );
+                walk->addr = atom->addr;
+                walk->port = atom->port;
+                walk->flags = atom->flags;
+                ++count;
                 ++walk;
             }
         }
 
-        assert( ( walk - pex ) == peersReturning );
-        qsort( pex, peersReturning, sizeof( tr_pex ), tr_pexCompare );
+        assert( ( walk - pex ) == count );
+        qsort( pex, count, sizeof( tr_pex ), tr_pexCompare );
         *setme_pex = pex;
     }
 
     managerUnlock( t->manager );
-    return peersReturning;
+    return count;
 }
 
 static void

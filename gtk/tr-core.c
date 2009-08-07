@@ -256,20 +256,24 @@ compareByActivity( GtkTreeModel *           model,
                    GtkTreeIter *            b,
                    gpointer       user_data UNUSED )
 {
-    int            i;
-    tr_torrent *   ta, *tb;
+    int i, aUp, aDown, bUp, bDown;
+    tr_torrent *ta, *tb;
     const tr_stat *sa, *sb;
 
-    gtk_tree_model_get( model, a, MC_TORRENT_RAW, &ta, -1 );
-    gtk_tree_model_get( model, b, MC_TORRENT_RAW, &tb, -1 );
+    gtk_tree_model_get( model, a, MC_SPEED_UP, &aUp,
+                                  MC_SPEED_DOWN, &aDown,
+                                  MC_TORRENT_RAW, &ta,
+                                  -1 );
+    gtk_tree_model_get( model, b, MC_SPEED_UP, &bUp,
+                                  MC_SPEED_DOWN, &bDown,
+                                  MC_TORRENT_RAW, &tb,
+                                  -1 );
+
+    if(( i = ((aUp+aDown)-(bUp+bDown)) ))
+        return i;
 
     sa = tr_torrentStatCached( ta );
     sb = tr_torrentStatCached( tb );
-
-    if( ( i = compareDouble( sa->pieceUploadSpeed + sa->pieceDownloadSpeed,
-                             sb->pieceUploadSpeed + sb->pieceDownloadSpeed ) ) )
-        return i;
-
     if( sa->uploadedEver != sb->uploadedEver )
         return sa->uploadedEver < sa->uploadedEver ? -1 : 1;
 
@@ -608,19 +612,19 @@ static void
 tr_core_init( GTypeInstance *  instance,
               gpointer g_class UNUSED )
 {
-    TrCore *               self = (TrCore *) instance;
-    GtkListStore *         store;
+    GtkListStore * store;
     struct TrCorePrivate * p;
+    TrCore * self = (TrCore *) instance;
 
     /* column types for the model used to store torrent information */
     /* keep this in sync with the enum near the bottom of tr_core.h */
-    GType                  types[] = {
-        G_TYPE_STRING,    /* name */
-        G_TYPE_STRING,    /* collated name */
-        TR_TORRENT_TYPE,  /* TrTorrent object */
-        G_TYPE_POINTER,   /* tr_torrent* */
-        G_TYPE_INT        /* tr_stat()->status */
-    };
+    GType types[] = { G_TYPE_STRING,    /* name */
+                      G_TYPE_STRING,    /* collated name */
+                      TR_TORRENT_TYPE,  /* TrTorrent object */
+                      G_TYPE_POINTER,   /* tr_torrent* */
+                      G_TYPE_INT,       /* tr_stat.pieceUploadSpeed */
+                      G_TYPE_INT,       /* tr_stat.pieceDownloadSpeed */
+                      G_TYPE_INT };     /* tr_stat.status */
 
     p = self->priv = G_TYPE_INSTANCE_GET_PRIVATE( self,
                                                   TR_CORE_TYPE,
@@ -751,7 +755,7 @@ tr_core_add_torrent( TrCore     * self,
                      gboolean     doNotify )
 {
     const tr_info * inf = tr_torrent_info( gtor );
-    const tr_stat * torStat = tr_torrent_stat( gtor );
+    const tr_stat * st = tr_torrent_stat( gtor );
     tr_torrent *    tor = tr_torrent_handle( gtor );
     char *          collated = doCollate( inf->name );
     GtkListStore *  store = GTK_LIST_STORE( tr_core_model( self ) );
@@ -762,7 +766,9 @@ tr_core_add_torrent( TrCore     * self,
                                        MC_NAME_COLLATED, collated,
                                        MC_TORRENT,       gtor,
                                        MC_TORRENT_RAW,   tor,
-                                       MC_ACTIVITY,      torStat->activity,
+                                       MC_SPEED_UP,      (int)st->pieceUploadSpeed,
+                                       MC_SPEED_DOWN,    (int)st->pieceDownloadSpeed,
+                                       MC_ACTIVITY,      st->activity,
                                        -1 );
 
     if( doNotify )
@@ -826,11 +832,10 @@ add_ctor( TrCore * core, tr_ctor * ctor, gboolean doPrompt, gboolean doNotify )
 
     switch( err )
     {
-        case TR_EINVALID:
+        case TR_PARSE_ERR:
             break;
 
-        case TR_EDUPLICATE:
-            g_message( "it's a duplicate" );
+        case TR_PARSE_DUPLICATE:
             /* don't complain about .torrent files in the watch directory
              * that have already been added... that gets annoying and we
              * don't want to be nagging users to clean up their watch dirs */
@@ -910,8 +915,8 @@ add_filename( TrCore      * core,
         tr_ctorSetMetainfoFromFile( ctor, filename );
 
         err = add_ctor( core, ctor, doPrompt, doNotify );
-        if( err == TR_EINVALID )
-            tr_core_errsig( core, TR_EINVALID, filename );
+        if( err == TR_PARSE_ERR )
+            tr_core_errsig( core, TR_PARSE_ERR, filename );
     }
 }
 
@@ -1024,25 +1029,43 @@ tr_core_remove_torrent( TrCore *    core,
 ***/
 
 static gboolean
-update_foreach( GtkTreeModel *      model,
+update_foreach( GtkTreeModel * model,
                 GtkTreePath  * path UNUSED,
-                GtkTreeIter *       iter,
+                GtkTreeIter  * iter,
                 gpointer       data UNUSED )
 {
-    int         oldActivity;
-    int         newActivity;
+    int oldActivity, newActivity;
+    int oldUpSpeed, newUpSpeed;
+    int oldDownSpeed, newDownSpeed;
+    const tr_stat * st;
     TrTorrent * gtor;
 
-    /* maybe update the status column in the model */
+    /* get the old states */
     gtk_tree_model_get( model, iter,
                         MC_TORRENT, &gtor,
                         MC_ACTIVITY, &oldActivity,
+                        MC_SPEED_UP, &oldUpSpeed,
+                        MC_SPEED_DOWN, &oldDownSpeed,
                         -1 );
-    newActivity = tr_torrentGetActivity( tr_torrent_handle( gtor ) );
-    if( newActivity != oldActivity )
+
+    /* get the new states */
+    st = tr_torrentStat( tr_torrent_handle( gtor ) );
+    newActivity = st->activity;
+    newUpSpeed = st->pieceUploadSpeed;
+    newDownSpeed = st->pieceDownloadSpeed;
+
+    /* updating the model triggers off resort/refresh,
+       so don't do it unless something's actually changed... */
+    if( ( newActivity != oldActivity ) ||
+        ( newUpSpeed != oldUpSpeed ) ||
+        ( newDownSpeed != oldDownSpeed ) )
+    {
         gtk_list_store_set( GTK_LIST_STORE( model ), iter,
                             MC_ACTIVITY, newActivity,
+                            MC_SPEED_UP, newUpSpeed,
+                            MC_SPEED_DOWN, newDownSpeed,
                             -1 );
+    }
 
     /* cleanup */
     g_object_unref( gtor );
