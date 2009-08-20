@@ -519,7 +519,7 @@ handle_rpc( struct evhttp_request * req,
 
     data->req = req;
     data->server = server;
-    
+
     if( req->type == EVHTTP_REQ_GET )
     {
         const char * q;
@@ -629,17 +629,16 @@ handle_request( struct evhttp_request * req, void * arg )
         {
             const char * sessionId = get_current_session_id( server );
             char * tmp = tr_strdup_printf(
-                "<p>Please add this header to your HTTP requests:</p>"
-                "<p style=\"padding-left: 20pt;\"><code>%s: %s</code></p>"
-                "<p><b>RPC Application Developers:</b></p>"
-                "<p style=\"padding-left: 20pt;\">As of Transmission 1.53 and 1.61, RPC clients "
-                "need to look for this 409 response containing the phrase \"invalid session-id\".  "
-                "It occurs when the request's "TR_RPC_SESSION_ID_HEADER" header was missing "
-                "(such as during bootstrapping) or expired. "
-                "Either way, you can parse this response's headers for the new session-id.</p>"
-                "<p style=\"padding-left: 20pt;\">This requirement has been added to make "
-                "<a href=\"http://en.wikipedia.org/wiki/Cross-site_request_forgery\">CSRF</a>"
-                " attacks more difficult.</p>",
+                "<p>Your request had an invalid session-id header.</p>"
+                "<p>To fix this, follow these steps:"
+                "<ol><li> When reading a response, get its X-Transmission-Session-Id header and remember it"
+                "<li> Add the updated header to your outgoing requests"
+                "<li> When you get this 409 error message, resend your request with the updated header"
+                "</ol></p>"
+                "<p>This requirement has been added to help prevent "
+                "<a href=\"http://en.wikipedia.org/wiki/Cross-site_request_forgery\">CSRF</a> "
+                "attacks.</p>"
+                "<p><code>%s: %s</code></p>",
                 TR_RPC_SESSION_ID_HEADER, sessionId );
             evhttp_add_header( req->output_headers, TR_RPC_SESSION_ID_HEADER, sessionId );
             send_simple_response( req, 409, tmp );
@@ -769,7 +768,7 @@ tr_rpcSetWhitelist( tr_rpc_server * server,
             tr_ninf( MY_NAME, "Adding address to whitelist: %s (And it has a '+' or '-'!  Are you using an old ACL by mistake?)", token );
         else
             tr_ninf( MY_NAME, "Adding address to whitelist: %s", token );
-        
+
         if( walk[len]=='\0' )
             break;
         walk += len + 1;

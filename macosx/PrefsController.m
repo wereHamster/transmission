@@ -457,6 +457,7 @@ tr_session * fHandle;
 {
     const int count = [sender intValue];
     [fDefaults setInteger: count forKey: @"PeersTorrent"];
+    tr_sessionSetPeerLimitPerTorrent(fHandle, count);
 }
 
 - (void) setPEX: (id) sender
@@ -669,6 +670,7 @@ tr_session * fHandle;
     [fDefaults removeObjectForKey: @"WarningCreatorBlankAddress"];
     [fDefaults removeObjectForKey: @"WarningRemoveBuiltInTracker"];
     [fDefaults removeObjectForKey: @"WarningInvalidOpen"];
+    [fDefaults removeObjectForKey: @"WarningDonate"];
 }
 
 - (void) setQueue: (id) sender
@@ -1083,7 +1085,7 @@ tr_session * fHandle;
     [fDefaults setInteger: peersTotal forKey: @"PeersTotal"];
     
     const uint16_t peersTorrent = tr_sessionGetPeerLimitPerTorrent(fHandle);
-    [fDefaults setInteger: peersTotal forKey: @"PeersTorrent"];
+    [fDefaults setInteger: peersTorrent forKey: @"PeersTorrent"];
     
     //pex
     const BOOL pex = tr_sessionIsPexEnabled(fHandle);
@@ -1127,11 +1129,11 @@ tr_session * fHandle;
     
     //alt speed limit - down
     const int downLimitAlt = tr_sessionGetAltSpeed(fHandle, TR_DOWN);
-    [fDefaults setInteger: downLimit forKey: @"SpeedLimitDownloadLimit"];
+    [fDefaults setInteger: downLimitAlt forKey: @"SpeedLimitDownloadLimit"];
     
     //alt speed limit - up
     const int upLimitAlt = tr_sessionGetAltSpeed(fHandle, TR_UP);
-    [fDefaults setInteger: upLimitAlt forKey: @"SpeedLimitDownloadLimit"];
+    [fDefaults setInteger: upLimitAlt forKey: @"SpeedLimitUploadLimit"];
     
     //alt speed limit schedule
     const BOOL useAltSpeedSched = tr_sessionUsesAltSpeedTime(fHandle);

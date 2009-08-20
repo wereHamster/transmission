@@ -87,7 +87,7 @@ savePeers( tr_benc *          dict,
     count = tr_peerMgrGetPeers( (tr_torrent*) tor, &pex, TR_AF_INET6 );
     if( count > 0 )
         tr_bencDictAddRaw( dict, KEY_PEERS6, pex, sizeof( tr_pex ) * count );
-    
+
     tr_free( pex );
 }
 
@@ -112,7 +112,7 @@ loadPeers( tr_benc *    dict,
         tr_tordbg( tor, "Loaded %d IPv4 peers from resume file", count );
         ret = TR_FR_PEERS;
     }
-    
+
     if( tr_bencDictFindRaw( dict, KEY_PEERS6, &str, &len ) )
     {
         int       i;
@@ -523,12 +523,13 @@ static uint64_t
 loadFromFile( tr_torrent * tor,
               uint64_t     fieldsToLoad )
 {
-    int64_t      i;
+    int64_t  i;
     const char * str;
-    uint64_t     fieldsLoaded = 0;
-    char *       filename;
-    tr_benc      top;
-    tr_bool      boolVal;
+    uint64_t fieldsLoaded = 0;
+    char * filename;
+    tr_benc top;
+    tr_bool boolVal;
+    const tr_bool  wasDirty = tor->isDirty;
 
     filename = getResumeFilename( tor );
 
@@ -638,9 +639,14 @@ loadFromFile( tr_torrent * tor,
 
     if( fieldsToLoad & TR_FR_SPEEDLIMIT )
         fieldsLoaded |= loadSpeedLimits( &top, tor );
-    
+
     if( fieldsToLoad & TR_FR_RATIOLIMIT )
         fieldsLoaded |= loadRatioLimits( &top, tor );
+
+    /* loading the resume file triggers of a lot of changes,
+     * but none of them needs to trigger a re-saving of the
+     * same resume information... */
+    tor->isDirty = wasDirty;
 
     tr_bencFree( &top );
     tr_free( filename );

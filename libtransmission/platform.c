@@ -522,7 +522,6 @@ isClutchDir( const char * path )
     tr_inf( _( "Searching for web interface file \"%s\"" ), tmp );
     tr_free( tmp );
     return ret;
-    
 }
 
 const char *
@@ -554,10 +553,10 @@ tr_getClutchDir( const tr_session * session UNUSED )
             CFRelease( appRef );
 
             s = tr_buildPath( appString, "Contents", "Resources", "web", NULL );
-            
+
             if( !isClutchDir( s ) ) {
                 tr_free( s );
-                
+
                 /* Fallback to the Application Support folder */
                 s = tr_buildPath( tr_sessionGetConfigDir( session ), "web", NULL );
                 if( !isClutchDir( s ) ) {
@@ -570,11 +569,11 @@ tr_getClutchDir( const tr_session * session UNUSED )
 
             /* SHGetFolderPath explicitly requires MAX_PATH length */
             char dir[MAX_PATH];
-            
+
             /* Generally, Web interface should be stored in a Web subdir of
              * calling executable dir. */
 
-            if( s == NULL ) { 
+            if( s == NULL ) {
                 /* First, we should check personal AppData/Transmission/Web */
                 SHGetFolderPath( NULL, CSIDL_COMMON_APPDATA, NULL, 0, dir );
                 s = tr_buildPath( dir, "Transmission", "Web", NULL );
@@ -663,53 +662,6 @@ tr_getClutchDir( const tr_session * session UNUSED )
 /***
 ****
 ***/
-
-tr_lockfile_state_t
-tr_lockfile( const char * filename )
-{
-    tr_lockfile_state_t ret;
-
-#ifdef WIN32
-
-    HANDLE              file = CreateFile(
-        filename,
-        GENERIC_READ | GENERIC_WRITE,
-        FILE_SHARE_READ |
-        FILE_SHARE_WRITE,
-        NULL,
-        OPEN_ALWAYS,
-        FILE_ATTRIBUTE_NORMAL,
-        NULL );
-    if( file == INVALID_HANDLE_VALUE )
-        ret = TR_LOCKFILE_EOPEN;
-    else if( !LockFile( file, 0, 0, 1, 1 ) )
-        ret = TR_LOCKFILE_ELOCK;
-    else
-        ret = TR_LOCKFILE_SUCCESS;
-
-#else
-
-    int fd = open( filename, O_RDWR | O_CREAT, 0666 );
-    if( fd < 0 )
-        ret = TR_LOCKFILE_EOPEN;
-    else
-    {
-        struct flock lk;
-        memset( &lk, 0,  sizeof( lk ) );
-        lk.l_start = 0;
-        lk.l_len = 0;
-        lk.l_type = F_WRLCK;
-        lk.l_whence = SEEK_SET;
-        if( -1 == fcntl( fd, F_SETLK, &lk ) )
-            ret = TR_LOCKFILE_ELOCK;
-        else
-            ret = TR_LOCKFILE_SUCCESS;
-    }
-
-#endif
-
-    return ret;
-}
 
 #ifdef WIN32
 

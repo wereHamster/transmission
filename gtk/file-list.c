@@ -381,7 +381,7 @@ buildTree( GNode * node, gpointer gdata )
     const gboolean isLeaf = node->children == NULL;
 
     const char * mime_type = isLeaf ? get_mime_type_from_filename( child_data->name ) : DIRECTORY_MIME_TYPE;
-    GdkPixbuf * icon = get_mime_type_icon( mime_type, GTK_ICON_SIZE_MENU, build->w ); 
+    GdkPixbuf * icon = get_mime_type_icon( mime_type, GTK_ICON_SIZE_MENU, build->w );
     const int priority = isLeaf ? tr_torrentGetFilePriority( build->tor, child_data->index ) : 0;
     const gboolean enabled = isLeaf ? tr_torrentGetFileDL( build->tor, child_data->index ) : TRUE;
 #if GTK_CHECK_VERSION(2,10,0)
@@ -415,7 +415,7 @@ buildTree( GNode * node, gpointer gdata )
     }
 
     g_object_unref( icon );
- 
+
     /* we're done with this node */
     g_free( child_data->name );
     g_free( child_data );
@@ -692,7 +692,6 @@ file_list_new( TrCore * core, int torrentId )
     /* create the view */
     view = gtk_tree_view_new( );
     tree_view = GTK_TREE_VIEW( view );
-    gtk_tree_view_set_fixed_height_mode( tree_view, TRUE );
     gtk_tree_view_set_rules_hint( tree_view, TRUE );
     gtk_container_set_border_width( GTK_CONTAINER( view ), GUI_PAD_BIG );
     g_signal_connect( view, "button-press-event",
@@ -713,7 +712,7 @@ file_list_new( TrCore * core, int torrentId )
                                                 "expand", TRUE,
                                                 "title", _( "File" ),
                                                 NULL ) );
-    gtk_tree_view_column_set_sizing( col, GTK_TREE_VIEW_COLUMN_FIXED );
+    gtk_tree_view_column_set_resizable( col, TRUE );
     rend = gtk_cell_renderer_pixbuf_new( );
     gtk_tree_view_column_pack_start( col, rend, FALSE );
     gtk_tree_view_column_add_attribute( col, rend, "pixbuf", FC_ICON );

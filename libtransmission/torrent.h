@@ -3,7 +3,7 @@
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
- * so that the bulk of its code can remain under the MIT license. 
+ * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
  * the Transmission project.
  *
@@ -20,7 +20,7 @@
 #include "completion.h" /* tr_completion */
 #include "ratecontrol.h" /* tr_ratecontrol */
 #include "session.h" /* tr_globalLock(), tr_globalUnlock() */
-#include "utils.h" /* tr_bitfield */
+#include "utils.h" /* TR_GNUC_PRINTF */
 
 struct tr_bandwidth;
 struct tr_ratecontrol;
@@ -117,6 +117,11 @@ tr_torrent*      tr_torrentNext( tr_session  * session,
                                  tr_torrent  * current );
 
 void             tr_torrentCheckSeedRatio( tr_torrent * tor );
+
+/** save a torrent's .resume file if it's changed since the last time it was saved */
+void             tr_torrentSave( tr_torrent * tor );
+
+void             tr_torrentSetLocalError( tr_torrent * tor, const char * fmt, ... ) TR_GNUC_PRINTF( 2, 3 );
 
 
 
@@ -223,6 +228,8 @@ struct tr_torrent
 
     double                     desiredRatio;
     tr_ratiolimit              ratioLimitMode;
+
+    uint64_t                   preVerifyTotal;
 };
 
 /* get the index of this piece's first block */

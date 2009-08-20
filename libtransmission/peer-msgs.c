@@ -1100,7 +1100,7 @@ parseUtPex( tr_peermsgs * msgs, int msglen, struct evbuffer * inbuf )
                 tr_peerMgrAddPex( tor, TR_PEER_FROM_PEX, pex + i );
             tr_free( pex );
         }
-        
+
         if( tr_bencDictFindRaw( &val, "added6", &added, &added_len ) )
         {
             const uint8_t * added_f = NULL;
@@ -1115,7 +1115,6 @@ parseUtPex( tr_peermsgs * msgs, int msglen, struct evbuffer * inbuf )
                 tr_peerMgrAddPex( tor, TR_PEER_FROM_PEX, pex + i );
             tr_free( pex );
         }
-        
     }
 
     if( loaded )
@@ -1348,12 +1347,7 @@ readBtPiece( tr_peermsgs      * msgs,
         msgs->incoming.block = evbuffer_new( );
         req->length = 0;
         msgs->state = AWAITING_BT_LENGTH;
-        if( !err )
-            return READ_NOW;
-        else {
-            fireError( msgs, err );
-            return READ_ERR;
-        }
+        return err ? READ_ERR : READ_NOW;
     }
 }
 
@@ -1679,12 +1673,24 @@ canRead( tr_peerIo * io, void * vmsgs, size_t * piece )
 static int
 ratePulse( tr_peermsgs * msgs, uint64_t now )
 {
-    const double rateToClient = tr_peerGetPieceSpeed( msgs->peer, now, TR_PEER_TO_CLIENT );
-    const int seconds = 10;
+    int irate;
     const int floor = 8;
-    const int estimatedBlocksInPeriod = ( rateToClient * seconds * 1024 ) / msgs->torrent->blockSize;
+    const int seconds = 10;
+    double rate;
+    int estimatedBlocksInPeriod;
+    const tr_torrent * const torrent = msgs->torrent;
 
-    msgs->maxActiveRequests = floor + estimatedBlocksInPeriod;
+    /* Get the rate limit we should use.
+     * FIXME: this needs to consider all the other peers as well... */
+    rate = tr_peerGetPieceSpeed( msgs->peer, now, TR_PEER_TO_CLIENT );
+    if( tr_torrentUsesSpeedLimit( torrent, TR_PEER_TO_CLIENT ) )
+        rate = MIN( rate, tr_torrentGetSpeedLimit( torrent, TR_PEER_TO_CLIENT ) );
+    if( tr_torrentUsesSessionLimits( torrent ) )
+        if( tr_sessionGetActiveSpeedLimit( torrent->session, TR_PEER_TO_CLIENT, &irate ) )
+            rate = MIN( rate, irate );
+
+    estimatedBlocksInPeriod = ( rate * seconds * 1024 ) / torrent->blockSize;
+    msgs->maxActiveRequests = MAX( floor, estimatedBlocksInPeriod );
 
     if( msgs->reqq > 0 )
         msgs->maxActiveRequests = MIN( msgs->maxActiveRequests, msgs->reqq );
@@ -1753,7 +1759,7 @@ fillOutputBuffer( tr_peermsgs * msgs, time_t now )
             }
             else
             {
-                dbgmsg( msgs, "sending block %u:%u->%u", req.index, req.offset, req.length ); 
+                dbgmsg( msgs, "sending block %u:%u->%u", req.index, req.offset, req.length );
                 EVBUFFER_LENGTH(out) += req.length;
                 assert( EVBUFFER_LENGTH( out ) == msglen );
                 tr_peerIoWriteBuf( io, out, TRUE );
@@ -1765,7 +1771,6 @@ fillOutputBuffer( tr_peermsgs * msgs, time_t now )
 
             if( err )
             {
-                fireError( msgs, err );
                 bytesWritten = 0;
                 msgs = NULL;
             }
@@ -2058,7 +2063,7 @@ sendPex( tr_peermsgs * msgs )
             assert( ( walk - tmp ) == diffs.droppedCount * 6 );
             tr_bencDictAddRaw( &val, "dropped", tmp, walk - tmp );
             tr_free( tmp );
-            
+
             /* "added6" */
             tmp = walk = tr_new( uint8_t, diffs6.addedCount * 18 );
             for( i = 0; i < diffs6.addedCount; ++i )
@@ -2071,7 +2076,7 @@ sendPex( tr_peermsgs * msgs )
             assert( ( walk - tmp ) == diffs6.addedCount * 18 );
             tr_bencDictAddRaw( &val, "added6", tmp, walk - tmp );
             tr_free( tmp );
-            
+
             /* "added6.f" */
             tmp = walk = tr_new( uint8_t, diffs6.addedCount );
             for( i = 0; i < diffs6.addedCount; ++i )
@@ -2079,7 +2084,7 @@ sendPex( tr_peermsgs * msgs )
             assert( ( walk - tmp ) == diffs6.addedCount );
             tr_bencDictAddRaw( &val, "added6.f", tmp, walk - tmp );
             tr_free( tmp );
-            
+
             /* "dropped6" */
             tmp = walk = tr_new( uint8_t, diffs6.droppedCount * 18 );
             for( i = 0; i < diffs6.droppedCount; ++i )

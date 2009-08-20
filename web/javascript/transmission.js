@@ -5,17 +5,17 @@
  *
  * Class Transmission
  */
- 
+
 function Transmission(){
 	this.initialize();
-} 
- 
+}
+
 Transmission.prototype =
 {
 	/*--------------------------------------------
-	 * 
+	 *
 	 *  C O N S T R U C T O R
-	 * 
+	 *
 	 *--------------------------------------------*/
 
 	initialize: function()
@@ -162,7 +162,7 @@ Transmission.prototype =
 		for( var i=0, row; row=arguments[i]; ++i )
 			jQuery("<img>").attr("src", row);
 	},
-    
+
 	/*
 	 * Set up the preference validation
 	 */
@@ -179,7 +179,7 @@ Transmission.prototype =
 			}
 		});
 	},
-    
+
 	/*
 	 * Load the clutch prefs and init the GUI according to those prefs
 	 */
@@ -260,7 +260,7 @@ Transmission.prototype =
 	contextDeselectAll: function( ) {
 		this.deselectAll( true );
 	},
-    
+
 	/*
 	 * Create the torrent right-click menu
 	 */
@@ -288,13 +288,13 @@ Transmission.prototype =
 			boundingElement:   $('div#torrent_container'),
 			boundingRightPad:  20,
 			boundingBottomPad: 5,
-			onContextMenu:     function(e) { 
-				tr.setSelectedTorrent( $(e.target).closest('.torrent')[0]._torrent, true ); 
-				return true; 
+			onContextMenu:     function(e) {
+				tr.setSelectedTorrent( $(e.target).closest('.torrent')[0]._torrent, true );
+				return true;
 			}
 		});
 	},
-    
+
 	/*
 	 * Create the footer settings menu
 	 */
@@ -309,12 +309,12 @@ Transmission.prototype =
 		$('#unlimited_download_rate').selectMenuItem();
 		$('#unlimited_upload_rate').selectMenuItem();
 	},
-    
+
 
 	/*--------------------------------------------
-	 * 
+	 *
 	 *  U T I L I T I E S
-	 * 
+	 *
 	 *--------------------------------------------*/
 
 	getAllTorrents: function()
@@ -404,9 +404,9 @@ Transmission.prototype =
 	},
 
 	/*--------------------------------------------
-	 * 
+	 *
 	 *  S E L E C T I O N
-	 * 
+	 *
 	 *--------------------------------------------*/
 
 	setSelectedTorrent: function( torrent, doUpdate ) {
@@ -486,11 +486,11 @@ Transmission.prototype =
 	},
 
 	/*--------------------------------------------
-	 * 
+	 *
 	 *  E V E N T   F U N C T I O N S
-	 * 
+	 *
 	 *--------------------------------------------*/
-    
+
 	/*
 	 * Process key event
 	 */
@@ -521,7 +521,7 @@ Transmission.prototype =
 			tr.selectRow( i, true );
 		}
 	},
-    
+
 	isButtonEnabled: function(e) {
 		var p = e.target ? e.target.parentNode : e.srcElement.parentNode;
 		return p.className!='disabled' && p.parentNode.className!='disabled';
@@ -640,7 +640,7 @@ Transmission.prototype =
 		// Select the clicked tab, unselect the others,
 		// and display the appropriate info
 		var tab_ids = $(tab).parent('#inspector_tabs').find('.inspector_tab').map(
-			function() { return $(this).attr('id'); } 
+			function() { return $(this).attr('id'); }
 		);
 		for( var i=0, row; row=tab_ids[i]; ++i ) {
 			if (tab.id == row) {
@@ -731,17 +731,13 @@ Transmission.prototype =
 			this._periodic_refresh = null;
 		}
 	},
-	
-	scheduleFileRefresh: function() {
-		this._periodicRefreshIterations = 0;
-	},
 
 	/*--------------------------------------------
-	 * 
+	 *
 	 *  I N T E R F A C E   F U N C T I O N S
-	 * 
+	 *
 	 *--------------------------------------------*/
-    
+
 	showPrefsDialog: function( ) {
 		$('body').addClass('prefs_showing');
 		$('#prefs_container').show();
@@ -765,7 +761,7 @@ Transmission.prototype =
 		}
 		this.updateButtonStates( );
 	},
-    
+
 	/*
 	 * Process got some new session data from the server
 	 */
@@ -802,7 +798,7 @@ Transmission.prototype =
 			$(key).deselectMenuSiblings().selectMenuItem();
 		}
 	},
-    
+
 	setSearch: function( search ) {
 		this._current_search = search ? search.trim() : null;
 		this.refilter( );
@@ -873,7 +869,7 @@ Transmission.prototype =
 				tr.remote.savePrefs( args );
 				break;
 			
-			// Sort the torrent list 
+			// Sort the torrent list
 			case 'footer_sort_menu':
 
 				// The 'reverse sort' option state can be toggled independently of the other options
@@ -909,7 +905,7 @@ Transmission.prototype =
 	{
 		this._last_torrent_clicked = torrent;
 	},
-    
+
 	/*
 	 * Update the inspector with the latest data for the selected torrents
 	 */
@@ -1027,7 +1023,7 @@ Transmission.prototype =
 			var tracker = t._tracker;
 			if( total_tracker == null )
 				total_tracker = tracker;
-			else if ( total_tracker.search ( tracker ) == -1 )  
+			else if ( total_tracker.search ( tracker ) == -1 )
 				total_tracker += ', ' + tracker;
 			if( t._is_private )
 				have_private = true;
@@ -1078,7 +1074,7 @@ Transmission.prototype =
 			jQuery.each( this.getDeselectedTorrents(), function() { this.hideFileList(); } );
 		}
 	},
-    
+
 	/*
 	 * Toggle the visibility of the inspector (used by the context menu)
 	 */
@@ -1106,7 +1102,7 @@ Transmission.prototype =
 		this.setPref( Prefs._ShowInspector, true );
 		this.updateInspector( );
 	},
-    
+
 	/*
 	 * Hide the inspector
 	 */
@@ -1267,7 +1263,7 @@ Transmission.prototype =
 				row.toggleClass('even', isEven);
 		}
 	},
-    
+
 	updateStatusbar: function()
 	{
 		var torrents = this.getAllTorrents();
@@ -1300,7 +1296,7 @@ Transmission.prototype =
 		if( iPhone ) s = 'DL: ' + s;
 		setInnerHTML( $('#torrent_global_download')[0], s );
 	},
-    
+
 	/*
 	 * Select a torrent file to upload
 	 * FIXME
@@ -1310,7 +1306,7 @@ Transmission.prototype =
 		// Display the upload dialog
 		if (! confirmed) {
 				$('input#torrent_upload_file').attr('value', '');
-				$('input#torrent_upload_url').attr('value', ''); 
+				$('input#torrent_upload_url').attr('value', '');
 				$('#upload_container').show();
 			if (!iPhone && Safari3) {
 				setTimeout("$('div#upload_container div.dialog_window').css('top', '0px');",10);
@@ -1337,7 +1333,7 @@ Transmission.prototype =
 			}
 		}
 	},
-   
+
 	removeSelectedTorrents: function() {
 		var torrents = this.getSelectedTorrents( );
 		if( torrents.length )
@@ -1359,7 +1355,7 @@ Transmission.prototype =
 			var message = 'Once removed, continuing the transfer will require the torrent file. Are you sure you want to remove it?';
 			dialog.confirm( header, message, 'Remove', 'transmission.removeTorrents', torrents );
 		}
-		else 
+		else
 		{
 			var header = 'Remove ' + torrents.length + ' transfers?';
 			var message = 'Once removed, continuing the transfers will require the torrent files. Are you sure you want to remove them?';
@@ -1376,7 +1372,7 @@ Transmission.prototype =
 				message = 'All data downloaded for this torrent will be deleted. Are you sure you want to remove it?';
 			dialog.confirm( header, message, 'Remove', 'transmission.removeTorrentsAndData', torrents );
 		}
-		else 
+		else
 		{
 			var header = 'Remove ' + torrents.length + ' transfers and delete data?',
 				message = 'All data downloaded for these torrents will be deleted. Are you sure you want to remove them?';
@@ -1385,7 +1381,9 @@ Transmission.prototype =
 	},
 
 	removeTorrents: function( torrents ) {
-		this.remote.removeTorrents( torrents );
+		var torrent_ids = jQuery.map(torrents, function(t) { return t.id(); } );
+		var tr = this;
+		this.remote.removeTorrents( torrent_ids, function(){ tr.refreshTorrents() } );
 	},
 
 	removeTorrentsAndData: function( torrents ) {
@@ -1406,15 +1404,19 @@ Transmission.prototype =
 		this.startTorrents( [ torrent ] );
 	},
 	startTorrents: function( torrents ) {
-		this.remote.startTorrents( torrents );
+		var torrent_ids = jQuery.map(torrents, function(t) { return t.id(); } );
+		var tr = this;
+		this.remote.startTorrents( torrent_ids, function(){ tr.refreshTorrents(torrent_ids) } );
 	},
 	verifyTorrent: function( torrent ) {
 		this.verifyTorrents( [ torrent ] );
 	},
 	verifyTorrents: function( torrents ) {
-		this.remote.verifyTorrents( torrents );
+		var torrent_ids = jQuery.map(torrents, function(t) { return t.id(); } );
+		var tr = this;
+		this.remote.verifyTorrents( torrent_ids, function(){ tr.refreshTorrents(torrent_ids) } );
 	},
-    
+
 	stopSelectedTorrents: function( ) {
 		this.stopTorrents( this.getSelectedTorrents( ) );
 	},
@@ -1425,7 +1427,9 @@ Transmission.prototype =
 		this.stopTorrents( [ torrent ] );
 	},
 	stopTorrents: function( torrents ) {
-		this.remote.stopTorrents( torrents );
+		var torrent_ids = jQuery.map(torrents, function(t) { return t.id(); } );
+		var tr = this;
+		this.remote.stopTorrents( torrent_ids,	function(){ tr.refreshTorrents(torrent_ids )} );
 	},
 	changeFileCommand: function(command, torrent, file) {
 		this.remote.changeFileCommand(command, torrent, file)

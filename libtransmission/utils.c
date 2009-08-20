@@ -284,7 +284,6 @@ tr_deepLog( const char  * file,
 /***
 ****
 ***/
-    
 
 int
 tr_msgLoggingIsActive( int level )
@@ -924,10 +923,10 @@ tr_sha1_to_hex( char *          out,
 ****
 ***/
 
-int
+tr_bool
 tr_httpIsValidURL( const char * url )
 {
-    const char *        c;
+    const char * c;
     static const char * rfc2396_valid_chars =
         "abcdefghijklmnopqrstuvwxyz" /* lowalpha */
         "ABCDEFGHIJKLMNOPQRSTUVWXYZ" /* upalpha */
@@ -944,7 +943,7 @@ tr_httpIsValidURL( const char * url )
         if( !strchr( rfc2396_valid_chars, *c ) )
             return FALSE;
 
-    return !tr_httpParseURL( url, -1, NULL, NULL, NULL );
+    return tr_httpParseURL( url, -1, NULL, NULL, NULL ) == 0;
 }
 
 int
@@ -1248,7 +1247,7 @@ compareInt( const void * va, const void * vb )
  * Given a string like "1-4" or "1-4,6,9,14-51", this allocates and returns an
  * array of setmeCount ints of all the values in the array.
  * For example, "5-8" will return [ 5, 6, 7, 8 ] and setmeCount will be 4.
- * It's the caller's responsibility to call tr_free() on the returned array. 
+ * It's the caller's responsibility to call tr_free() on the returned array.
  * If a fragment of the string can't be parsed, NULL is returned.
  */
 int*

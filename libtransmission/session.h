@@ -53,7 +53,7 @@ struct tr_session
     tr_bool                      isRatioLimited;
 
     tr_benc                      removedTorrents;
-    
+
     int                          umask;
 
     int                          speedLimit[2];
@@ -124,6 +124,7 @@ struct tr_session
     tr_benc                    * metainfoLookup;
 
     struct event               * altTimer;
+    struct event               * saveTimer;
 
     /* the size of the output buffer for peer connections */
     int so_sndbuf;

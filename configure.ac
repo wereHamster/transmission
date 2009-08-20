@@ -3,8 +3,8 @@ dnl STATUS: "X" for prerelease beta builds,
 dnl         "Z" for unsupported trunk builds,
 dnl         "0" for stable, supported releases
 dnl these should be the only two lines you need to change
-m4_define([user_agent_prefix],[1.73+])
-m4_define([peer_id_prefix],[-TR173Z-])
+m4_define([user_agent_prefix],[1.74b1])
+m4_define([peer_id_prefix],[-TR173X-])
 
 AC_INIT([transmission],
         [user_agent_prefix],
@@ -75,10 +75,14 @@ fi
 AC_HEADER_STDC
 AC_HEADER_TIME
 
-AC_CHECK_FUNCS([lrintf strlcpy daemon dirname basename strcasecmp localtime_r posix_fallocate memmem])
+AC_CHECK_FUNCS([lrintf strlcpy daemon dirname basename strcasecmp localtime_r posix_fallocate memmem strtold])
 AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 ACX_PTHREAD
+
+if test "x$ac_cv_func_strtold" != "xyes" ; then
+    CPPFLAGS="$CPPFLAGS -Dstrtold=strtod"
+fi
 
 AC_SEARCH_LIBS(cos, [m])
 AC_SEARCH_LIBS([socket], [socket net])
@@ -335,7 +339,7 @@ have_darwin="no"
 have_msw="no"
 case $host_os in
 
-   *cygwin|*mingw32*)
+   *mingw32*)
      have_msw="yes"
      CXXFLAGS="$CXXFLAGS -mms-bitfields -mwin32 -mwindows"
      CPPFLAGS="$CPPFLAGS -DWIN32 -D_WIN32 -DWIN32_LEAN_AND_MEAN"

@@ -47,7 +47,7 @@ enum
 
     /* minimum interval for refilling peers' request lists */
     REFILL_PERIOD_MSEC = 400,
-   
+
     /* how frequently to reallocate bandwidth */
     BANDWIDTH_PERIOD_MSEC = 500,
 
@@ -1078,7 +1078,7 @@ peerCallbackFunc( void * vpeer, void * vevent, void * vt )
                 tr_torrentSetDirty( tor );
             }
 
-            /* update the stats */ 
+            /* update the stats */
             if( e->wasPieceData )
                 tr_statsAddDownloaded( tor->session, e->length );
 
@@ -1164,27 +1164,16 @@ peerCallbackFunc( void * vpeer, void * vevent, void * vt )
         }
 
         case TR_PEER_ERROR:
-            if( e->err == EINVAL )
-            {
-                addStrike( t, peer );
-                peer->doPurge = 1;
-                tordbg( t, "setting %s doPurge flag because we got an EINVAL error", tr_peerIoAddrStr( &peer->addr, peer->port ) );
-            }
-            else if( ( e->err == ERANGE )
-                  || ( e->err == EMSGSIZE )
-                  || ( e->err == ENOTCONN ) )
+            if( ( e->err == ERANGE ) || ( e->err == EMSGSIZE ) || ( e->err == ENOTCONN ) )
             {
                 /* some protocol error from the peer */
                 peer->doPurge = 1;
-                tordbg( t, "setting %s doPurge flag because we got an ERANGE, EMSGSIZE, or ENOTCONN error", tr_peerIoAddrStr( &peer->addr, peer->port ) );
+                tordbg( t, "setting %s doPurge flag because we got an ERANGE, EMSGSIZE, or ENOTCONN error",
+                        tr_peerIoAddrStr( &peer->addr, peer->port ) );
             }
-            else /* a local error, such as an IO error */
+            else 
             {
-                t->tor->error = TR_STAT_LOCAL_ERROR;
-                tr_strlcpy( t->tor->errorString,
-                            tr_strerror( e->err ),
-                            sizeof( t->tor->errorString ) );
-                tr_torrentStop( t->tor );
+                tordbg( t, "unhandled error: %s", tr_strerror( e->err ) );
             }
             break;
 
@@ -1430,7 +1419,7 @@ tr_peerMgrCompact6ToPex( const void    * compact,
     size_t          n = compactLen / 18;
     const uint8_t * walk = compact;
     tr_pex *        pex = tr_new0( tr_pex, n );
-    
+
     for( i = 0; i < n; ++i )
     {
         pex[i].addr.type = TR_AF_INET6;
@@ -1439,7 +1428,7 @@ tr_peerMgrCompact6ToPex( const void    * compact,
         if( added_f && ( n == added_f_len ) )
             pex[i].flags = added_f[i];
     }
-    
+
     *pexCount = n;
     return pex;
 }
@@ -1454,14 +1443,14 @@ tr_peerMgrArrayToPex( const void * array,
     /*size_t          n = arrayLen / sizeof( tr_peerArrayElement );*/
     const uint8_t * walk = array;
     tr_pex        * pex = tr_new0( tr_pex, n );
-    
+
     for( i = 0 ; i < n ; i++ ) {
         memcpy( &pex[i].addr, walk, sizeof( tr_address ) );
         memcpy( &pex[i].port, walk + sizeof( tr_address ), 2 );
         pex[i].flags = 0x00;
         walk += sizeof( tr_address ) + 2;
     }
-    
+
     *pexCount = n;
     return pex;
 }
@@ -2508,7 +2497,7 @@ enforceSessionPeerLimit( tr_session * session, uint64_t now )
     while(( tor = tr_torrentNext( session, tor )))
         n += tr_ptrArraySize( &tor->torrentPeers->peers );
 
-    /* if there are too many, prune out the worst */ 
+    /* if there are too many, prune out the worst */
     if( n > max )
     {
         tr_peer ** peers = tr_new( tr_peer*, n );
@@ -2526,7 +2515,7 @@ enforceSessionPeerLimit( tr_session * session, uint64_t now )
                 torrents[n] = t;
             }
         }
-        
+
         /* sort 'em */
         sortPeersByLiveliness( peers, (void**)torrents, n, now );
 
@@ -2614,6 +2603,12 @@ bandwidthPulse( void * vmgr )
             tr_torrentCheckSeedRatio( tor );
         }
     }
+
+    /* possibly stop torrents that have an error */
+    tor = NULL;
+    while(( tor = tr_torrentNext( mgr->session, tor )))
+        if( tor->isRunning && (( tor->error == TR_STAT_TRACKER_ERROR ) || ( tor->error == TR_STAT_LOCAL_ERROR )))
+            tr_torrentStop( tor );
 
     managerUnlock( mgr );
     return TRUE;

@@ -144,6 +144,8 @@ typedef enum
 #define TRAC_URL   @"http://trac.transmissionbt.com/"
 #define DONATE_URL  @"http://www.transmissionbt.com/donate.php"
 
+#define DONATE_NAG_TIME (60 * 60 * 24 * 7)
+
 static void altSpeedToggledCallback(tr_session * handle UNUSED, tr_bool active, tr_bool byUser, void * controller)
 {
     NSDictionary * dict = [[NSDictionary alloc] initWithObjectsAndKeys: [[NSNumber alloc] initWithBool: active], @"Active",
@@ -532,6 +534,52 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     //registering the Web UI to Bonjour
     if ([fDefaults boolForKey: @"RPC"] && [fDefaults boolForKey: @"RPCWebDiscovery"])
         [[BonjourController defaultController] startWithPort: [fDefaults integerForKey: @"RPCPort"]];
+    
+    //shamelessly ask for donations
+    if ([fDefaults boolForKey: @"WarningDonate"])
+    {
+        tr_session_stats stats;
+        tr_sessionGetCumulativeStats(fLib, &stats);
+        const BOOL firstLaunch = stats.sessionCount <= 1;
+        
+        NSDate * lastDonateDate = [fDefaults objectForKey: @"DonateAskDate"];
+        const BOOL timePassed = !lastDonateDate || (-1 * [lastDonateDate timeIntervalSinceNow]) >= DONATE_NAG_TIME;
+        
+        if (!firstLaunch && timePassed)
+        {
+            NSAlert * alert = [[NSAlert alloc] init];
+            [alert setMessageText: NSLocalizedString(@"Support open-source indie software", "Donation beg -> title")];
+            
+            NSString * donateMessage = [NSString stringWithFormat: @"%@\n\n%@",
+                NSLocalizedString(@"Transmission is a full-featured torrent application."
+                    " A lot of time and effort have gone into development, coding, and refinement."
+                    " If you enjoy using it, please consider showing your love with a donation.", "Donation beg -> message"),
+                NSLocalizedString(@"Donate or not, there will be no difference to your torrenting experience.", "Donation beg -> message")];
+            
+            [alert setInformativeText: donateMessage];
+            [alert setAlertStyle: NSInformationalAlertStyle];
+            
+            [alert addButtonWithTitle: [NSLocalizedString(@"Donate", "Donation beg -> button") stringByAppendingEllipsis]];
+            NSButton * noDonateButton = [alert addButtonWithTitle: NSLocalizedString(@"Nope", "Donation beg -> button")];
+            [noDonateButton setKeyEquivalent: @"\e"]; //escape key
+            
+            const BOOL allowNeverAgain = lastDonateDate != nil; //hide the "don't show again" check the first time - give them time to try the app
+            [alert setShowsSuppressionButton: allowNeverAgain];
+            if (allowNeverAgain)
+                [[alert suppressionButton] setTitle: NSLocalizedString(@"Don't bug me about this ever again.", "Donation beg -> button")];
+            
+            const NSInteger donateResult = [alert runModal];
+            if (donateResult == NSAlertFirstButtonReturn)
+                [self linkDonate: self];
+            
+            if (allowNeverAgain)
+                [fDefaults setBool: ([[alert suppressionButton] state] != NSOnState) forKey: @"WarningDonate"];
+            
+            [alert release];
+            
+            [fDefaults setObject: [NSDate date] forKey: @"DonateAskDate"];
+        }
+    }
 }
 
 - (BOOL) applicationShouldHandleReopen: (NSApplication *) app hasVisibleWindows: (BOOL) visibleWindows
@@ -2205,7 +2253,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         if ([menu numberOfItems] > 3)
             return;
         
-        const NSInteger speedLimitActionValue[] = { 5, 10, 20, 30, 40, 50, 75, 100, 150, 200, 250, 500, 750, -1 };
+        const NSInteger speedLimitActionValue[] = { 5, 10, 20, 30, 40, 50, 75, 100, 150, 200, 250, 500, 750, 1000, 1500, 2000, -1 };
         
         NSMenuItem * item;
         for (NSInteger i = 0; speedLimitActionValue[i] != -1; i++)
@@ -4061,7 +4109,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
             break;
         
         default:
-            NSLog(@"Unknown RPC command received!");
+            NSLog(@"Unknown RPC command received (%d)", type);
             [torrent release];
     }
     

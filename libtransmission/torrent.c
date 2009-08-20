@@ -18,6 +18,7 @@
 #include <assert.h>
 #include <limits.h> /* INT_MAX */
 #include <math.h> /* fabs */
+#include <stdarg.h>
 #include <string.h> /* memcmp */
 #include <stdlib.h> /* qsort */
 
@@ -115,9 +116,8 @@ tr_torrentSetSpeedLimit( tr_torrent * tor, tr_direction dir, int KiB_sec )
     assert( tr_isTorrent( tor ) );
     assert( tr_isDirection( dir ) );
 
-    tr_bandwidthSetDesiredSpeed( tor->bandwidth, dir, KiB_sec );
-
-    tr_torrentSetDirty( tor );
+    if( tr_bandwidthSetDesiredSpeed( tor->bandwidth, dir, KiB_sec ) )
+        tr_torrentSetDirty( tor );
 }
 
 int
@@ -135,9 +135,8 @@ tr_torrentUseSpeedLimit( tr_torrent * tor, tr_direction dir, tr_bool do_use )
     assert( tr_isTorrent( tor ) );
     assert( tr_isDirection( dir ) );
 
-    tr_bandwidthSetLimited( tor->bandwidth, dir, do_use );
-
-    tr_torrentSetDirty( tor );
+    if( tr_bandwidthSetLimited( tor->bandwidth, dir, do_use ) )
+        tr_torrentSetDirty( tor );
 }
 
 tr_bool
@@ -152,12 +151,15 @@ tr_torrentUsesSpeedLimit( const tr_torrent * tor, tr_direction dir )
 void
 tr_torrentUseSessionLimits( tr_torrent * tor, tr_bool doUse )
 {
+    tr_bool changed;
+
     assert( tr_isTorrent( tor ) );
 
-    tr_bandwidthHonorParentLimits( tor->bandwidth, TR_UP, doUse );
-    tr_bandwidthHonorParentLimits( tor->bandwidth, TR_DOWN, doUse );
+    changed = tr_bandwidthHonorParentLimits( tor->bandwidth, TR_UP, doUse );
+    changed |= tr_bandwidthHonorParentLimits( tor->bandwidth, TR_DOWN, doUse );
 
-    tr_torrentSetDirty( tor );
+    if( changed )
+        tr_torrentSetDirty( tor );
 }
 
 tr_bool
@@ -178,10 +180,13 @@ tr_torrentSetRatioMode( tr_torrent *  tor, tr_ratiolimit mode )
     assert( tr_isTorrent( tor ) );
     assert( mode==TR_RATIOLIMIT_GLOBAL || mode==TR_RATIOLIMIT_SINGLE || mode==TR_RATIOLIMIT_UNLIMITED  );
 
-    tor->ratioLimitMode = mode;
-    tor->needsSeedRatioCheck = TRUE;
+    if( mode != tor->ratioLimitMode )
+    {
+        tor->ratioLimitMode = mode;
+        tor->needsSeedRatioCheck = TRUE;
 
-    tr_torrentSetDirty( tor );
+        tr_torrentSetDirty( tor );
+    }
 }
 
 tr_ratiolimit
@@ -197,11 +202,14 @@ tr_torrentSetRatioLimit( tr_torrent * tor, double desiredRatio )
 {
     assert( tr_isTorrent( tor ) );
 
-    tor->desiredRatio = desiredRatio;
+    if( (int)(desiredRatio*100.0) != (int)(tor->desiredRatio*100.0) )
+    {
+        tor->desiredRatio = desiredRatio;
 
-    tor->needsSeedRatioCheck = TRUE;
+        tor->needsSeedRatioCheck = TRUE;
 
-    tr_torrentSetDirty( tor );
+        tr_torrentSetDirty( tor );
+    }
 }
 
 double
@@ -262,10 +270,23 @@ tr_torrentGetSeedRatio( const tr_torrent * tor, double * ratio )
 ****
 ***/
 
+void
+tr_torrentSetLocalError( tr_torrent * tor, const char * fmt, ... )
+{
+    va_list ap;
+
+    assert( tr_isTorrent( tor ) );
+
+    va_start( ap, fmt );
+    tor->error = TR_STAT_LOCAL_ERROR;
+    evutil_vsnprintf( tor->errorString, sizeof( tor->errorString ), fmt, ap );
+    va_end( ap );
+}
+
 static void
 onTrackerResponse( void * tracker UNUSED,
-                   void *         vevent,
-                   void *         user_data )
+                   void * vevent,
+                   void * user_data )
 {
     tr_torrent *       tor = user_data;
     tr_tracker_event * event = vevent;
@@ -509,8 +530,7 @@ randomizeTiers( tr_info * info )
     tr_free( r );
 }
 
-static void torrentStart( tr_torrent * tor,
-                          int          reloadProgress );
+static void torrentStart( tr_torrent * tor );
 
 /**
  * Decide on a block size.  constraints:
@@ -677,7 +697,7 @@ torrentRealInit( tr_torrent * tor, const tr_ctor * ctor )
     tr_metainfoMigrate( session, &tor->info );
 
     if( doStart )
-        torrentStart( tor, FALSE );
+        torrentStart( tor );
 }
 
 tr_parse_result
@@ -991,7 +1011,7 @@ tr_torrentStat( tr_torrent * tor )
         s->percentRatio = 1.0;
     else if( s->ratio == TR_RATIO_NA )
         s->percentRatio = 0.0;
-    else 
+    else
         s->percentRatio = s->ratio / seedRatio;
 
     tr_torrentUnlock( tor );
@@ -1246,24 +1266,33 @@ freeTorrent( tr_torrent * tor )
 static void
 checkAndStartImpl( void * vtor )
 {
-    time_t now;
     tr_torrent * tor = vtor;
 
     assert( tr_isTorrent( tor ) );
 
     tr_globalLock( tor->session );
 
-    now = time( NULL );
-    tor->isRunning = TRUE;
-    tor->needsSeedRatioCheck = TRUE;
-    tor->error = TR_STAT_OK;
-    tor->errorString[0] = '\0';
-    tor->completeness = tr_cpGetStatus( &tor->completion );
-    tor->startDate = tor->anyDate = now;
-    tr_torrentResetTransferStats( tor );
-    tr_trackerStart( tor->tracker );
-    tor->dhtAnnounceAt = now + tr_cryptoWeakRandInt( 20 );
-    tr_peerMgrStartTorrent( tor );
+    /** If we had local data before, but it's disappeared,
+        stop the torrent and log an error. */
+    if( tor->preVerifyTotal && !tr_cpHaveTotal( &tor->completion ) )
+    {
+        tr_torrentSetLocalError( tor, _( "Can't find local data.  Try \"Set Location\" to find it, or restart the torrent to re-download." ) );
+        tr_torrentStop( tor );
+    }
+    else
+    {
+        const time_t now = time( NULL );
+        tor->isRunning = TRUE;
+        tor->needsSeedRatioCheck = TRUE;
+        tor->error = TR_STAT_OK;
+        tor->errorString[0] = '\0';
+        tor->completeness = tr_cpGetStatus( &tor->completion );
+        tor->startDate = tor->anyDate = now;
+        tr_torrentResetTransferStats( tor );
+        tr_trackerStart( tor->tracker );
+        tor->dhtAnnounceAt = now + tr_cryptoWeakRandInt( 20 );
+        tr_peerMgrStartTorrent( tor );
+    }
 
     tr_globalUnlock( tor->session );
 }
@@ -1278,7 +1307,7 @@ checkAndStartCB( tr_torrent * tor )
 }
 
 static void
-torrentStart( tr_torrent * tor, int reloadProgress )
+torrentStart( tr_torrent * tor )
 {
     assert( tr_isTorrent( tor ) );
 
@@ -1287,11 +1316,8 @@ torrentStart( tr_torrent * tor, int reloadProgress )
     if( !tor->isRunning )
     {
         tr_verifyRemove( tor );
-
-        if( reloadProgress )
-            tr_torrentLoadResume( tor, TR_FR_PROGRESS, NULL );
-
         tor->isRunning = 1;
+        tor->preVerifyTotal = tr_cpHaveTotal( &tor->completion );
         tr_verifyAdd( tor, checkAndStartCB );
     }
 
@@ -1302,7 +1328,7 @@ void
 tr_torrentStart( tr_torrent * tor )
 {
     if( tr_isTorrent( tor ) )
-        torrentStart( tor, TRUE );
+        torrentStart( tor );
 }
 
 static void
@@ -1313,9 +1339,15 @@ torrentRecheckDoneImpl( void * vtor )
     assert( tr_isTorrent( tor ) );
     tr_torrentRecheckCompleteness( tor );
 
-    if( tor->startAfterVerify )
+    if( tor->preVerifyTotal && !tr_cpHaveTotal( &tor->completion ) )
+    {
+        tr_torrentSetLocalError( tor, _( "Can't find local data.  Try \"Set Location\" to find it, or restart the torrent to re-download." ) );
+        tr_torrentStop( tor );
+    }
+    else if( tor->startAfterVerify )
     {
         tor->startAfterVerify = FALSE;
+
         tr_torrentStart( tor );
     }
 }
@@ -1328,9 +1360,11 @@ torrentRecheckDoneCB( tr_torrent * tor )
     tr_runInEventThread( tor->session, torrentRecheckDoneImpl, tor );
 }
 
-void
-tr_torrentVerify( tr_torrent * tor )
+static void
+verifyTorrent( void * vtor )
 {
+    tr_torrent * tor = vtor;
+
     assert( tr_isTorrent( tor ) );
     tr_globalLock( tor->session );
 
@@ -1338,16 +1372,35 @@ tr_torrentVerify( tr_torrent * tor )
     tr_verifyRemove( tor );
 
     /* if the torrent's running, stop it & set the restart-after-verify flag */
-    if( tor->isRunning ) {
+    if( tor->startAfterVerify || tor->isRunning ) {
         tr_torrentStop( tor );
         tor->startAfterVerify = TRUE;
     }
 
     /* add the torrent to the recheck queue */
+    tor->preVerifyTotal = tr_cpHaveTotal( &tor->completion );
     tr_torrentUncheck( tor );
     tr_verifyAdd( tor, torrentRecheckDoneCB );
 
     tr_globalUnlock( tor->session );
+}
+
+void
+tr_torrentVerify( tr_torrent * tor )
+{
+    if( tr_isTorrent( tor ) )
+        tr_runInEventThread( tor->session, verifyTorrent, tor );
+}
+
+void
+tr_torrentSave( tr_torrent * tor )
+{
+    assert( tr_isTorrent( tor ) );
+
+    if( tor->isDirty ) {
+        tor->isDirty = FALSE;
+        tr_torrentSaveResume( tor );
+    }
 }
 
 static void
@@ -1363,11 +1416,8 @@ stopTorrent( void * vtor )
 
     tr_fdTorrentClose( tor->uniqueId );
 
-    if( tor->isDirty ) {
-        tor->isDirty = 0;
-        if( !tor->isDeleting )
-            tr_torrentSaveResume( tor );
-    }
+    if( !tor->isDeleting )
+        tr_torrentSave( tor );
 }
 
 void
@@ -1398,13 +1448,15 @@ closeTorrent( void * vtor )
     tr_bencDictAddInt( d, "id", tor->uniqueId );
     tr_bencDictAddInt( d, "date", time( NULL ) );
 
-    tor->isRunning = 0;
     stopTorrent( tor );
+
     if( tor->isDeleting )
     {
         tr_metainfoRemoveSaved( tor->session, &tor->info );
         tr_torrentRemoveResume( tor );
     }
+
+    tor->isRunning = 0;
     freeTorrent( tor );
 }
 
@@ -1748,9 +1800,12 @@ tr_torrentSetPriority( tr_torrent * tor, tr_priority_t priority )
     assert( tr_isTorrent( tor ) );
     assert( tr_isPriority( priority ) );
 
-    tor->bandwidth->priority = priority;
+    if( tor->bandwidth->priority != priority )
+    {
+        tor->bandwidth->priority = priority;
 
-    tr_torrentSetDirty( tor );
+        tr_torrentSetDirty( tor );
+    }
 }
 
 /***
@@ -1814,10 +1869,11 @@ tr_torrentReqIsValid( const tr_torrent * tor,
     else if( tr_pieceOffset( tor, index, offset, length ) > tor->info.totalSize )
         err = 5;
 
-    if( err ) fprintf( stderr, "index %lu offset %lu length %lu err %d\n",
-                       (unsigned long)index, (unsigned long)offset,
-                       (unsigned long)length,
-                       err );
+    if( err ) tr_tordbg( tor, "index %lu offset %lu length %lu err %d\n",
+                              (unsigned long)index,
+                              (unsigned long)offset,
+                              (unsigned long)length,
+                              err );
 
     return !err;
 }
@@ -2012,14 +2068,12 @@ tr_torrentSetAddedDate( tr_torrent * tor,
 }
 
 void
-tr_torrentSetActivityDate( tr_torrent * tor,
-                           time_t       t )
+tr_torrentSetActivityDate( tr_torrent * tor, time_t t )
 {
     assert( tr_isTorrent( tor ) );
 
     tor->activityDate = t;
     tor->anyDate = MAX( tor->anyDate, tor->activityDate );
-    tr_torrentSetDirty( tor );
 }
 
 void
@@ -2282,7 +2336,7 @@ setLocation( void * vdata )
             const tr_file * f = &tor->info.files[i];
             char * oldpath = tr_buildPath( tor->downloadDir, f->name, NULL );
             char * newpath = tr_buildPath( location, f->name, NULL );
-            
+
             if( do_move )
             {
                 errno = 0;

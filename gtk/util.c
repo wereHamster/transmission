@@ -3,7 +3,7 @@
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
- * so that the bulk of its code can remain under the MIT license. 
+ * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
  * the Transmission project.
  *
@@ -15,6 +15,10 @@
 #include <stdarg.h>
 #include <stdlib.h> /* free() */
 #include <string.h> /* strcmp() */
+
+#include <sys/types.h> /* for gtr_lockfile()'s open() */
+#include <sys/stat.h> /* for gtr_lockfile()'s open() */
+#include <fcntl.h> /* for gtr_lockfile()'s open() */
 
 #include <gtk/gtk.h>
 #include <glib/gi18n.h>
@@ -36,6 +40,55 @@
 #include "hig.h"
 #include "tr-prefs.h"
 #include "util.h"
+
+gtr_lockfile_state_t
+gtr_lockfile( const char * filename )
+{
+    gtr_lockfile_state_t ret;
+
+#ifdef WIN32
+
+    HANDLE file = CreateFile( filename,
+                              GENERIC_READ | GENERIC_WRITE,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE,
+                              NULL,
+                              OPEN_ALWAYS,
+                              FILE_ATTRIBUTE_NORMAL,
+                              NULL );
+    if( file == INVALID_HANDLE_VALUE )
+        ret = GTR_LOCKFILE_EOPEN;
+    else if( !LockFile( file, 0, 0, 1, 1 ) )
+        ret = GTR_LOCKFILE_ELOCK;
+    else
+        ret = GTR_LOCKFILE_SUCCESS;
+
+#else
+
+    int fd = open( filename, O_RDWR | O_CREAT, 0666 );
+    if( fd < 0 )
+        ret = GTR_LOCKFILE_EOPEN;
+    else {
+        struct flock lk;
+        memset( &lk, 0,  sizeof( lk ) );
+        lk.l_start = 0;
+        lk.l_len = 0;
+        lk.l_type = F_WRLCK;
+        lk.l_whence = SEEK_SET;
+        if( -1 == fcntl( fd, F_SETLK, &lk ) )
+            ret = GTR_LOCKFILE_ELOCK;
+        else
+            ret = GTR_LOCKFILE_SUCCESS;
+    }
+
+#endif
+
+    return ret;
+}
+
+/***
+****
+***/
+
 
 char*
 tr_strlratio( char * buf, double ratio, size_t buflen )
@@ -379,7 +432,6 @@ on_tree_view_button_released( GtkWidget *      view,
     {
         GtkTreeSelection * selection = gtk_tree_view_get_selection( tv );
         gtk_tree_selection_unselect_all ( selection );
-        return TRUE;
     }
 
     return FALSE;
