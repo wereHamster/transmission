@@ -74,7 +74,9 @@
 #include <openssl/rand.h>
 #endif
 
+#ifndef _FORTIFY_SOURCE
 #define _FORTIFY_SOURCE 3
+#endif
 
 #include <string.h>
 #include <fcntl.h>
@@ -209,6 +211,7 @@ struct reply {
 struct nameserver {
 	int socket;  /* a connected UDP socket */
 	u32 address;
+	u16 port;
 	int failed_times;  /* number of times which we have given this server a chance */
 	int timedout;  /* number of times in a row a request has timed out */
 	struct event event;
@@ -469,7 +472,6 @@ nameserver_probe_failed(struct nameserver *const ns) {
 					  global_nameserver_timeouts_length - 1)];
 	ns->failed_times++;
 
-	evtimer_set(&ns->timeout_event, nameserver_prod_callback, ns);
 	if (evtimer_add(&ns->timeout_event, (struct timeval *) timeout) < 0) {
           log(EVDNS_LOG_WARN,
               "Error from libevent when adding timer event for %s",
@@ -498,7 +500,6 @@ nameserver_failed(struct nameserver *const ns, const char *msg) {
 	ns->state = 0;
 	ns->failed_times = 1;
 
-	evtimer_set(&ns->timeout_event, nameserver_prod_callback, ns);
 	if (evtimer_add(&ns->timeout_event, (struct timeval *) &global_nameserver_timeouts[0]) < 0) {
 		log(EVDNS_LOG_WARN,
 		    "Error from libevent when adding timer event for %s",
@@ -1152,17 +1153,36 @@ nameserver_pick(void) {
 	}
 }
 
+static int
+address_is_correct(struct nameserver *ns, struct sockaddr *sa, socklen_t slen)
+{
+	struct sockaddr_in *sin = (struct sockaddr_in*) sa;
+	if (sa->sa_family != AF_INET || slen != sizeof(struct sockaddr_in))
+		return 0;
+	if (sin->sin_addr.s_addr != ns->address)
+		return 0;
+	return 1;
+}
+
 /* this is called when a namesever socket is ready for reading */
 static void
 nameserver_read(struct nameserver *ns) {
 	u8 packet[1500];
+	struct sockaddr_storage ss;
+	socklen_t addrlen = sizeof(ss);
 
 	for (;;) {
-          	const int r = recv(ns->socket, packet, sizeof(packet), 0);
+          	const int r = recvfrom(ns->socket, packet, sizeof(packet), 0,
+		    (struct sockaddr*)&ss, &addrlen);
 		if (r < 0) {
 			int err = last_error(ns->socket);
 			if (error_is_eagain(err)) return;
 			nameserver_failed(ns, strerror(err));
+			return;
+		}
+		if (!address_is_correct(ns, (struct sockaddr*)&ss, addrlen)) {
+			log(EVDNS_LOG_WARN, "Address mismatch on received "
+			    "DNS packet.");
 			return;
 		}
 		ns->timedout = 0;
@@ -1685,7 +1705,7 @@ evdns_server_request_format_response(struct server_request *req, int err)
 	if (j > 512) {
 overflow:
 		j = 512;
-		buf[3] |= 0x02; /* set the truncated bit. */
+		buf[2] |= 0x02; /* set the truncated bit. */
 	}
 
 	req->response_len = j;
@@ -1892,7 +1912,15 @@ evdns_request_timeout_callback(int fd, short events, void *arg) {
 /*   2 other failure */
 static int
 evdns_request_transmit_to(struct request *req, struct nameserver *server) {
-	const int r = send(server->socket, req->request, req->request_len, 0);
+	struct sockaddr_in sin;
+	int r;
+	memset(&sin, 0, sizeof(sin));
+	sin.sin_addr.s_addr = req->ns->address;
+	sin.sin_port = req->ns->port;
+	sin.sin_family = AF_INET;
+
+	r = sendto(server->socket, req->request, req->request_len, 0,
+	    (struct sockaddr*)&sin, sizeof(sin));
 	if (r < 0) {
 		int err = last_error(server->socket);
 		if (error_is_eagain(err)) return 1;
@@ -1941,7 +1969,6 @@ evdns_request_transmit(struct request *req) {
 		/* all ok */
 		log(EVDNS_LOG_DEBUG,
 		    "Setting timeout for request %lx", (unsigned long) req);
-		evtimer_set(&req->timeout_event, evdns_request_timeout_callback, req);
 		if (evtimer_add(&req->timeout_event, &global_timeout) < 0) {
                   log(EVDNS_LOG_WARN,
 		      "Error from libevent when adding timer for request %lx",
@@ -2088,7 +2115,6 @@ _evdns_nameserver_add_impl(unsigned long int address, int port) {
 
 	const struct nameserver *server = server_head, *const started_at = server_head;
 	struct nameserver *ns;
-	struct sockaddr_in sin;
 	int err = 0;
 	if (server) {
 		do {
@@ -2102,18 +2128,14 @@ _evdns_nameserver_add_impl(unsigned long int address, int port) {
 
 	memset(ns, 0, sizeof(struct nameserver));
 
+	evtimer_set(&ns->timeout_event, nameserver_prod_callback, ns);
+
 	ns->socket = socket(PF_INET, SOCK_DGRAM, 0);
 	if (ns->socket < 0) { err = 1; goto out1; }
         evutil_make_socket_nonblocking(ns->socket);
-	sin.sin_addr.s_addr = address;
-	sin.sin_port = htons(port);
-	sin.sin_family = AF_INET;
-	if (connect(ns->socket, (struct sockaddr *) &sin, sizeof(sin)) != 0) {
-		err = 2;
-		goto out2;
-	}
 
 	ns->address = address;
+	ns->port = htons(port);
 	ns->state = 1;
 	event_set(&ns->event, ns->socket, EV_READ | EV_PERSIST, nameserver_ready_callback, ns);
 	if (event_add(&ns->event, NULL) < 0) {
@@ -2225,6 +2247,8 @@ request_new(int type, const char *name, int flags,
 
         if (!req) return NULL;
 	memset(req, 0, sizeof(struct request));
+
+	evtimer_set(&req->timeout_event, evdns_request_timeout_callback, req);
 
 	/* request data lives just after the header */
 	req->request = ((u8 *) req) + sizeof(struct request);
@@ -2965,7 +2989,7 @@ load_nameservers_from_registry(void)
 #undef TRY
 }
 
-static int
+int
 evdns_config_windows_nameservers(void)
 {
 	if (load_nameservers_with_getnetworkparams() == 0)

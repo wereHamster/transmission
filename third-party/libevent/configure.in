@@ -2,7 +2,7 @@ dnl configure.in for libevent
 dnl Dug Song <dugsong@monkey.org>
 AC_INIT(event.c)
 
-AM_INIT_AUTOMAKE(libevent,1.4.11-stable)
+AM_INIT_AUTOMAKE(libevent,1.4.12-stable)
 AM_CONFIG_HEADER(config.h)
 dnl AM_MAINTAINER_MODE
 
@@ -19,6 +19,9 @@ AC_PROG_LN_S
 AC_PROG_GCC_TRADITIONAL
 if test "$GCC" = yes ; then
         CFLAGS="$CFLAGS -Wall"
+        # And disable the strict-aliasing optimization, since it breaks
+        # our sockaddr-handling code in strange ways.
+        CFLAGS="$CFLAGS -fno-strict-aliasing"
 fi
 
 AC_ARG_ENABLE(gcc-warnings,
@@ -307,7 +310,6 @@ AC_CHECK_TYPES([uint64_t, uint32_t, uint16_t, uint8_t], , ,
 #include <sys/types.h>
 #endif])
 AC_CHECK_SIZEOF(long long)
-AC_CHECK_SIZEOF(long)   
 AC_CHECK_SIZEOF(int)
 AC_CHECK_SIZEOF(short)
 AC_CHECK_TYPES([struct in6_addr], , ,
