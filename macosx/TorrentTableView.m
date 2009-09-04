@@ -27,7 +27,7 @@
 #import "Torrent.h"
 #import "TorrentGroup.h"
 #import "FileListNode.h"
-#import "QuickLookController.h"
+#import "NSApplicationAdditions.h"
 
 #define MAX_GROUP 999999
 
@@ -51,6 +51,8 @@
 - (void) setGroupStatusColumns;
 
 - (void) createFileMenu: (NSMenu *) menu forFiles: (NSArray *) files;
+
+- (NSArray *) quickLookableTorrents;
 
 @end
 
@@ -85,6 +87,8 @@
 
 - (void) dealloc
 {
+    [fPreviewPanel release];
+    
     [fCollapsedGroups release];
     
     [fPiecesBarAnimation release];
@@ -496,19 +500,10 @@
     
     if (firstChar == 'f' && [event modifierFlags] & NSAlternateKeyMask && [event modifierFlags] & NSCommandKeyMask)
         [fController focusFilterField];
+    else if (firstChar == ' ')
+        [fController toggleQuickLook: self];
     else
-    {
-        //handle quicklook
-        if (firstChar == ' ')
-            [[QuickLookController quickLook] toggleQuickLook];
-        else if (firstChar == NSRightArrowFunctionKey)
-            [[QuickLookController quickLook] pressRight];
-        else if (firstChar == NSLeftArrowFunctionKey)
-            [[QuickLookController quickLook] pressLeft];
-        else;
-        
         [super keyDown: event];
-    }
 }
 
 - (NSRect) iconRectForRow: (NSInteger) row
@@ -539,7 +534,7 @@
         [fController stopTorrents: [NSArray arrayWithObject: torrent]];
     else
     {
-        if ([[NSApp currentEvent] modifierFlags] & NSAlternateKeyMask)
+        if (([NSApp isOnSnowLeopardOrBetter] ? [NSEvent modifierFlags] : [[NSApp currentEvent] modifierFlags]) & NSAlternateKeyMask)
             [fController resumeTorrentsNoWait: [NSArray arrayWithObject: torrent]];
         else if ([torrent waitingToStart])
             [fController stopTorrents: [NSArray arrayWithObject: torrent]];
@@ -874,6 +869,71 @@
     return fPiecesBarPercent;
 }
 
+
+
+
+
+
+
+
+
+- (BOOL) acceptsPreviewPanelControl: (QLPreviewPanel *) panel
+{
+    return YES;
+}
+
+- (void) beginPreviewPanelControl: (QLPreviewPanel *) panel
+{
+    fPreviewPanel = [panel retain];
+    fPreviewPanel.delegate = self;
+    fPreviewPanel.dataSource = self;
+}
+
+- (void) endPreviewPanelControl: (QLPreviewPanel *) panel
+{
+    [fPreviewPanel release];
+    fPreviewPanel = nil;
+}
+
+- (NSInteger) numberOfPreviewItemsInPreviewPanel: (QLPreviewPanel *) panel
+{
+    return [[self quickLookableTorrents] count];
+}
+
+- (id <QLPreviewItem>) previewPanel: (QLPreviewPanel *)panel previewItemAtIndex: (NSInteger) index
+{
+    return [[self quickLookableTorrents] objectAtIndex: index];
+}
+
+- (BOOL) previewPanel: (QLPreviewPanel *) panel handleEvent: (NSEvent *) event
+{
+    if ([event type] == NSKeyDown)
+    {
+        [super keyDown: event];
+        return YES;
+    }
+    
+    return NO;
+}
+
+- (NSRect) previewPanel: (QLPreviewPanel *) panel sourceFrameOnScreenForPreviewItem: (id <QLPreviewItem>) item
+{
+    const NSInteger row = [self rowForItem: item];
+    if (row == -1)
+        return NSZeroRect;
+    
+    NSRect frame = [self iconRectForRow: row];
+    frame.origin = [self convertPoint: frame.origin toView: nil];
+    frame.origin = [[self window] convertBaseToScreen: frame.origin];
+    frame.origin.y -= frame.size.height;
+    return frame;
+}
+
+
+
+
+
+
 @end
 
 @implementation TorrentTableView (Private)
@@ -932,7 +992,6 @@
         
         [item setRepresentedObject: node];
         
-        [icon setScalesWhenResized: YES];
         [icon setSize: NSMakeSize(16.0, 16.0)];
         [item setImage: icon];
         
@@ -943,6 +1002,18 @@
         [menu addItem: item];
         [item release];
     }
+}
+
+- (NSArray *) quickLookableTorrents
+{
+    NSArray * selectedTorrents = [self selectedTorrents];
+    NSMutableArray * qlArray = [NSMutableArray arrayWithCapacity: [selectedTorrents count]];
+    
+    for (Torrent * torrent in selectedTorrents)
+        if (([torrent isFolder] || [torrent isComplete]) && [[NSFileManager defaultManager] fileExistsAtPath: [torrent dataLocation]])
+            [qlArray addObject: torrent];
+    
+    return qlArray;
 }
 
 @end

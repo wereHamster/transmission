@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
- * 
- * Copyright (c) 2007-2009 Transmission authors and contributors
+ *
+ * Copyright (c) 2009 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -22,36 +22,8 @@
  * DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 
-#import "ExpandedPathToIconTransformer.h"
+@interface NSApplication (NSApplicationAdditions)
 
-@implementation ExpandedPathToIconTransformer
-
-+ (Class) transformedValueClass
-{
-    return [NSImage class];
-}
-
-+ (BOOL) allowsReverseTransformation
-{
-    return NO;
-}
-
-- (id) transformedValue: (id) value
-{
-    if (!value)
-        return nil;
-    
-    NSString * path = [value stringByExpandingTildeInPath];
-    NSImage * icon;
-    //show a folder icon if the folder doesn't exist
-    if (![[NSFileManager defaultManager] fileExistsAtPath: path] && [[path pathExtension] isEqualToString: @""])
-        icon = [[NSWorkspace sharedWorkspace] iconForFileType: NSFileTypeForHFSTypeCode('fldr')];
-    else
-        icon = [[NSWorkspace sharedWorkspace] iconForFile: [value stringByExpandingTildeInPath]];
-    
-    [icon setSize: NSMakeSize(16.0, 16.0)];
-    
-    return icon;
-}
+- (BOOL) isOnSnowLeopardOrBetter;
 
 @end

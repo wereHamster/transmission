@@ -27,6 +27,7 @@
 #import "BlocklistScheduler.h"
 #import "PortChecker.h"
 #import "BonjourController.h"
+#import "NSApplicationAdditions.h"
 #import "NSStringAdditions.h"
 #import "UKKQueue.h"
 #import "utils.h"
@@ -425,7 +426,7 @@ tr_session * fHandle;
         BOOL isDirectory;
         if ([[NSFileManager defaultManager] fileExistsAtPath: directory isDirectory: &isDirectory] && isDirectory)
         {
-            NSArray * directoryContents = [[NSFileManager defaultManager] directoryContentsAtPath: directory];
+            NSArray * directoryContents = [[NSFileManager defaultManager] contentsOfDirectoryAtPath: directory error: NULL];
             for (NSString * sound in directoryContents)
             {
                 sound = [sound stringByDeletingPathExtension];
@@ -524,12 +525,18 @@ tr_session * fHandle;
         NSDate * updatedDate = [fDefaults objectForKey: @"BlocklistLastUpdate"];
         if (updatedDate)
         {
-            NSDateFormatter * dateFormatter = [[NSDateFormatter alloc] init];
-            [dateFormatter setDateStyle: NSDateFormatterFullStyle];
-            [dateFormatter setTimeStyle: NSDateFormatterShortStyle];
-            
-            updatedDateString = [dateFormatter stringFromDate: updatedDate];
-            [dateFormatter release];
+            if ([NSApp isOnSnowLeopardOrBetter])
+                updatedDateString = [NSDateFormatter localizedStringFromDate: updatedDate dateStyle: NSDateFormatterFullStyle
+                                        timeStyle: NSDateFormatterShortStyle];
+            else
+            {
+                NSDateFormatter * dateFormatter = [[NSDateFormatter alloc] init];
+                [dateFormatter setDateStyle: NSDateFormatterFullStyle];
+                [dateFormatter setTimeStyle: NSDateFormatterShortStyle];
+                
+                updatedDateString = [dateFormatter stringFromDate: updatedDate];
+                [dateFormatter release];
+            }
         }
         else
             updatedDateString = NSLocalizedString(@"N/A", "Prefs -> blocklist -> message");
@@ -972,8 +979,8 @@ tr_session * fHandle;
         [fRPCWhitelistArray addObject: @""];
         [fRPCWhitelistTable reloadData];
         
-        int row = [fRPCWhitelistArray count] - 1;
-        [fRPCWhitelistTable selectRow: row byExtendingSelection: NO];
+        const int row = [fRPCWhitelistArray count] - 1;
+        [fRPCWhitelistTable selectRowIndexes: [NSIndexSet indexSetWithIndex: row] byExtendingSelection: NO];
         [fRPCWhitelistTable editColumn: 0 row: row withEvent: nil select: YES];
     }
 }

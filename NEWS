@@ -1,8 +1,7 @@
-=== Transmission 1.74 beta 1 (2008/08/18) ===
+=== Transmission 1.74 (2009/08/24) ===
 [http://trac.transmissionbt.com/query?milestone=1.74&group=component&groupdesc=1&order=severity All tickets closed by this release]
 ==== All Platforms ====
   * Better data recovery in the case of an OS or Transmission crash
-  * Upgrade DHT to version 0.8
   * If a data file is moved, stop the torrent instead of redownloading it
   * Fix bug that didn't list some peers in the resume file and in PEX
   * More helpful torrent error messages
@@ -33,7 +32,6 @@
 
 === Transmission 1.73 (2009/07/18) ===
 [http://trac.transmissionbt.com/query?milestone=1.73&group=component&groupdesc=1&order=severity All tickets closed by this release]
-
 ==== All Platforms ====
   * Fix bug where user-configured peer limits could be exceeded
   * Use less memory in some high-peer situations
@@ -115,7 +113,6 @@
   * Prefs dialog didn't show or modify "Stop seeding torrents at ratio"
 
 === Transmission 1.54 (2009/06/04) ===
-[http://trac.transmissionbt.com/query?milestone=1.54&group=component&groupdesc=1&order=severity All tickets closed by this release]
 ==== All Platforms ====
   * Fix small bugs and memory leaks
 ==== Web Client ====
@@ -143,7 +140,6 @@
   * transmission-remote was unable to select torrents by their SHA1 hash
 
 === Transmission 1.53 (2009/05/11) ===
-[http://trac.transmissionbt.com/query?milestone=1.53&group=component&groupdesc=1&order=severity All tickets closed by this release]
 ==== All Platforms ====
   * Close potential CSRF security hole for Web Client users
   * Fix locale error in the JSON parser

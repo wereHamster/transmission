@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
- * 
- * Copyright (c) 2008-2009 Transmission authors and contributors
+ *
+ * Copyright (c) 2009 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -22,32 +22,13 @@
  * DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 
-#import <Cocoa/Cocoa.h>
+#import "NSApplicationAdditions.h"
 
-@class Controller;
-@class InfoWindowController;
+@implementation NSApplication (NSApplicationAdditions)
 
-@interface QuickLookController : NSObject
+- (BOOL) isOnSnowLeopardOrBetter
 {
-    BOOL fQuickLookAvailable;
-    
-    Controller * fMainController;
-    InfoWindowController * fInfoController;
+	return floor(NSAppKitVersionNumber) > NSAppKitVersionNumber10_5;
 }
-
-//call once at startup
-+ (void) quickLookControllerInitializeWithController: (Controller *) controller infoController: (InfoWindowController *) infoController;
-
-//assumes quickLookControllerInitializeWithController:infoController: has already been called!
-+ (QuickLookController *) quickLook;
-
-- (BOOL) quickLookSelectItems;
-- (BOOL) canQuickLook;
-
-- (void) toggleQuickLook;
-- (void) updateQuickLook;
-
-- (void) pressLeft;
-- (void) pressRight;
 
 @end

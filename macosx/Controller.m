@@ -33,7 +33,6 @@
 #import "TorrentTableView.h"
 #import "CreatorWindowController.h"
 #import "StatsWindowController.h"
-#import "QuickLookController.h"
 #import "GroupsController.h"
 #import "AboutWindowController.h"
 #import "ButtonToolbarItem.h"
@@ -43,6 +42,7 @@
 #import "StatusBarView.h"
 #import "FilterButton.h"
 #import "BonjourController.h"
+#import "NSApplicationAdditions.h"
 #import "NSStringAdditions.h"
 #import "ExpandedPathToPathTransformer.h"
 #import "ExpandedPathToIconTransformer.h"
@@ -292,8 +292,6 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         
         [PrefsController setHandle: fLib];
         fPrefsController = [[PrefsController alloc] init];
-        
-        [QuickLookController quickLookControllerInitializeWithController: self infoController: fInfoController];
         
         fSoundPlaying = NO;
         
@@ -1409,8 +1407,20 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
 
 - (void) revealFile: (id) sender
 {
-    for (Torrent * torrent in [fTableView selectedTorrents])
-        [torrent revealData];
+    NSArray * selected = [fTableView selectedTorrents];
+    if ([NSApp isOnSnowLeopardOrBetter])
+    {
+        NSMutableArray * paths = [NSMutableArray arrayWithCapacity: [selected count]];
+        for (Torrent * torrent in [fTableView selectedTorrents])
+            [paths addObject: [NSURL fileURLWithPath: [torrent dataLocation]]];
+        
+        [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs: paths];
+    }
+    else
+    {
+        for (Torrent * torrent in selected)
+            [[NSWorkspace sharedWorkspace] selectFile: [torrent dataLocation] inFileViewerRootedAtPath: nil];
+    }
 }
 
 - (void) announceSelectedTorrents: (id) sender
@@ -1463,7 +1473,9 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
 - (void) resetInfo
 {
     [fInfoController setInfoForTorrents: [fTableView selectedTorrents]];
-    [[QuickLookController quickLook] updateQuickLook];
+    
+    if ([QLPreviewPanel sharedPreviewPanelExists] && [[QLPreviewPanel sharedPreviewPanel] isVisible])
+        [[QLPreviewPanel sharedPreviewPanel] reloadData];
 }
 
 - (void) setInfoTab: (id) sender
@@ -3353,10 +3365,6 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         [(NSButton *)[toolbarItem view] setState: ![fFilterBar isHidden]];
         return YES;
     }
-    
-    //enable quicklook item
-    if ([ident isEqualToString: TOOLBAR_QUICKLOOK])
-        return [[QuickLookController quickLook] canQuickLook];
 
     return YES;
 }
@@ -3550,10 +3558,6 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     //enable prev/next filter button
     if (action == @selector(switchFilter:))
         return [fWindow isVisible] && ![fFilterBar isHidden];
-    
-    //enable quicklook item
-    if (action == @selector(toggleQuickLook:))
-        return [[QuickLookController quickLook] canQuickLook];
     
     //enable reveal in finder
     if (action == @selector(revealFile:))
@@ -3958,62 +3962,12 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     [self updateUI];
 }
 
-- (NSArray *) quickLookURLs
-{
-    NSArray * selectedTorrents = [fTableView selectedTorrents];
-    NSMutableArray * urlArray = [NSMutableArray arrayWithCapacity: [selectedTorrents count]];
-    
-    for (Torrent * torrent in selectedTorrents)
-        if ([self canQuickLookTorrent: torrent])
-            [urlArray addObject: [NSURL fileURLWithPath: [torrent dataLocation]]];
-    
-    return urlArray;
-}
-
-- (BOOL) canQuickLook
-{
-    for (Torrent * torrent in [fTableView selectedTorrents])
-        if ([self canQuickLookTorrent: torrent])
-            return YES;
-    
-    return NO;
-}
-
-- (BOOL) canQuickLookTorrent: (Torrent *) torrent
-{
-    if (![[NSFileManager defaultManager] fileExistsAtPath: [torrent dataLocation]])
-        return NO;
-    
-    return [torrent isFolder] || [torrent isComplete];
-}
-
-- (NSRect) quickLookFrameWithURL: (NSURL *) url
-{
-    if ([fWindow isVisible])
-    {
-        NSString * fullPath = [url path];
-        NSRange visibleRows = [fTableView rowsInRect: [fTableView bounds]];
-        
-        for (NSInteger row = 0; row < NSMaxRange(visibleRows); row++)
-        {
-            id item = [fTableView itemAtRow: row];
-            if ([item isKindOfClass: [Torrent class]] && [[(Torrent *)item dataLocation] isEqualToString: fullPath])
-            {
-                NSRect frame = [fTableView iconRectForRow: row];
-                frame.origin = [fTableView convertPoint: frame.origin toView: nil];
-                frame.origin = [fWindow convertBaseToScreen: frame.origin];
-                frame.origin.y -= frame.size.height;
-                return frame;
-            }
-        }
-    }
-    
-    return NSZeroRect;
-}
-
 - (void) toggleQuickLook: (id) sender
 {
-    [[QuickLookController quickLook] toggleQuickLook];
+    if ([QLPreviewPanel sharedPreviewPanelExists] && [[QLPreviewPanel sharedPreviewPanel] isVisible])
+        [[QLPreviewPanel sharedPreviewPanel] orderOut: nil];
+    else
+        [[QLPreviewPanel sharedPreviewPanel] makeKeyAndOrderFront: nil];
 }
 
 - (void) linkHomepage: (id) sender
@@ -4057,7 +4011,15 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     NSString * type = [clickContext objectForKey: @"Type"], * location;
     if (([type isEqualToString: GROWL_DOWNLOAD_COMPLETE] || [type isEqualToString: GROWL_SEEDING_COMPLETE])
             && (location = [clickContext objectForKey: @"Location"]))
-        [[NSWorkspace sharedWorkspace] selectFile: location inFileViewerRootedAtPath: nil];
+    {
+        if ([NSApp isOnSnowLeopardOrBetter])
+        {
+            NSURL * file = [NSURL fileURLWithPath: location];
+            [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs: [NSArray arrayWithObject: file]];
+        }
+        else
+            [[NSWorkspace sharedWorkspace] selectFile: location inFileViewerRootedAtPath: nil];
+    }
 }
 
 - (void) rpcCallback: (tr_rpc_callback_type) type forTorrentStruct: (struct tr_torrent *) torrentStruct
