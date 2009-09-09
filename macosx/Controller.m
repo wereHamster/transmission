@@ -1474,7 +1474,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
 {
     [fInfoController setInfoForTorrents: [fTableView selectedTorrents]];
     
-    if ([QLPreviewPanel sharedPreviewPanelExists] && [[QLPreviewPanel sharedPreviewPanel] isVisible])
+    if ([NSApp isOnSnowLeopardOrBetter] && [QLPreviewPanel sharedPreviewPanelExists] && [[QLPreviewPanel sharedPreviewPanel] isVisible])
         [[QLPreviewPanel sharedPreviewPanel] reloadData];
 }
 
@@ -3251,6 +3251,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         [item setImage: [NSImage imageNamed: NSImageNameQuickLookTemplate]];
         [item setTarget: self];
         [item setAction: @selector(toggleQuickLook:)];
+        [item setAutovalidates: NO];
+        [item setEnabled: [NSApp isOnSnowLeopardOrBetter]];
         
         return item;
     }
@@ -3715,6 +3717,10 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         return YES;
     }
     
+    //quick look only works on 10.6
+    if (action == @selector(toggleQuickLook:))
+        return [NSApp isOnSnowLeopardOrBetter];
+    
     return YES;
 }
 
@@ -3964,7 +3970,10 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
 
 - (void) toggleQuickLook: (id) sender
 {
-    if ([QLPreviewPanel sharedPreviewPanelExists] && [[QLPreviewPanel sharedPreviewPanel] isVisible])
+    if (![NSApp isOnSnowLeopardOrBetter])
+        return;
+    
+    if ([[QLPreviewPanel sharedPreviewPanel] isVisible])
         [[QLPreviewPanel sharedPreviewPanel] orderOut: nil];
     else
         [[QLPreviewPanel sharedPreviewPanel] makeKeyAndOrderFront: nil];

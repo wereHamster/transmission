@@ -819,11 +819,6 @@
     [[NSNotificationCenter defaultCenter] postNotificationName: @"UpdateStats" object: nil];
 }
 
-- (void) moveDataFile: (id) sender
-{
-    [fController moveDataFiles: [NSArray arrayWithObject: fMenuTorrent]];
-}
-
 - (void) togglePiecesBar
 {
     //stop previous animation
@@ -868,14 +863,6 @@
 {
     return fPiecesBarPercent;
 }
-
-
-
-
-
-
-
-
 
 - (BOOL) acceptsPreviewPanelControl: (QLPreviewPanel *) panel
 {
@@ -928,11 +915,6 @@
     frame.origin.y -= frame.size.height;
     return frame;
 }
-
-
-
-
-
 
 @end
 

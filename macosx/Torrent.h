@@ -24,13 +24,14 @@
 
 #import <Cocoa/Cocoa.h>
 #import <transmission.h>
+#import <Quartz/Quartz.h>
 
 @class FileListNode;
 
 #define STAT_TIME_NONE -1
 #define STAT_TIME_NOW -2
 
-@interface Torrent : NSObject
+@interface Torrent : NSObject <QLPreviewItem>
 {
     tr_torrent * fHandle;
     const tr_info * fInfo;
@@ -162,12 +163,11 @@
 
 - (CGFloat) progress;
 - (CGFloat) progressDone;
-- (CGFloat) progressLeft;
 - (CGFloat) checkingProgress;
 
 - (NSInteger) eta;
 
-- (CGFloat) notAvailableDesired;
+- (CGFloat) availableDesired;
 
 - (BOOL) isActive;
 - (BOOL) isSeeding;

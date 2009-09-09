@@ -132,8 +132,11 @@ typedef enum
 
 - (void) outlineViewSelectionDidChange: (NSNotification *) notification
 {
-    if ([QLPreviewPanel sharedPreviewPanelExists] && [[QLPreviewPanel sharedPreviewPanel] isVisible])
+    if ([NSApp isOnSnowLeopardOrBetter] && [QLPreviewPanel sharedPreviewPanelExists] && [[QLPreviewPanel sharedPreviewPanel] isVisible])
+    {
         [[QLPreviewPanel sharedPreviewPanel] reloadData];
+        [[QLPreviewPanel sharedPreviewPanel] updateController];
+    }
 }
 
 - (NSInteger) outlineView: (NSOutlineView *) outlineView numberOfChildrenOfItem: (id) item

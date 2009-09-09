@@ -82,6 +82,8 @@ typedef enum
 - (void) setWebSeedTableHidden: (BOOL) hide animate: (BOOL) animate;
 - (NSArray *) peerSortDescriptors;
 
+- (NSArray *) quickLookURLs;
+- (BOOL) canQuickLook;
 - (BOOL) canQuickLookFile: (FileListNode *) item;
 
 - (void) addTrackers;
@@ -820,9 +822,9 @@ typedef enum
     [[window contentView] addSubview: view];
     [view setHidden: NO];
     
-    if (fCurrentTabTag == TAB_FILES_TAG || oldTabTag == TAB_FILES_TAG
+    if ([NSApp isOnSnowLeopardOrBetter] && (fCurrentTabTag == TAB_FILES_TAG || oldTabTag == TAB_FILES_TAG)
         && ([QLPreviewPanel sharedPreviewPanelExists] && [[QLPreviewPanel sharedPreviewPanel] isVisible]))
-        [[QLPreviewPanel sharedPreviewPanel] reloadData];
+        [[QLPreviewPanel sharedPreviewPanel] updateController];
 }
 
 - (void) setNextTab
@@ -1102,14 +1104,9 @@ typedef enum
     return [[fTrackers objectAtIndex: i] intValue] == 0;
 }
 
-
-
-
-
-
 - (BOOL) acceptsPreviewPanelControl: (QLPreviewPanel *) panel
 {
-    return fCurrentTabTag == TAB_FILES_TAG && [[fFileController outlineView] numberOfSelectedRows] > 0;
+    return fCurrentTabTag == TAB_FILES_TAG && [self canQuickLook];
 }
 
 - (void) beginPreviewPanelControl: (QLPreviewPanel *) panel
@@ -1146,58 +1143,29 @@ typedef enum
     return NO;
 }
 
-#warning fix!
 - (NSRect) previewPanel: (QLPreviewPanel *) panel sourceFrameOnScreenForPreviewItem: (id <QLPreviewItem>) item
 {
-    const NSInteger row = [[fFileController outlineView] rowForItem: item];
-    if (row == -1)
-        return NSZeroRect;
-    
-    NSRect frame = [[fFileController outlineView] iconRectForRow: row];
-    frame.origin = [[fFileController outlineView] convertPoint: frame.origin toView: nil];
-    frame.origin = [[self window] convertBaseToScreen: frame.origin];
-    frame.origin.y -= frame.size.height;
-    return frame;
-}
-
-
-
-
-
-#warning private
-- (NSArray *) quickLookURLs
-{
     FileOutlineView * fileOutlineView = [fFileController outlineView];
-    Torrent * torrent = [fTorrents objectAtIndex: 0];
-    NSString * folder = [torrent downloadFolder];
-    NSIndexSet * indexes = [fileOutlineView selectedRowIndexes];
-    NSMutableArray * urlArray = [NSMutableArray arrayWithCapacity: [indexes count]];
     
-    for (NSUInteger i = [indexes firstIndex]; i != NSNotFound; i = [indexes indexGreaterThanIndex: i])
+    NSString * fullPath = [(NSURL *) item path];
+    NSString * folder = [[fTorrents objectAtIndex: 0] downloadFolder];
+    NSRange visibleRows = [fileOutlineView rowsInRect: [fileOutlineView bounds]];
+    
+    for (NSUInteger row = visibleRows.location; row < NSMaxRange(visibleRows); row++)
     {
-        FileListNode * item = [fileOutlineView itemAtRow: i];
-        if ([self canQuickLookFile: item])
-            [urlArray addObject: [NSURL fileURLWithPath: [folder stringByAppendingPathComponent: [item fullPath]]]];
+        FileListNode * rowItem = [fileOutlineView itemAtRow: row];
+        if ([[folder stringByAppendingPathComponent: [rowItem fullPath]] isEqualToString: fullPath])
+        {
+            NSRect frame = [fileOutlineView iconRectForRow: row];
+            frame.origin = [fileOutlineView convertPoint: frame.origin toView: nil];
+            frame.origin = [[self window] convertBaseToScreen: frame.origin];
+            frame.origin.y -= frame.size.height;
+            return frame;
+        }
     }
     
-    return urlArray;
+    return NSZeroRect;
 }
-
-#warning need? private?
-- (BOOL) canQuickLook
-{
-    FileOutlineView * fileOutlineView = [fFileController outlineView];
-    NSIndexSet * indexes = [fileOutlineView selectedRowIndexes];
-    
-    for (NSUInteger i = [indexes firstIndex]; i != NSNotFound; i = [indexes indexGreaterThanIndex: i])
-        if ([self canQuickLookFile: [fileOutlineView itemAtRow: i]])
-            return YES;
-    
-    return NO;
-}
-
-
-
 
 - (void) setPiecesView: (id) sender
 {
@@ -1706,6 +1674,39 @@ typedef enum
     }
     
     return descriptors;
+}
+
+- (NSArray *) quickLookURLs
+{
+    FileOutlineView * fileOutlineView = [fFileController outlineView];
+    Torrent * torrent = [fTorrents objectAtIndex: 0];
+    NSString * folder = [torrent downloadFolder];
+    NSIndexSet * indexes = [fileOutlineView selectedRowIndexes];
+    NSMutableArray * urlArray = [NSMutableArray arrayWithCapacity: [indexes count]];
+    
+    for (NSUInteger i = [indexes firstIndex]; i != NSNotFound; i = [indexes indexGreaterThanIndex: i])
+    {
+        FileListNode * item = [fileOutlineView itemAtRow: i];
+        if ([self canQuickLookFile: item])
+            [urlArray addObject: [NSURL fileURLWithPath: [folder stringByAppendingPathComponent: [item fullPath]]]];
+    }
+    
+    return urlArray;
+}
+
+- (BOOL) canQuickLook
+{
+    if (![NSApp isOnSnowLeopardOrBetter])
+        return NO;
+    
+    FileOutlineView * fileOutlineView = [fFileController outlineView];
+    NSIndexSet * indexes = [fileOutlineView selectedRowIndexes];
+    
+    for (NSUInteger i = [indexes firstIndex]; i != NSNotFound; i = [indexes indexGreaterThanIndex: i])
+        if ([self canQuickLookFile: [fileOutlineView itemAtRow: i]])
+            return YES;
+    
+    return NO;
 }
 
 - (BOOL) canQuickLookFile: (FileListNode *) item

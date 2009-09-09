@@ -35,6 +35,11 @@
 ****
 ***/
 
+enum
+{
+    MSEC_TO_SLEEP_PER_SECOND_DURING_VERIFY = 200
+};
+
 /* #define STOPWATCH */
 
 static tr_bool
@@ -45,15 +50,15 @@ verifyTorrent( tr_torrent * tor, tr_bool * stopFlag )
     int64_t filePos = 0;
     tr_bool changed = 0;
     tr_bool hadPiece = 0;
+    time_t lastSleptAt = 0;
     uint32_t piecePos = 0;
     uint32_t pieceBytesRead = 0;
     tr_file_index_t fileIndex = 0;
     tr_piece_index_t pieceIndex = 0;
     const int64_t buflen = tor->info.pieceSize;
     uint8_t * buffer = tr_new( uint8_t, buflen );
-#ifdef STOPWATCH
-    time_t now = time( NULL );
-#endif
+    const time_t begin = time( NULL );
+    time_t end;
 
     SHA1_Init( &sha );
 
@@ -105,6 +110,7 @@ verifyTorrent( tr_torrent * tor, tr_bool * stopFlag )
         /* if we're finishing a piece... */
         if( leftInPiece == 0 )
         {
+            time_t now;
             tr_bool hasPiece;
             uint8_t hash[SHA_DIGEST_LENGTH];
 
@@ -121,14 +127,15 @@ verifyTorrent( tr_torrent * tor, tr_bool * stopFlag )
                 changed = TRUE;
             }
             tr_torrentSetPieceChecked( tor, pieceIndex, TRUE );
-            tor->anyDate = time( NULL );
+            now = time( NULL );
+            tor->anyDate = now;
 
-            /* going full-throttle on a verify can choke other processes'
-             * disk IO, so wait a fwe msec between pieces.
-             * The msec is arbitrary, and the "if" clause is to make sure we
-             * don't slow down verification of files that don't exist */
-            if( pieceBytesRead == tr_torPieceCountBytes( tor, pieceIndex ) )
-                tr_wait( 50 );
+            /* sleeping even just a few msec per second goes a long
+             * way towards reducing IO load... */
+            if( lastSleptAt != now ) {
+                lastSleptAt = now;
+                tr_wait( MSEC_TO_SLEEP_PER_SECOND_DURING_VERIFY );
+            }
 
             SHA1_Init( &sha );
             ++pieceIndex;
@@ -151,13 +158,10 @@ verifyTorrent( tr_torrent * tor, tr_bool * stopFlag )
         tr_close_file( fd );
     tr_free( buffer );
 
-#ifdef STOPWATCH
-{
-    time_t now2 = time( NULL );
-    fprintf( stderr, "it took %d seconds to verify %"PRIu64" bytes (%"PRIu64" bytes per second)\n",
-             (int)(now2-now), tor->info.totalSize, (uint64_t)(tor->info.totalSize/(1+(now2-now))) );
-}
-#endif
+    /* stopwatch */
+    end = time( NULL );
+    tr_tordbg( tor, "it took %d seconds to verify %"PRIu64" bytes (%"PRIu64" bytes per second)",
+               (int)(end-begin), tor->info.totalSize, (uint64_t)(tor->info.totalSize/(1+(end-begin))) );
 
     return changed;
 }
@@ -238,17 +242,50 @@ verifyThreadFunc( void * unused UNUSED )
     tr_lockUnlock( getVerifyLock( ) );
 }
 
+static tr_bool
+torrentHasAnyLocalData( const tr_torrent * tor )
+{
+    tr_file_index_t i;
+    tr_bool hasAny = FALSE;
+    const tr_file_index_t n = tor->info.fileCount;
+
+    assert( tr_isTorrent( tor ) );
+
+    for( i=0; i<n && !hasAny; ++i )
+    {
+        struct stat sb;
+        char * path = tr_buildPath( tor->downloadDir, tor->info.files[i].name, NULL );
+        if( !stat( path, &sb ) && ( sb.st_size > 0 ) )
+            hasAny = TRUE;
+        tr_free( path );
+    }
+
+    return hasAny;
+}
+
 void
 tr_verifyAdd( tr_torrent *      tor,
               tr_verify_done_cb verify_done_cb )
 {
-    const int uncheckedCount = tr_torrentCountUncheckedPieces( tor );
-
     assert( tr_isTorrent( tor ) );
 
-    if( !uncheckedCount )
+    if( tr_torrentCountUncheckedPieces( tor ) == 0 )
     {
         /* doesn't need to be checked... */
+        fireCheckDone( tor, verify_done_cb );
+    }
+    else if( !torrentHasAnyLocalData( tor ) )
+    {
+        /* we haven't downloaded anything for this torrent yet...
+         * no need to leave it waiting in the back of the queue.
+         * we can mark it as all-missing from here and fire
+         * the "done" callback */
+        const tr_bool hadAny = tr_cpHaveTotal( &tor->completion ) != 0;
+        tr_piece_index_t i;
+        for( i=0; i<tor->info.pieceCount; ++i )
+            tr_torrentSetHasPiece( tor, i, FALSE );
+        if( hadAny ) /* if we thought we had some, flag as dirty */
+            tr_torrentSetDirty( tor );
         fireCheckDone( tor, verify_done_cb );
     }
     else

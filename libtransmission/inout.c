@@ -10,6 +10,10 @@
  * $Id$
  */
 
+#ifdef HAVE_LSEEK64
+ #define _LARGEFILE64_SOURCE
+#endif
+
 #include <assert.h>
 #include <errno.h>
 #include <stdlib.h> /* realloc */
@@ -51,9 +55,9 @@ enum { TR_IO_READ, TR_IO_WRITE };
 int64_t
 tr_lseek( int fd, int64_t offset, int whence )
 {
-#if defined(_LARGEFILE_SOURCE)
+#if defined( HAVE_LSEEK64 )
     return lseek64( fd, (off64_t)offset, whence );
-#elif defined(WIN32)
+#elif defined( WIN32 )
     return _lseeki64( fd, offset, whence );
 #else
     return lseek( fd, (off_t)offset, whence );
@@ -100,13 +104,19 @@ readOrWriteBytes( const tr_torrent * tor,
         preallocationMode = tor->session->preallocationMode;
 
     if( ( ioMode == TR_IO_READ ) && !fileExists ) /* does file exist? */
+        err = ENOENT;
+    else if( ( fd = tr_fdFileCheckout( tor->uniqueId, tor->downloadDir, file->name, ioMode == TR_IO_WRITE, preallocationMode, file->length ) ) < 0 ) {
         err = errno;
-    else if( ( fd = tr_fdFileCheckout ( tor->uniqueId, tor->downloadDir, file->name, ioMode == TR_IO_WRITE, preallocationMode, file->length ) ) < 0 )
+        tr_torerr( tor, "tr_fdFileCheckout failed for \"%s\": %s", file->name, tr_strerror( err ) );
+    }
+    else if( tr_lseek( fd, (int64_t)fileOffset, SEEK_SET ) == -1 ) {
         err = errno;
-    else if( tr_lseek( fd, (int64_t)fileOffset, SEEK_SET ) == -1 )
+        tr_torerr( tor, "tr_lseek failed for \"%s\": %s", file->name, tr_strerror( err ) );
+    }
+    else if( func( fd, buf, buflen ) != buflen ) {
         err = errno;
-    else if( func( fd, buf, buflen ) != buflen )
-        err = errno;
+        tr_torerr( tor, "read/write failed for \"%s\": %s", file->name, tr_strerror( err ) );
+    }
     else
         err = 0;
 
@@ -175,7 +185,7 @@ readOrWritePiece( tr_torrent       * tor,
     while( buflen && !err )
     {
         const tr_file * file = &info->files[fileIndex];
-        const uint64_t  bytesThisPass = MIN( buflen, file->length - fileOffset );
+        const uint64_t bytesThisPass = MIN( buflen, file->length - fileOffset );
 
         err = readOrWriteBytes( tor, ioMode, fileIndex, fileOffset, buf, bytesThisPass );
         buf += bytesThisPass;

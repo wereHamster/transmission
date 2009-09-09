@@ -93,10 +93,6 @@
 
 - (void) addRemoveTracker: (id) sender;
 
-- (NSArray *) quickLookURLs;
-- (BOOL) canQuickLook;
-- (NSRect) quickLookFrameWithURL: (NSURL*) url;
-
 - (void) setPiecesView: (id) sender;
 - (void) setPiecesViewForAvailable: (BOOL) available;
 
