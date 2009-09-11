@@ -990,7 +990,7 @@ tr_httpParseURL( const char * url_in,
     }
 
     err = !host || !path || !protocol
-          || ( strcmp( protocol, "http" ) && strcmp( protocol, "https" ) );
+	    || ( strcmp( protocol, "http" ) && strcmp( protocol, "https" ) && strcmp( protocol, "udp" ) );
 
     if( !err && !port )
     {

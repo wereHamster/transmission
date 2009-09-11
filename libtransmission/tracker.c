@@ -31,6 +31,8 @@
 #include "utils.h"
 #include "web.h"
 
+#include "udp.h"
+
 enum
 {
     /* the announceAt fields are set to this when the action is disabled */
@@ -799,6 +801,11 @@ buildTrackerRequestURI( tr_tracker *       t,
 
 }
 
+static void udpAnnounceWrapper(void * data)
+{
+	tr_udpAnnounce(data, 0);
+}
+
 static struct tr_tracker_request*
 createRequest( tr_session * session,
                tr_tracker * tracker,
@@ -815,6 +822,11 @@ createRequest( tr_session * session,
      * an event=paused parameter in every announce while it is a partial seed. */
     if( tr_cpGetStatus( &torrent->completion ) == TR_PARTIAL_SEED )
         reqtype = TR_REQ_PAUSED;
+
+    if (strncmp(address->announce, "udp://", 6) == 0) {
+	    tr_runInEventThread( session, udpAnnounceWrapper, address);
+	    return NULL;
+    }
 
     isStopping = reqtype == TR_REQ_STOPPED;
 
@@ -961,7 +973,8 @@ enqueueRequest( tr_session * session,
     assert( tr_isSession( session ) );
 
     req = createRequest( session, tracker, reqtype );
-    tr_runInEventThread( session, invokeRequest, req );
+    if (req)
+	    tr_runInEventThread( session, invokeRequest, req );
 }
 
 static int
