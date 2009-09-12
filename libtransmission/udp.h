@@ -23,7 +23,7 @@ struct tr_udp_connect_request {
 	int32_t transaction_id;
 } __attribute__((packed));
 
-struct tr_udp_connnect_reply
+struct tr_udp_connect_reply
 {
 	int32_t action;
 	int32_t transaction_id;
@@ -105,14 +105,30 @@ struct tr_udp_error_reply
  * State tracking of the UDP request
  */
 
+struct tr_udp_state;
+
+typedef int (*tr_udp_send_func)(struct tr_udp_state *state);
+typedef int (*tr_udp_recv_func)(struct tr_udp_state *state);
+
+
+struct tr_udp_task
+{
+    tr_udp_send_func send;
+    tr_udp_recv_func recv;
+};
+
 struct tr_udp_state
 {
-	int sockfd;
-	struct event ev;
+    int sockfd;
+    struct event ev;
+    
+    int failures;
+    
+    int64_t connection_id;
+    int32_t transaction_id;
 
-	int64_t connection_id;
-	int32_t action;
-	int32_t transaction_id;
+    unsigned long numTasks, curTask;
+    struct tr_udp_task *task[0];
 };
 
 void tr_udpAnnounce(const tr_tracker_info * address, int reqtype);
