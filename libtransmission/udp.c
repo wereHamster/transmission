@@ -10,6 +10,9 @@
 
 
 #include "transmission.h"
+#include "tracker.h"
+#include "net.h"
+#include "utils.h"
 #include "udp.h"
 
 /*
@@ -41,43 +44,36 @@ static void printAddr(struct addrinfo *addr)
 static int setupSocket(const char *url)
 {
 	struct addrinfo hints, *res;
-	int error, sockfd;
+	int error, sockfd, port;
+        char *host, ports[10];
+
+        tr_httpParseURL(url, strlen(url), &host, &port, NULL);
+        snprintf(ports, 10, "%d", port);
+
+        printf("host: %s, port: %s\n", host, ports);
 
 	memset(&hints, 0, sizeof(hints));
 
 	/* set-up hints structure */
-	hints.ai_family = PF_INET;
-	hints.ai_flags = AI_PASSIVE;
+	hints.ai_family = PF_UNSPEC;
 	hints.ai_socktype = SOCK_DGRAM;
 
-	error = getaddrinfo(NULL, "6969", &hints, &res);
+	error = getaddrinfo(host, ports, &hints, &res);
 	if (error || !res) {
-		printf("first getaddrinfo\n");
+		printf("getaddrinfo\n");
 		perror(gai_strerror(error));
 		return -1;
 	}
-//	printAddr(res);
-	sockfd = socket(res->ai_family, res->ai_socktype, 0);
-	perror("socket");
-//	bind(sockfd, res->ai_addr, res->ai_addrlen);
-//	perror("bind");
 
-	hints.ai_flags = 0;
-
-	printf("url: %s\n", url);
-
-	error = getaddrinfo(url, "6969", &hints, &res);
-	if (error || !res) {
-		printf("second getaddrinfo\n");
-		perror(gai_strerror(error));
-		return -1;
-	}
 	printAddr(res);
+
+	sockfd = socket(res->ai_family, res->ai_socktype, 0);
 	error = connect(sockfd, res->ai_addr, res->ai_addrlen);
 	printf("connected %d\n", error);
-	perror("connect");
 
 	printf("returning socket %d\n", sockfd);
+
+        evutil_make_socket_nonblocking(sockfd);
 
 	return sockfd;
 }
@@ -107,6 +103,7 @@ static void callback(int fd, short event, void * data)
 
     printf("event: %04x\n", event);
     if (event == EV_TIMEOUT || state->task[state->curTask]->recv(state)) {
+        perror("recv");
         if (++state->failures >= 4)
             return;
     } else {
@@ -116,7 +113,6 @@ static void callback(int fd, short event, void * data)
         printf("advancing task counter\n");
     }
 
-    printf("rescheduling\n");
     if (state->curTask < state->numTasks)
         schedule(state);
 }
@@ -139,15 +135,21 @@ static int connect_recv(struct tr_udp_state *state)
     struct tr_udp_connect_reply connect_reply;
     int ret;
 
+    printf("connect recv\n");
     ret = recv(state->sockfd, &connect_reply, sizeof(connect_reply), 0);
-    if (ret != sizeof(connect_reply))
+    if (ret != sizeof(connect_reply)) {
+        printf("size doesn't match %d != %d\n", ret, sizeof(connect_reply));
         return -1;
+    }
 
-    if (state->transaction_id != connect_reply.transaction_id)
+    if (state->transaction_id != connect_reply.transaction_id) {
+        printf("txid doesn't match\n");
         return -1;
+    }
 
     state->connection_id = connect_reply.connection_id;
 
+    printf(".. success\n");
     return 0;
 }
 
@@ -197,6 +199,8 @@ static int announce_recv(struct tr_udp_state *state)
 
     announce_reply_rest = (struct tr_udp_announce_reply_rest *) (announce_reply + 1);
 
+    uint8_t *compact = malloc(num * (sizeof(tr_address) + sizeof(tr_port))), *walk = compact;
+                              
     for (i = 0; i < num; ++i) {
         struct sockaddr_in sin;
         char namebuf[100];
@@ -207,7 +211,21 @@ static int announce_recv(struct tr_udp_state *state)
         
         ret = getnameinfo((struct sockaddr *) &sin, sizeof(sin), namebuf, sizeof(namebuf), NULL, 0, NI_NUMERICHOST);
         printf("%s:%d\n", namebuf, ntohs(announce_reply_rest[i].port));
+
+        tr_address addr;
+        addr.type = TR_AF_INET;
+        addr.addr.addr4.s_addr = ntohl(announce_reply_rest[i].ip);
+
+        tr_port port = ntohs(announce_reply_rest[i].port);
+
+        uint8_t compact[sizeof(addr) + sizeof(port)];
+        memcpy(walk, &addr, sizeof(addr));
+        memcpy(walk + sizeof(addr), &port, sizeof(port));
+
+        walk += sizeof(addr) + sizeof(port);
     }
+
+    publishNewPeers(state->tracker, 0, compact, num * (sizeof(tr_address) + sizeof(tr_port)));
 
     return 0;
 }
@@ -216,11 +234,14 @@ static struct tr_udp_task __task_announce = {
     announce_send, announce_recv
 };
 
-void tr_udpAnnounce(const tr_tracker_info * address, int reqtype)
+struct tr_udp_state *tr_udp_announce(tr_session *session, tr_tracker *tracker, tr_tracker_info *address, int type)
 {
     struct tr_udp_state *state = malloc(sizeof(struct tr_udp_state) + 2 * sizeof(struct tr_udp_task));
     int ret;
-    char *url = "udp://192.168.0.82";
+
+    state->session = session;
+    state->tracker = tracker;
+    state->failures = 0;
 
     state->numTasks = 2;
     state->curTask = 0;
@@ -229,8 +250,8 @@ void tr_udpAnnounce(const tr_tracker_info * address, int reqtype)
     state->task[1] = &__task_announce;
 
     printf("creating socket to connect with %s\n", address->announce);
-    
-    state->sockfd = setupSocket(url + 6);
+
+    state->sockfd = setupSocket(address->announce);
     event_set(&state->ev, state->sockfd, EV_READ, callback, state);
 
 #define hton64(i)   ( ((uint64_t)(htonl((i) & 0xffffffff)) << 32) | htonl(((i) >> 32) & 0xffffffff ) )
@@ -239,4 +260,6 @@ void tr_udpAnnounce(const tr_tracker_info * address, int reqtype)
     state->transaction_id = random();
 
     schedule(state);
+
+    return state;
 }

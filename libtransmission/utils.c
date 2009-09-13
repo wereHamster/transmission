@@ -968,24 +968,23 @@ tr_httpParseURL( const char * url_in,
         *pch = '\0';
         protocol = tmp;
         pch += 3;
-/*fprintf( stderr, "protocol is [%s]... what's left is [%s]\n", protocol, pch
-  );*/
+//fprintf( stderr, "protocol is [%s]... what's left is [%s]\n", protocol, pch);
         if( ( n = strcspn( pch, ":/" ) ) )
         {
             const int havePort = pch[n] == ':';
             host = pch;
             pch += n;
             *pch++ = '\0';
-/*fprintf( stderr, "host is [%s]... what's left is [%s]\n", host, pch );*/
+//fprintf( stderr, "host is [%s]... what's left is [%s]\n", host, pch );
             if( havePort )
             {
                 char * end;
                 port = strtol( pch, &end, 10 );
                 pch = end;
-/*fprintf( stderr, "port is [%d]... what's left is [%s]\n", port, pch );*/
+//fprintf( stderr, "port is [%d]... what's left is [%s]\n", port, pch );
             }
             path = pch;
-/*fprintf( stderr, "path is [%s]\n", path );*/
+//fprintf( stderr, "path is [%s]\n", path );
         }
     }
 
@@ -996,12 +995,13 @@ tr_httpParseURL( const char * url_in,
     {
         if( !strcmp( protocol, "http" ) ) port = 80;
         if( !strcmp( protocol, "https" ) ) port = 443;
+        if( !strcmp( protocol, "udp" ) ) port = 6969;
     }
 
     if( !err )
     {
         if( setme_host ){ ( (char*)host )[-3] = ':'; *setme_host =
-                              tr_strdup( protocol ); }
+                              tr_strdup( host ); }
         if( setme_path ){ ( (char*)path )[-1] = '/'; *setme_path =
                               tr_strdup( path - 1 ); }
         if( setme_port ) *setme_port = port;

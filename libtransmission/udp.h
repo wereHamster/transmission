@@ -119,6 +119,9 @@ struct tr_udp_task
 
 struct tr_udp_state
 {
+    tr_session *session;
+    tr_tracker *tracker;
+
     int sockfd;
     struct event ev;
     
@@ -131,6 +134,10 @@ struct tr_udp_state
     struct tr_udp_task *task[0];
 };
 
-void tr_udpAnnounce(const tr_tracker_info * address, int reqtype);
+struct tr_udp_state *tr_udp_announce(tr_session *session, tr_tracker *tracker, tr_tracker_info *address, int type);
+struct tr_udp_state *tr_udp_scrape(tr_session *session, tr_tracker *tracker, tr_tracker_info *address);
+
+void tr_udp_cancel(struct tr_udp_state *state);
+
 
 #endif /* _TR_UDP_H_ */

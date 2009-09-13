@@ -226,7 +226,7 @@ publishWarning( tr_tracker * t,
     publishMessage( t, msg, TR_TRACKER_WARNING );
 }
 
-static void
+void
 publishNewPeers( tr_tracker * t,
                  int          allAreSeeds,
                  const void * compact,
@@ -801,9 +801,20 @@ buildTrackerRequestURI( tr_tracker *       t,
 
 }
 
-static void udpAnnounceWrapper(void * data)
+struct tr_udp_wrapper_data
 {
-	tr_udpAnnounce(data, 0);
+    tr_session *session;
+    tr_tracker *tracker;
+    tr_tracker_info *address;
+
+    int type;
+};
+
+static void udpAnnounceWrapper(void *vdata)
+{
+    struct tr_udp_wrapper_data *data = vdata;
+    tr_udp_announce(data->session, data->tracker, data->address, data->type);
+    free(data);
 }
 
 static struct tr_tracker_request*
@@ -824,8 +835,16 @@ createRequest( tr_session * session,
         reqtype = TR_REQ_PAUSED;
 
     if (strncmp(address->announce, "udp://", 6) == 0) {
-	    tr_runInEventThread( session, udpAnnounceWrapper, address);
-	    return NULL;
+        struct tr_udp_wrapper_data *data = malloc(sizeof(struct tr_udp_wrapper_data));
+
+        data->session = session;
+        data->tracker = tracker;
+        data->address = address;
+        data->type = reqtype;
+
+        tr_runInEventThread( session, udpAnnounceWrapper, data);
+
+        return NULL;
     }
 
     isStopping = reqtype == TR_REQ_STOPPED;

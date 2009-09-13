@@ -103,4 +103,10 @@ void                    tr_trackerGetCounts( const struct tr_tracker *,
                                              int * setme_seederCount,
                                              int * setme_downloaderCount );
 
+void
+publishNewPeers( tr_tracker * t,
+                 int          allAreSeeds,
+                 const void * compact,
+                 int          compactLen );
+
 #endif
