@@ -123,6 +123,14 @@ struct peer_atom
     time_t      piece_data_time;
 };
 
+static tr_bool
+tr_isAtom( const struct peer_atom * atom )
+{
+    return ( atom != NULL )
+        && ( atom->from < TR_PEER_FROM__MAX )
+        && ( tr_isAddress( &atom->addr ) );
+}
+
 struct tr_blockIterator
 {
     time_t expirationDate;
@@ -243,6 +251,8 @@ static int
 comparePeerAtoms( const void * va, const void * vb )
 {
     const struct peer_atom * b = vb;
+
+    assert( tr_isAtom( b ) );
 
     return comparePeerAtomToAddress( va, &b->addr );
 }
@@ -1191,6 +1201,9 @@ ensureAtomExists( Torrent          * t,
                   uint8_t            flags,
                   uint8_t            from )
 {
+    assert( tr_isAddress( addr ) );
+    assert( from < TR_PEER_FROM__MAX );
+
     if( getExistingAtom( t, addr ) == NULL )
     {
         struct peer_atom * a;
@@ -1520,8 +1533,28 @@ peerPrefersCrypto( const tr_peer * peer )
 }
 #endif
 
+/* better goes first */
+static int
+compareAtomsByUsefulness( const void * va, const void *vb )
+{
+    const struct peer_atom * a = * (const struct peer_atom**) va;
+    const struct peer_atom * b = * (const struct peer_atom**) vb;
+
+    assert( tr_isAtom( a ) );
+    assert( tr_isAtom( b ) );
+
+    if( a->piece_data_time != b->piece_data_time )
+        return a->piece_data_time > b->piece_data_time ? -1 : 1;
+    if( a->from != b->from )
+        return a->from < b->from ? -1 : 1;
+    if( a->numFails != b->numFails )
+        return a->numFails < b->numFails ? -1 : 1;
+
+    return 0;
+}
+
 int
-tr_peerMgrGetPeers( tr_torrent * tor, tr_pex ** setme_pex, uint8_t af )
+tr_peerMgrGetPeers( tr_torrent * tor, tr_pex ** setme_pex, uint8_t af, int maxPeerCount )
 {
     int count = 0;
     const Torrent * t = tor->torrentPeers;
@@ -1530,14 +1563,18 @@ tr_peerMgrGetPeers( tr_torrent * tor, tr_pex ** setme_pex, uint8_t af )
 
     {
         int i;
-        const struct peer_atom ** atoms = (const struct peer_atom**) tr_ptrArrayBase( &t->pool );
         const int atomCount = tr_ptrArraySize( &t->pool );
+        const int pexCount = MIN( atomCount, maxPeerCount );
+        const struct peer_atom ** atomsBase = (const struct peer_atom**) tr_ptrArrayBase( &t->pool );
+        struct peer_atom ** atoms = tr_memdup( atomsBase, atomCount * sizeof( struct peer_atom * ) );
         /* for now, this will waste memory on torrents that have both
          * ipv6 and ipv4 peers */
         tr_pex * pex = tr_new0( tr_pex, atomCount );
         tr_pex * walk = pex;
 
-        for( i=0; i<atomCount; ++i )
+        qsort( atoms, atomCount, sizeof( struct peer_atom * ), compareAtomsByUsefulness );
+
+        for( i=0; i<atomCount && count<pexCount; ++i )
         {
             const struct peer_atom * atom = atoms[i];
             if( atom->addr.type == af )
@@ -1552,8 +1589,9 @@ tr_peerMgrGetPeers( tr_torrent * tor, tr_pex ** setme_pex, uint8_t af )
         }
 
         assert( ( walk - pex ) == count );
-        qsort( pex, count, sizeof( tr_pex ), tr_pexCompare );
         *setme_pex = pex;
+
+        tr_free( atoms );
     }
 
     managerUnlock( t->manager );

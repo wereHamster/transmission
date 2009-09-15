@@ -332,7 +332,7 @@ syncAltSpeedButton( PrivateData * p )
 {
     char u[32];
     char d[32];
-    char buf[128];
+    char * str;
     const char * fmt;
     const gboolean b = pref_flag_get( TR_PREFS_KEY_ALT_SPEED_ENABLED );
     GtkWidget * w = p->alt_speed_button;
@@ -341,12 +341,14 @@ syncAltSpeedButton( PrivateData * p )
     tr_strlspeed( d, pref_int_get( TR_PREFS_KEY_ALT_SPEED_DOWN ), sizeof( d ) );
     fmt = b ? _( "Click to disable Temporary Speed Limits\n(%1$s down, %2$s up)" )
             : _( "Click to enable Temporary Speed Limits\n(%1$s down, %2$s up)" );
-    g_snprintf( buf, sizeof( buf ), fmt, d, u );
+    str = g_strdup_printf( fmt, d, u );
 
     gtk_toggle_button_set_active( GTK_TOGGLE_BUTTON( w ), b );
     gtk_button_set_image( GTK_BUTTON( w ), p->alt_speed_image[b?1:0] );
     gtk_button_set_alignment( GTK_BUTTON( w ), 0.5, 0.5 );
-    gtr_widget_set_tooltip_text( w, buf );
+    gtr_widget_set_tooltip_text( w, str );
+
+    g_free( str );
 }
 
 static void
@@ -583,7 +585,7 @@ onAskTrackerQueryTooltip( GtkWidget *            widget UNUSED,
     }
     else
     {
-        char      buf[128];
+        char      buf[512];
         char      timebuf[64];
         const int seconds = maxTime - now;
 
@@ -1080,7 +1082,7 @@ updateTorrentCount( PrivateData * p )
 {
     if( p && p->core )
     {
-        char      buf[128];
+        char      buf[512];
         const int torrentCount = gtk_tree_model_iter_n_children(
             tr_core_model( p->core ), NULL );
         const int visibleCount = gtk_tree_model_iter_n_children(
@@ -1106,7 +1108,7 @@ static void
 updateStats( PrivateData * p )
 {
     const char *            pch;
-    char                    up[32], down[32], ratio[32], buf[128];
+    char                    up[32], down[32], ratio[32], buf[512];
     struct tr_session_stats stats;
     tr_session *            session = tr_core_session( p->core );
 

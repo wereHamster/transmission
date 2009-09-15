@@ -223,6 +223,10 @@
 
 - (void) create: (id) sender
 {
+    //make sure the trackers are no longer being verified
+    if ([fTrackerTable editedRow] != -1)
+        [[self window] endEditingFor: fTrackerTable];
+    
     if ([fTrackers count] == 0 && [fDefaults boolForKey: @"WarningCreatorBlankAddress"])
     {
         NSAlert * alert = [[NSAlert alloc] init];
@@ -475,6 +479,7 @@
             [fProgressView setHidden: YES];
             
             NSWindow * window = [self window];
+            [window setFrameAutosaveName: @""];
             
             NSRect windowRect = [window frame];
             CGFloat difference = [fProgressView frame].size.height - [[window contentView] frame].size.height;
