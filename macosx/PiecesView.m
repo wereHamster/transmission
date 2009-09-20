@@ -28,7 +28,7 @@
 #import "utils.h"
 
 #define MAX_ACROSS 18
-#define BETWEEN 1.0f
+#define BETWEEN 1.0
 
 #define HIGH_PEERS 30
 
@@ -108,17 +108,14 @@
         return;
     
     //determine if first time
-    BOOL first = NO;
-    if (!fPieces)
-    {
+    const BOOL first = fPieces == NULL;
+    if (first)
         fPieces = (int8_t *)tr_malloc(fNumPieces * sizeof(int8_t));
-        first = YES;
-    }
 
     int8_t * pieces = NULL;
     float * piecesPercent = NULL;
     
-    BOOL showAvailablity = [[NSUserDefaults standardUserDefaults] boolForKey: @"PiecesViewShowAvailability"];
+    const BOOL showAvailablity = [[NSUserDefaults standardUserDefaults] boolForKey: @"PiecesViewShowAvailability"];
     if (showAvailablity)
     {   
         pieces = (int8_t *)tr_malloc(fNumPieces * sizeof(int8_t));
@@ -132,9 +129,10 @@
     
     NSImage * image = [self image];
     
-    NSInteger index = -1;
-    NSRect rect = NSMakeRect(0, 0, fWidth, fWidth);
-    BOOL change = NO;
+    NSRect fillRects[fNumPieces];
+    NSColor * fillColors[fNumPieces];
+    
+    NSInteger index = -1, usedCount = 0;
     
     for (NSInteger i = 0; i < fAcross; i++)
         for (NSInteger j = 0; j < fAcross; j++)
@@ -148,7 +146,7 @@
             
             NSColor * pieceColor = nil;
             
-            if (showAvailablity ? pieces[index] == -1 : piecesPercent[index] == 1.0f)
+            if (showAvailablity ? pieces[index] == -1 : piecesPercent[index] == 1.0)
             {
                 if (first || fPieces[index] != PIECE_FINISHED)
                 {
@@ -164,7 +162,7 @@
                     }
                 }
             }
-            else if (showAvailablity ? pieces[index] == 0 : piecesPercent[index] == 0.0f)
+            else if (showAvailablity ? pieces[index] == 0 : piecesPercent[index] == 0.0)
             {
                 if (first || fPieces[index] != PIECE_NONE)
                 {
@@ -191,23 +189,19 @@
             
             if (pieceColor)
             {
-                //avoid unneeded memory usage by only locking focus if drawing will occur
-                if (!change)
-                {
-                    change = YES;
-                    [image lockFocus];
-                }
+                fillRects[usedCount] = NSMakeRect(j * (fWidth + BETWEEN) + BETWEEN + fExtraBorder,
+                                                    [image size].width - (i + 1) * (fWidth + BETWEEN) - fExtraBorder,
+                                                    fWidth, fWidth);
+                fillColors[usedCount] = pieceColor;
                 
-                rect.origin = NSMakePoint(j * (fWidth + BETWEEN) + BETWEEN + fExtraBorder,
-                                        [image size].width - (i + 1) * (fWidth + BETWEEN) - fExtraBorder);
-                
-                [pieceColor set];
-                NSRectFill(rect);
+                usedCount++;
             }
         }
     
-    if (change)
+    if (usedCount > 0)
     {
+        [image lockFocus];
+        NSRectFillListWithColors(fillRects, fillColors, usedCount);
         [image unlockFocus];
         [self setNeedsDisplay];
     }

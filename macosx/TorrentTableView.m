@@ -39,9 +39,6 @@
 #define ACTION_MENU_PRIORITY_NORMAL_TAG 102
 #define ACTION_MENU_PRIORITY_LOW_TAG 103
 
-#define GROUP_SPEED_IMAGE_COLUMN_WIDTH 8.0f
-#define GROUP_RATIO_IMAGE_COLUMN_WIDTH 10.0f
-
 #define TOGGLE_PROGRESS_SECONDS 0.175
 
 @interface TorrentTableView (Private)
@@ -593,7 +590,8 @@
         NSMenuItem * item;
         if ([menu numberOfItems] == 3)
         {
-            const NSInteger speedLimitActionValue[] = { 0, 5, 10, 20, 30, 40, 50, 75, 100, 150, 200, 250, 500, 750, 1000, 1500, 2000, -1 };
+            const NSInteger speedLimitActionValue[] = { 0, 5, 10, 20, 30, 40, 50, 75, 100, 150, 200, 250, 500,
+                                                        750, 1000, 1500, 2000, -1 };
             
             for (NSInteger i = 0; speedLimitActionValue[i] != -1; i++)
             {
@@ -676,12 +674,14 @@
 //alternating rows - first row after group row is white
 - (void) highlightSelectionInClipRect: (NSRect) clipRect
 {
-    NSColor * altColor = [[NSColor controlAlternatingRowBackgroundColors] objectAtIndex: 1];
-    [altColor set];
-    
     NSRect visibleRect = clipRect;
     NSRange rows = [self rowsInRect: visibleRect];
     BOOL start = YES;
+    
+    const CGFloat totalRowHeight = [self rowHeight] + [self intercellSpacing].height;
+    
+    NSRect gridRects[(NSInteger)(ceil(visibleRect.size.height / totalRowHeight / 2.0)) + 1]; //add one if partial rows at top and bottom
+    NSInteger rectNum = 0;
     
     if (rows.length > 0)
     {
@@ -711,29 +711,33 @@
             }
             
             if (!start && ![self isRowSelected: i])
-                NSRectFill([self rectOfRow: i]);
+                gridRects[rectNum++] = [self rectOfRow: i];
             
             start = !start;
         }
         
-        CGFloat newY = NSMaxY([self rectOfRow: i-1]);
+        const CGFloat newY = NSMaxY([self rectOfRow: i-1]);
         visibleRect.size.height -= newY - visibleRect.origin.y;
         visibleRect.origin.y = newY;
     }
-        
+    
+    const NSInteger numberBlankRows = ceil(visibleRect.size.height / totalRowHeight);
+    
     //remaining visible rows continue alternating
-    const CGFloat height = [self rowHeight] + [self intercellSpacing].height;
-    const NSInteger numberOfRects = ceil(visibleRect.size.height / height);
-    
-    visibleRect.size.height = height;
+    visibleRect.size.height = totalRowHeight;
     if (start)
-        visibleRect.origin.y += height;
+        visibleRect.origin.y += totalRowHeight;
     
-    for (NSInteger i = start ? 1 : 0; i < numberOfRects; i += 2)
+    for (NSInteger i = start ? 1 : 0; i < numberBlankRows; i += 2)
     {
-        NSRectFill(visibleRect);
-        visibleRect.origin.y += 2.0 * height;
+        gridRects[rectNum++] = visibleRect;
+        visibleRect.origin.y += 2.0 * totalRowHeight;
     }
+    
+    NSAssert([[NSColor controlAlternatingRowBackgroundColors] count] >= 2, @"There should be 2 alternating row colors");
+    
+    [[[NSColor controlAlternatingRowBackgroundColors] objectAtIndex: 1] set];
+    NSRectFillList(gridRects, rectNum);
     
     [super highlightSelectionInClipRect: clipRect];
 }
@@ -938,21 +942,10 @@
 
 - (void) setGroupStatusColumns
 {
-    BOOL ratio = [fDefaults boolForKey: @"DisplayGroupRowRatio"];
+    const BOOL ratio = [fDefaults boolForKey: @"DisplayGroupRowRatio"];
     
     [[self tableColumnWithIdentifier: @"DL"] setHidden: ratio];
     [[self tableColumnWithIdentifier: @"DL Image"] setHidden: ratio];
-    
-    //change size of image column
-    NSTableColumn * ulImageTableColumn = [self tableColumnWithIdentifier: @"UL Image"];
-    CGFloat oldWidth = [ulImageTableColumn width], newWidth = ratio ? GROUP_RATIO_IMAGE_COLUMN_WIDTH : GROUP_SPEED_IMAGE_COLUMN_WIDTH;
-    if (oldWidth != newWidth)
-    {
-        [ulImageTableColumn setWidth: newWidth];
-        
-        NSTableColumn * groupTableColumn = [self tableColumnWithIdentifier: @"Group"];
-        [groupTableColumn setWidth: [groupTableColumn width] - (newWidth - oldWidth)];
-    }
 }
 
 - (void) createFileMenu: (NSMenu *) menu forFiles: (NSArray *) files
