@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  * 
- * Copyright (c) 2008-2009 Transmission authors and contributors
+ * Copyright (c) 2009 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -24,19 +24,9 @@
 
 #import <Cocoa/Cocoa.h>
 
-@class Torrent;
-
-@interface TrackerTableView : NSTableView
+@interface TrackerCell : NSActionCell
 {
-    //weak references
-    Torrent * fTorrent;
-    NSArray * fTrackers;
+    NSMutableDictionary * fNameAttributes, * fStatusAttributes;
 }
-
-- (void) setTorrent: (Torrent *) torrent;
-- (void) setTrackers: (NSArray *) trackers;
-
-- (void) copy: (id) sender;
-- (void) paste: (id) sender;
 
 @end

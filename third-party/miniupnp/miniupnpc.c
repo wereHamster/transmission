@@ -1,4 +1,4 @@
-/* $Id: miniupnpc.c,v 1.63 2009/08/07 14:44:50 nanard Exp $ */
+/* $Id: miniupnpc.c,v 1.64 2009/09/21 12:57:42 nanard Exp $ */
 /* Project : miniupnp
  * Author : Thomas BERNARD
  * copyright (c) 2005-2009 Thomas Bernard
@@ -34,6 +34,7 @@
 #else
 /* Standard POSIX includes */
 #include <unistd.h>
+#include <sys/select.h> /* fd_set */
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/param.h>
@@ -263,12 +264,32 @@ int simpleUPnPcommand(int s, const char * url, const char * service,
 		dest.sin_family = AF_INET;
 		dest.sin_port = htons(port);
 		dest.sin_addr.s_addr = inet_addr(hostname);
+        n = connect(s, (struct sockaddr *)&dest, sizeof(struct sockaddr));
 #ifdef MINIUPNPC_IGNORE_EINTR
-        do {
-#endif
-            n = connect(s, (struct sockaddr *)&dest, sizeof(struct sockaddr));
-#ifdef MINIUPNPC_IGNORE_EINTR
-        } while(n < 0 && errno == EINTR);
+        while(n < 0 && errno == EINTR)
+		{
+			socklen_t len;
+			fd_set wset;
+			int err;
+			FD_ZERO(&wset);
+			FD_SET(s, &wset);
+			if((n = select(s + 1, NULL, &wset, NULL, NULL)) == -1 && errno == EINTR)
+				continue;
+			/*len = 0;*/
+			/*n = getpeername(s, NULL, &len);*/
+			len = sizeof(err);
+			if(getsockopt(s, SOL_SOCKET, SO_ERROR, &err, &len) < 0) {
+				PRINT_SOCKET_ERROR("getsockopt");
+				closesocket(s);
+				return -1;
+			}
+			if(err != 0) {
+				errno = err;
+				n = -1;
+			} else {
+				n = 0;
+			}
+		}
 #endif
 		if(n < 0)
         {

@@ -28,13 +28,13 @@
 
 @class Torrent;
 @class TrackerTableView;
+@class TrackerCell;
 @class FileOutlineController;
 @class PiecesView;
 
 @interface InfoWindowController : NSWindowController <QLPreviewPanelDataSource, QLPreviewPanelDelegate>
 {
     NSArray * fTorrents;
-    NSMutableArray * fTrackers;
     
     IBOutlet NSView * fInfoView, * fActivityView, * fTrackerView, * fPeersView, * fFilesView, * fOptionsView;
     NSInteger fCurrentTabTag;
@@ -43,7 +43,7 @@
     IBOutlet NSImageView * fImageView;
     IBOutlet NSTextField * fNameField, * fBasicInfoField;
     
-    IBOutlet NSTextField * fTrackerField, * fPiecesField, * fHashField, * fSecureField,
+    IBOutlet NSTextField * fPiecesField, * fHashField, * fSecureField,
                         * fDataLocationField,
                         * fDateAddedField, * fDateCompletedField, * fDateActivityField,
                         * fCreatorField, * fDateCreatedField,
@@ -53,10 +53,10 @@
     IBOutlet NSTextView * fCommentView;
     IBOutlet NSButton * fRevealDataButton;
     
+    NSMutableArray * fTrackers;
     IBOutlet TrackerTableView * fTrackerTable;
+    TrackerCell * fTrackerCell;
     IBOutlet NSSegmentedControl * fTrackerAddRemoveControl;
-    IBOutlet NSTextField * fAnnounceAddressField, * fAnnounceLastField, * fAnnounceResponseField, * fAnnounceNextField,
-                            * fScrapeAddressField, * fScrapeLastField, * fScrapeResponseField, * fScrapeNextField;
     
     NSArray * fPeers, * fWebSeeds;
     IBOutlet NSTableView * fPeerTable, * fWebSeedTable;

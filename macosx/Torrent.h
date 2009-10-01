@@ -28,9 +28,6 @@
 
 @class FileListNode;
 
-#define STAT_TIME_NONE -1
-#define STAT_TIME_NOW -2
-
 @interface Torrent : NSObject <QLPreviewItem>
 {
     tr_torrent * fHandle;
@@ -131,20 +128,10 @@
 - (uint64_t) size;
 - (uint64_t) sizeLeft;
 
-- (NSString *) trackerAddressAnnounce;
-- (NSDate *) lastAnnounceTime;
-- (NSInteger) nextAnnounceTime;
-- (NSString *) announceResponse;
-
-- (NSString *) trackerAddressScrape;
-- (NSDate *) lastScrapeTime;
-- (NSInteger) nextScrapeTime;
-- (NSString *) scrapeResponse;
-
-- (NSMutableArray *) allTrackers: (BOOL) separators;
-- (NSArray *) allTrackersFlat;
-- (BOOL) updateAllTrackersForAdd: (NSMutableArray *) trackers;
-- (void) updateAllTrackersForRemove: (NSMutableArray *) trackers;
+- (NSMutableArray *) allTrackerStats;
+- (NSMutableArray *) allTrackersFlat; //used by GroupRules
+- (BOOL) addTrackerToNewTier: (NSString *) tracker;
+- (void) removeTrackersWithAnnounceAddresses: (NSArray *) trackers;
 
 - (NSString *) comment;
 - (NSString *) creator;
@@ -187,11 +174,6 @@
 - (NSString *) remainingTimeString;
 
 - (NSString *) stateString;
-
-- (NSInteger) seeders;
-- (NSInteger) leechers;
-- (NSInteger) completedFromTracker;
-
 - (NSInteger) totalPeersConnected;
 - (NSInteger) totalPeersTracker;
 - (NSInteger) totalPeersIncoming;

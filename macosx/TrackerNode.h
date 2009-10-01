@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
- * 
- * Copyright (c) 2008-2009 Transmission authors and contributors
+ *
+ * Copyright (c) 2009 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -23,20 +23,26 @@
  *****************************************************************************/
 
 #import <Cocoa/Cocoa.h>
+#import <transmission.h>
 
-@class Torrent;
-
-@interface TrackerTableView : NSTableView
+@interface TrackerNode : NSObject
 {
-    //weak references
-    Torrent * fTorrent;
-    NSArray * fTrackers;
+    tr_tracker_stat fStat;
 }
 
-- (void) setTorrent: (Torrent *) torrent;
-- (void) setTrackers: (NSArray *) trackers;
+- (id) initWithTrackerStat: (tr_tracker_stat *) stat;
 
-- (void) copy: (id) sender;
-- (void) paste: (id) sender;
+- (NSString *) host;
+- (NSString *) fullAnnounceAddress;
+
+- (NSInteger) tier;
+
+- (NSInteger) totalSeeders;
+- (NSInteger) totalLeechers;
+- (NSInteger) totalDownloaded;
+
+- (NSString *) lastAnnounceStatusString;
+- (NSString *) nextAnnounceStatusString;
+- (NSString *) lastScrapeStatusString;
 
 @end

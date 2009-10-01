@@ -1190,9 +1190,9 @@ void tr_torrentManualUpdate( tr_torrent * torrent );
 
 tr_bool tr_torrentCanManualUpdate( const tr_torrent * torrent );
 
-/***********************************************************************
-* tr_torrentPeers
-***********************************************************************/
+/***
+****  tr_peer_stat
+***/
 
 typedef struct tr_peer_stat
 {
@@ -1225,6 +1225,107 @@ tr_peer_stat * tr_torrentPeers( const tr_torrent * torrent,
 
 void           tr_torrentPeersFree( tr_peer_stat * peerStats,
                                     int            peerCount );
+
+/***
+****  tr_tracker_stat
+***/
+
+typedef struct
+{
+    /* how many downloads this tracker knows of (-1 means it does not know) */
+    int downloadCount;
+
+    /* whether or not we've ever sent this tracker an announcement */
+    tr_bool hasAnnounced;
+
+    /* whether or not we've ever scraped to this tracker */
+    tr_bool hasScraped;
+
+    /* ex: legaltorrents.com */
+    char host[1024];
+
+    /* the full announce URL */
+    char announce[1024];
+
+    /* true if we're trying to use this tracker.
+       Transmission typically uses one tracker per tier. */
+    tr_bool isActive;
+
+    /* true if we've sent an announce and waiting for the response */
+    tr_bool isAnnouncing;
+
+    /* true if we've got a scrape request pending right now */
+    tr_bool isScraping;
+
+    /* number of peers the tracker told us about last time.
+     * if "lastAnnounceSucceeded" is false, this field is undefined */
+    int lastAnnouncePeerCount;
+
+    /* human-readable string with the result of the last announce.
+       if "hasAnnounced" is false, this field is undefined */ 
+    char lastAnnounceResult[128];
+
+    /* when the last announce was sent to the tracker.
+     * if "hasAnnounced" is false, this field is undefined */
+    time_t lastAnnounceStartTime;
+   
+    /* whether or not the last announce was a success.
+       if "hasAnnounced" is false, this field is undefined */ 
+    tr_bool lastAnnounceSucceeded;
+
+    /* when the last announce was completed.
+       if "hasAnnounced" is false, this field is undefined */
+    time_t lastAnnounceTime;
+
+    /* human-readable string with the result of the last scrape.
+     * if "hasScraped" is false, this field is undefined */
+    char lastScrapeResult[128];
+
+    /* when the last scrape was sent to the tracker.
+     * if "hasScraped" is false, this field is undefined */
+    time_t lastScrapeStartTime;
+
+    /* whether or not the last scrape was a success.
+       if "hasAnnounced" is false, this field is undefined */ 
+    tr_bool lastScrapeSucceeded;
+
+    /* when the last scrape was completed.
+       if "hasScraped" is false, this field is undefined */
+    time_t lastScrapeTime;
+
+    /* number of leechers this tracker knows of (-1 means it does not know) */
+    int leecherCount;
+
+    /* when the next periodic announce message will be sent out.
+       if "willAnnounce" is false, this field is undefined */
+    time_t nextAnnounceTime;
+
+    /* when the next periodic scrape message will be sent out.
+       if "willScrape" is false, this field is undefined */
+    time_t nextScrapeTime;
+
+    /* number of seeders this tracker knows of (-1 means it does not know) */
+    int seederCount;
+
+    /* which tier this tracker is in */
+    int tier;
+
+    /* true if the torrent's not announcing now, but will at nextAnnounceTime */
+    tr_bool willAnnounce;
+
+    /* true if we're not scraping now but will at nextScrapeTime */
+    tr_bool willScrape;
+}
+tr_tracker_stat;
+
+tr_tracker_stat * tr_torrentTrackers( const tr_torrent * torrent,
+                                      int              * setmeTrackerCount );
+
+void tr_torrentTrackersFree( tr_tracker_stat * trackerStats,
+                             int               trackerCount );
+
+
+    
 
 /**
  * @brief get the download speeds for each of this torrent's webseed sources.
@@ -1333,6 +1434,9 @@ struct tr_info
     uint8_t            hash[SHA_DIGEST_LENGTH];
     char               hashString[2 * SHA_DIGEST_LENGTH + 1];
 
+    /* hash, escaped as per rfc2396 for tracker announces */
+    char               hashEscaped[3 * SHA_DIGEST_LENGTH + 1];
+
     /* Flags */
     tr_bool            isPrivate;
     tr_bool            isMultifile;
@@ -1394,18 +1498,6 @@ typedef struct tr_stat
 
     /** What is this torrent doing right now? */
     tr_torrent_activity activity;
-
-    /** Our current announce URL, or NULL if none.
-        This URL may change during the session if the torrent's
-        metainfo has multiple trackers and the current one
-        becomes unreachable. */
-    char *  announceURL;
-
-    /** Our current scrape URL, or NULL if none.
-        This URL may change during the session if the torrent's
-        metainfo has multiple trackers and the current one
-        becomes unreachable. */
-    char *  scrapeURL;
 
     /** Defines what kind of text is in errorString.
         @see errorString */
@@ -1478,20 +1570,6 @@ typedef struct tr_stat
     /** Number of webseeds that are sending data to us. */
     int    webseedsSendingToUs;
 
-    /** Number of seeders that the tracker says this torrent has */
-    int    seeders;
-
-    /** Number of leechers that the tracker says this torrent has */
-    int    leechers;
-
-    /** Number of downloaders that the tracker says this torrent has.
-        This is a new key introduced in BEP 21 and may not be supported by some trackers.
-        If the tracker doesn't support this key, the value here will be -1. */
-    int    downloaders;
-
-    /** Number of finished downloads that the tracker says torrent has */
-    int    timesCompleted;
-
     /** Byte count of all the piece data we'll have downloaded when we're done,
         whether or not we have it yet.  This may be less than tr_info.totalSize
         if only some of the torrent's files are wanted.
@@ -1528,45 +1606,10 @@ typedef struct tr_stat
         are moved to `corrupt' or `haveValid'. */
     uint64_t    haveUnchecked;
 
-    /**
-     * This is a human-readable string with the last scrape's results.
-     * 1. If an http error occurred, the response code and description is given.
-     * 2. If the tracker gave an error or warning messae, that is given.
-     * 3. If everything went fine, "Success" is given.
-     */
-    char    scrapeResponse[128];
-
-    /** This is a human-readable string with the last announce's results.
-        Its contents have the same form as scrapeResponse. */
-    char    announceResponse[128];
-
-    /** Time the most recent scrape request was sent,
-        or zero if one hasn't been sent yet. */
-    time_t    lastScrapeTime;
-
-    /** Time when the next scrape request will be sent,
-        or 0 if an error has occured that stops scraping,
-        or 1 if a scrape is currently in progress s.t.
-        we haven't set a timer for the next one yet. */
-    time_t    nextScrapeTime;
-
-    /** Time the most recent announce request was sent,
-        or zero if one hasn't been sent yet. */
-    time_t    lastAnnounceTime;
-
-    /** Time when the next reannounce request will be sent,
-        or 0 if the torrent is stopped,
-        or 1 if an announce is currently in progress s.t.
-        we haven't set a timer for the next one yet */
-    time_t    nextAnnounceTime;
-
-    /** If the torrent is running, this is the time at which
-        the client can manually ask the torrent's tracker
-        for more peers,
-        or 0 if the torrent is stopped or doesn't allow manual,
-        or 1 if an announce is currently in progress s.t.
-        we haven't set a timer for the next one yet */
-    time_t    manualAnnounceTime;
+    /** time when one or more of the torrent's trackers will
+        allow you to manually ask for more peers,
+        or 0 if you can't */
+    time_t manualAnnounceTime;
 
     /** A very rough estimate in KiB/s of how quickly data is being
         passed around between all the peers we're connected to.

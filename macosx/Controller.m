@@ -29,7 +29,6 @@
 #import "Controller.h"
 #import "Torrent.h"
 #import "TorrentGroup.h"
-#import "TorrentCell.h"
 #import "TorrentTableView.h"
 #import "CreatorWindowController.h"
 #import "StatsWindowController.h"
@@ -1840,7 +1839,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     }
     
     [fDefaults setObject: sortType forKey: @"Sort"];
-    [self sortTorrents];
+    [self applyFilter: nil]; //better than calling sortTorrents because it will even apply to queue order
 }
 
 - (void) setSortByGroup: (id) sender
@@ -2024,9 +2023,10 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
             if (filterTracker)
             {
                 BOOL removeTextField = YES;
-                for (NSString * tracker in [torrent allTrackers: NO])
+                for (NSString * tracker in [torrent allTrackersFlat])
                 {
-                    if ([tracker rangeOfString: searchString options: NSCaseInsensitiveSearch].location != NSNotFound)
+                    if ([tracker rangeOfString: searchString options:
+                            (NSCaseInsensitiveSearch | NSDiacriticInsensitiveSearch)].location != NSNotFound)
                     {
                         removeTextField = NO;
                         break;
@@ -2038,7 +2038,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
             }
             else
             {
-                if ([[torrent name] rangeOfString: searchString options: NSCaseInsensitiveSearch].location == NSNotFound)
+                if ([[torrent name] rangeOfString: searchString options:
+                        (NSCaseInsensitiveSearch | NSDiacriticInsensitiveSearch)].location == NSNotFound)
                     continue;
             }
         }

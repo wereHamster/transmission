@@ -26,6 +26,7 @@
 #import "GroupsController.h"
 #import "FileListNode.h"
 #import "NSStringAdditions.h"
+#import "TrackerNode.h"
 #import "utils.h" //tr_httpIsValidURL
 
 @interface Torrent (Private)
@@ -51,8 +52,6 @@
 - (void) endQuickPause;
 
 - (NSString *) etaString;
-
-- (void) updateAllTrackers: (NSMutableArray *) trackers;
 
 - (void) setTimeMachineExclude: (BOOL) exclude forPath: (NSString *) path;
 
@@ -671,117 +670,84 @@ int trashDataFile(const char * filename)
     return fStat->leftUntilDone;
 }
 
-- (NSString *) trackerAddressAnnounce
+- (NSMutableArray *) allTrackerStats
 {
-    return fStat->announceURL ? [NSString stringWithUTF8String: fStat->announceURL] : nil;
-}
-
-- (NSDate *) lastAnnounceTime
-{
-    NSInteger date = fStat->lastAnnounceTime;
-    return date > 0 ? [NSDate dateWithTimeIntervalSince1970: date] : nil;
-}
-
-- (NSInteger) nextAnnounceTime
-{
-    NSInteger date = fStat->nextAnnounceTime;
-    NSTimeInterval difference;
-    switch (date)
-    {
-        case 0:
-            return STAT_TIME_NONE;
-        case 1:
-            return STAT_TIME_NOW;
-        default:
-            difference = [[NSDate dateWithTimeIntervalSince1970: date] timeIntervalSinceNow];
-            return difference > 0 ? (NSInteger)difference : STAT_TIME_NONE;
-    }
-}
-
-- (NSString *) announceResponse
-{
-    return [NSString stringWithUTF8String: fStat->announceResponse];
-}
-
-- (NSString *) trackerAddressScrape
-{
-    return fStat->scrapeURL ? [NSString stringWithUTF8String: fStat->scrapeURL] : nil;
-}
-
-- (NSDate *) lastScrapeTime
-{
-    NSInteger date = fStat->lastScrapeTime;
-    return date > 0 ? [NSDate dateWithTimeIntervalSince1970: date] : nil;
-}
-
-- (NSInteger) nextScrapeTime
-{
-    NSInteger date = fStat->nextScrapeTime;
-    NSTimeInterval difference;
-    switch (date)
-    {
-        case 0:
-            return STAT_TIME_NONE;
-        case 1:
-            return STAT_TIME_NOW;
-        default:
-            difference = [[NSDate dateWithTimeIntervalSince1970: date] timeIntervalSinceNow];
-            return difference > 0 ? (NSInteger)difference : STAT_TIME_NONE;
-    }
-}
-
-- (NSString *) scrapeResponse
-{
-    return [NSString stringWithUTF8String: fStat->scrapeResponse];
-}
-
-- (NSMutableArray *) allTrackers: (BOOL) separators
-{
-    const NSInteger count = fInfo->trackerCount;
-    const NSInteger capacity = (separators && count > 0) ? count + fInfo->trackers[count-1].tier + 1 : count;
-    NSMutableArray * allTrackers = [NSMutableArray arrayWithCapacity: capacity];
+    int count;
+    tr_tracker_stat * stats = tr_torrentTrackers(fHandle, &count);
     
-    for (NSInteger i = 0, tier = -1; i < count; i++)
+    NSMutableArray * trackers = [NSMutableArray arrayWithCapacity: count + stats[count-1].tier];
+    
+    int prevTier = -1;
+    for (int i=0; i < count; ++i)
     {
-        if (separators && tier != fInfo->trackers[i].tier)
+        if (stats[i].tier != prevTier)
         {
-            tier = fInfo->trackers[i].tier;
-            [allTrackers addObject: [NSNumber numberWithInteger: tier + 1]];
+            [trackers addObject: [NSNumber numberWithInteger: stats[i].tier]];
+            prevTier = stats[i].tier;
         }
         
-        [allTrackers addObject: [NSString stringWithUTF8String: fInfo->trackers[i].announce]];
+        TrackerNode * tracker = [[TrackerNode alloc] initWithTrackerStat: &stats[i]];
+        [trackers addObject: tracker];
+        [tracker release];
     }
+    
+    tr_torrentTrackersFree(stats, count);
+    return trackers;
+}
+
+- (NSMutableArray *) allTrackersFlat
+{
+    NSMutableArray * allTrackers = [NSMutableArray arrayWithCapacity: fInfo->trackerCount];
+    
+    for (NSInteger i=0; i < fInfo->trackerCount; i++)
+        [allTrackers addObject: [NSString stringWithUTF8String: fInfo->trackers[i].announce]];
     
     return allTrackers;
 }
 
-- (NSArray *) allTrackersFlat
+#warning check for duplicates?
+- (BOOL) addTrackerToNewTier: (NSString *) tracker
 {
-    return [self allTrackers: NO];
-}
-
-- (BOOL) updateAllTrackersForAdd: (NSMutableArray *) trackers
-{
-    NSString * tracker = [trackers lastObject];
     tracker = [tracker stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
     
     if ([tracker rangeOfString: @"://"].location == NSNotFound)
-    {
         tracker = [@"http://" stringByAppendingString: tracker];
-        [trackers replaceObjectAtIndex: [trackers count]-1 withObject: tracker];
-    }
     
     if (!tr_httpIsValidURL([tracker UTF8String]))
         return NO;
     
-    [self updateAllTrackers: trackers];
+    //recreate the tracker structure
+    const int oldTrackerCount = fInfo->trackerCount;
+    tr_tracker_info * trackerStructs = tr_new(tr_tracker_info, oldTrackerCount+1);
+    for (NSInteger i=0; i < oldTrackerCount; ++i)
+        trackerStructs[i] = fInfo->trackers[i];
+    
+    trackerStructs[oldTrackerCount].announce = (char *)[tracker UTF8String];
+    trackerStructs[oldTrackerCount].tier = trackerStructs[oldTrackerCount-1].tier + 1;
+    
+    tr_torrentSetAnnounceList(fHandle, trackerStructs, oldTrackerCount+1);
+    tr_free(trackerStructs);
     
     return YES;
 }
 
-- (void) updateAllTrackersForRemove: (NSMutableArray *) trackers
+- (void) removeTrackersWithAnnounceAddresses: (NSArray *) trackers
 {
-    [self updateAllTrackers: trackers];
+    //recreate the tracker structure
+    const int oldTrackerCount = fInfo->trackerCount;
+    tr_tracker_info * trackerStructs = tr_new(tr_tracker_info, oldTrackerCount-1);
+    
+    NSInteger newCount = 0;
+    for (NSInteger oldIndex = 0; oldIndex < oldTrackerCount; ++newCount, ++oldIndex)
+    {
+        if (![trackers containsObject: [NSString stringWithUTF8String: fInfo->trackers[oldIndex].announce]])
+            trackerStructs[newCount] = fInfo->trackers[oldIndex];
+        else
+            --newCount;
+    }
+    
+    tr_torrentSetAnnounceList(fHandle, trackerStructs, newCount);
+    tr_free(trackerStructs);
 }
 
 - (NSString *) comment
@@ -1192,21 +1158,6 @@ int trashDataFile(const char * filename)
         case TR_STATUS_SEED:
             return NSLocalizedString(@"Seeding", "Torrent -> status string");
     }
-}
-
-- (NSInteger) seeders
-{
-    return fStat->seeders;
-}
-
-- (NSInteger) leechers
-{
-    return fStat->leechers;
-}
-
-- (NSInteger) completedFromTracker
-{
-    return fStat->timesCompleted;
 }
 
 - (NSInteger) totalPeersConnected
@@ -1865,33 +1816,6 @@ int trashDataFile(const char * filename)
             return [NSString stringWithFormat: NSLocalizedString(@"%@ remaining", "Torrent -> eta string"),
                         [NSString timeString: eta showSeconds: YES maxFields: 2]];
     }
-}
-
-- (void) updateAllTrackers: (NSMutableArray *) trackers
-{
-    //get count
-    NSInteger count = 0;
-    for (id object in trackers)
-        if (![object isKindOfClass: [NSNumber class]])
-            count++;
-    
-    //recreate the tracker structure
-    tr_tracker_info * trackerStructs = tr_new(tr_tracker_info, count);
-    NSInteger tier = 0, i = 0;
-    for (id object in trackers)
-    {
-        if (![object isKindOfClass: [NSNumber class]])
-        {
-            trackerStructs[i].tier = tier;
-            trackerStructs[i].announce = (char *)[object UTF8String];
-            i++;
-        }
-        else
-            tier++;
-    }
-    
-    tr_torrentSetAnnounceList(fHandle, trackerStructs, count);
-    tr_free(trackerStructs);
 }
 
 - (void) setTimeMachineExclude: (BOOL) exclude forPath: (NSString *) path

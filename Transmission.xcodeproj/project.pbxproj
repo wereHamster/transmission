@@ -79,6 +79,8 @@
 		A21282A80CA6C66800EAEE0F /* StatusBarView.m in Sources */ = {isa = PBXBuildFile; fileRef = A21282A60CA6C66800EAEE0F /* StatusBarView.m */; };
 		A215BF5C0F02EBB800350CDB /* GroupRules.xib in Resources */ = {isa = PBXBuildFile; fileRef = A215BF5B0F02EBB800350CDB /* GroupRules.xib */; };
 		A219798B0D07B78400438EA7 /* GroupToolbarItem.m in Sources */ = {isa = PBXBuildFile; fileRef = A219798A0D07B78400438EA7 /* GroupToolbarItem.m */; };
+		A21A9BE2106D86A800F1C3C1 /* TrackerNode.m in Sources */ = {isa = PBXBuildFile; fileRef = A21A9BE1106D86A800F1C3C1 /* TrackerNode.m */; };
+		A21A9D41106EC2E800F1C3C1 /* TrackerCell.m in Sources */ = {isa = PBXBuildFile; fileRef = A21A9D40106EC2E800F1C3C1 /* TrackerCell.m */; };
 		A21DFF100A292B2B007C5F76 /* Transfers.png in Resources */ = {isa = PBXBuildFile; fileRef = A21DFF0F0A292B2B007C5F76 /* Transfers.png */; };
 		A21FBBAB0EDA78C300BC3C51 /* bandwidth.h in Headers */ = {isa = PBXBuildFile; fileRef = A21FBBA90EDA78C300BC3C51 /* bandwidth.h */; };
 		A21FBBAC0EDA78C300BC3C51 /* bandwidth.c in Sources */ = {isa = PBXBuildFile; fileRef = A21FBBAA0EDA78C300BC3C51 /* bandwidth.c */; };
@@ -124,6 +126,9 @@
 		A257C1820CAD3003004E121C /* PeerTableView.m in Sources */ = {isa = PBXBuildFile; fileRef = A257C1800CAD3003004E121C /* PeerTableView.m */; };
 		A25892640CF1F7E800CCCDDF /* StatsWindowController.m in Sources */ = {isa = PBXBuildFile; fileRef = A25892630CF1F7E800CCCDDF /* StatsWindowController.m */; };
 		A259317E0A73B2CC002F4FE7 /* TransmissionHelp in Resources */ = {isa = PBXBuildFile; fileRef = A259316A0A73B2CC002F4FE7 /* TransmissionHelp */; };
+		A25963E11068376200453B31 /* FavIcon.png in Resources */ = {isa = PBXBuildFile; fileRef = A25963E01068376200453B31 /* FavIcon.png */; };
+		A25964A6106D73A800453B31 /* announcer.c in Sources */ = {isa = PBXBuildFile; fileRef = A25964A4106D73A800453B31 /* announcer.c */; };
+		A25964A7106D73A800453B31 /* announcer.h in Headers */ = {isa = PBXBuildFile; fileRef = A25964A5106D73A800453B31 /* announcer.h */; };
 		A25D2CBD0CF4C73E0096A262 /* stats.c in Sources */ = {isa = PBXBuildFile; fileRef = A25D2CBB0CF4C7190096A262 /* stats.c */; };
 		A25D2CBE0CF4C73E0096A262 /* stats.h in Headers */ = {isa = PBXBuildFile; fileRef = A25D2CBA0CF4C7190096A262 /* stats.h */; };
 		A25E03D90E4015100086C225 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1058C7A1FEA54F0111CA2CBB /* Cocoa.framework */; };
@@ -275,8 +280,6 @@
 		BEFC1E2D0C07861A00B0BB3C /* upnp.c in Sources */ = {isa = PBXBuildFile; fileRef = BEFC1DF40C07861A00B0BB3C /* upnp.c */; };
 		BEFC1E2E0C07861A00B0BB3C /* transmission.h in Headers */ = {isa = PBXBuildFile; fileRef = BEFC1DF50C07861A00B0BB3C /* transmission.h */; };
 		BEFC1E2F0C07861A00B0BB3C /* session.c in Sources */ = {isa = PBXBuildFile; fileRef = BEFC1DF60C07861A00B0BB3C /* session.c */; };
-		BEFC1E300C07861A00B0BB3C /* tracker.h in Headers */ = {isa = PBXBuildFile; fileRef = BEFC1DF70C07861A00B0BB3C /* tracker.h */; };
-		BEFC1E310C07861A00B0BB3C /* tracker.c in Sources */ = {isa = PBXBuildFile; fileRef = BEFC1DF80C07861A00B0BB3C /* tracker.c */; };
 		BEFC1E320C07861A00B0BB3C /* torrent.c in Sources */ = {isa = PBXBuildFile; fileRef = BEFC1DF90C07861A00B0BB3C /* torrent.c */; };
 		BEFC1E350C07861A00B0BB3C /* port-forwarding.h in Headers */ = {isa = PBXBuildFile; fileRef = BEFC1DFC0C07861A00B0BB3C /* port-forwarding.h */; };
 		BEFC1E360C07861A00B0BB3C /* port-forwarding.c in Sources */ = {isa = PBXBuildFile; fileRef = BEFC1DFD0C07861A00B0BB3C /* port-forwarding.c */; };
@@ -485,6 +488,10 @@
 		A215BF5D0F02EBB800350CDB /* en */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = en; path = macosx/en.lproj/GroupRules.xib; sourceTree = "<group>"; };
 		A21979890D07B78400438EA7 /* GroupToolbarItem.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = GroupToolbarItem.h; path = macosx/GroupToolbarItem.h; sourceTree = "<group>"; };
 		A219798A0D07B78400438EA7 /* GroupToolbarItem.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = GroupToolbarItem.m; path = macosx/GroupToolbarItem.m; sourceTree = "<group>"; };
+		A21A9BE0106D86A800F1C3C1 /* TrackerNode.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = TrackerNode.h; path = macosx/TrackerNode.h; sourceTree = "<group>"; };
+		A21A9BE1106D86A800F1C3C1 /* TrackerNode.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = TrackerNode.m; path = macosx/TrackerNode.m; sourceTree = "<group>"; };
+		A21A9D3F106EC2E800F1C3C1 /* TrackerCell.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = TrackerCell.h; path = macosx/TrackerCell.h; sourceTree = "<group>"; };
+		A21A9D40106EC2E800F1C3C1 /* TrackerCell.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = TrackerCell.m; path = macosx/TrackerCell.m; sourceTree = "<group>"; };
 		A21DFF0F0A292B2B007C5F76 /* Transfers.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = Transfers.png; path = macosx/Images/Transfers.png; sourceTree = "<group>"; };
 		A21FBBA90EDA78C300BC3C51 /* bandwidth.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = bandwidth.h; path = libtransmission/bandwidth.h; sourceTree = "<group>"; };
 		A21FBBAA0EDA78C300BC3C51 /* bandwidth.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = bandwidth.c; path = libtransmission/bandwidth.c; sourceTree = "<group>"; };
@@ -551,6 +558,9 @@
 		A25892620CF1F7E800CCCDDF /* StatsWindowController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = StatsWindowController.h; path = macosx/StatsWindowController.h; sourceTree = "<group>"; };
 		A25892630CF1F7E800CCCDDF /* StatsWindowController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = StatsWindowController.m; path = macosx/StatsWindowController.m; sourceTree = "<group>"; };
 		A259316A0A73B2CC002F4FE7 /* TransmissionHelp */ = {isa = PBXFileReference; lastKnownFileType = folder; name = TransmissionHelp; path = macosx/TransmissionHelp; sourceTree = "<group>"; };
+		A25963E01068376200453B31 /* FavIcon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = FavIcon.png; path = macosx/Images/FavIcon.png; sourceTree = "<group>"; };
+		A25964A4106D73A800453B31 /* announcer.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = announcer.c; path = libtransmission/announcer.c; sourceTree = "<group>"; };
+		A25964A5106D73A800453B31 /* announcer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = announcer.h; path = libtransmission/announcer.h; sourceTree = "<group>"; };
 		A25D2CBA0CF4C7190096A262 /* stats.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = stats.h; path = libtransmission/stats.h; sourceTree = "<group>"; };
 		A25D2CBB0CF4C7190096A262 /* stats.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = stats.c; path = libtransmission/stats.c; sourceTree = "<group>"; };
 		A25E03E00E4015380086C225 /* tr-getopt.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "tr-getopt.h"; path = "libtransmission/tr-getopt.h"; sourceTree = "<group>"; };
@@ -769,8 +779,6 @@
 		BEFC1DF40C07861A00B0BB3C /* upnp.c */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.c; name = upnp.c; path = libtransmission/upnp.c; sourceTree = "<group>"; };
 		BEFC1DF50C07861A00B0BB3C /* transmission.h */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.h; name = transmission.h; path = libtransmission/transmission.h; sourceTree = "<group>"; };
 		BEFC1DF60C07861A00B0BB3C /* session.c */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.c; name = session.c; path = libtransmission/session.c; sourceTree = "<group>"; };
-		BEFC1DF70C07861A00B0BB3C /* tracker.h */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.h; name = tracker.h; path = libtransmission/tracker.h; sourceTree = "<group>"; };
-		BEFC1DF80C07861A00B0BB3C /* tracker.c */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.c; name = tracker.c; path = libtransmission/tracker.c; sourceTree = "<group>"; };
 		BEFC1DF90C07861A00B0BB3C /* torrent.c */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.c; name = torrent.c; path = libtransmission/torrent.c; sourceTree = "<group>"; };
 		BEFC1DFC0C07861A00B0BB3C /* port-forwarding.h */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.h; name = "port-forwarding.h"; path = "libtransmission/port-forwarding.h"; sourceTree = "<group>"; };
 		BEFC1DFD0C07861A00B0BB3C /* port-forwarding.c */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.c; name = "port-forwarding.c"; path = "libtransmission/port-forwarding.c"; sourceTree = "<group>"; };
@@ -899,6 +907,8 @@
 		080E96DDFE201D6D7F000001 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				A21A9BE0106D86A800F1C3C1 /* TrackerNode.h */,
+				A21A9BE1106D86A800F1C3C1 /* TrackerNode.m */,
 				32CA4F630368D1EE00C91783 /* Transmission_Prefix.pch */,
 				29B97316FDCFA39411CA2CEA /* main.m */,
 				A29D84021049C25600D1987A /* NSApplicationAdditions.h */,
@@ -1070,6 +1080,7 @@
 				4DA6FDC3091141AD00450CB1 /* ResumeOff.png */,
 				4DA6FDC4091141AD00450CB1 /* ResumeOn.png */,
 				A2623B3D0D3DC5930045D19A /* ResumeHover.png */,
+				A25963E01068376200453B31 /* FavIcon.png */,
 				4DDFDD20099A5D8E00189D81 /* DownloadBadge.png */,
 				4DDFDD21099A5D8E00189D81 /* UploadBadge.png */,
 				A24B655F0D3F30870079EA4D /* QuitBadge.png */,
@@ -1172,8 +1183,8 @@
 				BEFC1DF60C07861A00B0BB3C /* session.c */,
 				BEFC1E140C07861A00B0BB3C /* session.h */,
 				A20152790D1C26EB0081714F /* torrent-ctor.c */,
-				BEFC1DF70C07861A00B0BB3C /* tracker.h */,
-				BEFC1DF80C07861A00B0BB3C /* tracker.c */,
+				A25964A4106D73A800453B31 /* announcer.c */,
+				A25964A5106D73A800453B31 /* announcer.h */,
 				BEFC1DF90C07861A00B0BB3C /* torrent.c */,
 				BEFC1DFC0C07861A00B0BB3C /* port-forwarding.h */,
 				BEFC1DFD0C07861A00B0BB3C /* port-forwarding.c */,
@@ -1373,6 +1384,8 @@
 				A2AA579B0ADFCAB400CA59F6 /* PiecesView.m */,
 				A2725D5B0DE7507C003445E7 /* TrackerTableView.h */,
 				A2725D5C0DE7507C003445E7 /* TrackerTableView.m */,
+				A21A9D3F106EC2E800F1C3C1 /* TrackerCell.h */,
+				A21A9D40106EC2E800F1C3C1 /* TrackerCell.m */,
 			);
 			name = "Info Window";
 			sourceTree = "<group>";
@@ -1425,7 +1438,6 @@
 				A2AAB65D0DE0CF6200E04DDA /* rpcimpl.h in Headers */,
 				A2AAB65E0DE0CF6200E04DDA /* rpc-server.h in Headers */,
 				BEFC1E2E0C07861A00B0BB3C /* transmission.h in Headers */,
-				BEFC1E300C07861A00B0BB3C /* tracker.h in Headers */,
 				BEFC1E350C07861A00B0BB3C /* port-forwarding.h in Headers */,
 				BEFC1E390C07861A00B0BB3C /* ratecontrol.h in Headers */,
 				BEFC1E3B0C07861A00B0BB3C /* platform.h in Headers */,
@@ -1464,6 +1476,7 @@
 				A263E0740F111B8A008D09D6 /* request-list.h in Headers */,
 				A22CFCA90FC24ED80009BD3E /* tr-dht.h in Headers */,
 				0A6169A80FE5C9A200C66CE6 /* bitfield.h in Headers */,
+				A25964A7106D73A800453B31 /* announcer.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1811,6 +1824,7 @@
 				A22F1E550E7DA8030065DB9D /* sparkle_dsa_pub.pem in Resources */,
 				A2E2EA920EE321C200EB6308 /* Groups.png in Resources */,
 				A215BF5C0F02EBB800350CDB /* GroupRules.xib in Resources */,
+				A25963E11068376200453B31 /* FavIcon.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1879,7 +1893,6 @@
 				BEFC1E2D0C07861A00B0BB3C /* upnp.c in Sources */,
 				A2AAB65C0DE0CF6200E04DDA /* rpc-server.c in Sources */,
 				BEFC1E2F0C07861A00B0BB3C /* session.c in Sources */,
-				BEFC1E310C07861A00B0BB3C /* tracker.c in Sources */,
 				BEFC1E320C07861A00B0BB3C /* torrent.c in Sources */,
 				BEFC1E360C07861A00B0BB3C /* port-forwarding.c in Sources */,
 				BEFC1E3A0C07861A00B0BB3C /* ratecontrol.c in Sources */,
@@ -1920,6 +1933,7 @@
 				A263E0730F111B89008D09D6 /* request-list.c in Sources */,
 				A22CFCA80FC24ED80009BD3E /* tr-dht.c in Sources */,
 				0A6169A70FE5C9A200C66CE6 /* bitfield.c in Sources */,
+				A25964A6106D73A800453B31 /* announcer.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1986,6 +2000,8 @@
 				A232F07E0EEA034A00041646 /* BonjourController.m in Sources */,
 				A23F526F0F14395900AA02E3 /* PredicateEditorRowTemplateAny.m in Sources */,
 				A29D84041049C25600D1987A /* NSApplicationAdditions.m in Sources */,
+				A21A9BE2106D86A800F1C3C1 /* TrackerNode.m in Sources */,
+				A21A9D41106EC2E800F1C3C1 /* TrackerCell.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

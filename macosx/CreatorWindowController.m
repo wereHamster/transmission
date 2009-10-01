@@ -142,7 +142,7 @@
     [fNameField setStringValue: name];
     [fNameField setToolTip: fPath];
     
-    BOOL multifile = !fInfo->isSingleFile;
+    const BOOL multifile = !fInfo->isSingleFile;
     
     NSImage * icon = [[NSWorkspace sharedWorkspace] iconForFileType: multifile
                         ? NSFileTypeForHFSTypeCode('fldr') : [fPath pathExtension]];
@@ -162,13 +162,12 @@
     }
     [fStatusField setStringValue: statusString];
     
-    const int piecesCount = fInfo->pieceCount;
-    if (piecesCount == 1)
+    if (fInfo->pieceCount == 1)
         [fPiecesField setStringValue: [NSString stringWithFormat: NSLocalizedString(@"1 piece, %@", "Create torrent -> info"),
                                                             [NSString stringForFileSize: fInfo->pieceSize]]];
     else
         [fPiecesField setStringValue: [NSString stringWithFormat: NSLocalizedString(@"%d pieces, %@ each", "Create torrent -> info"),
-                                                            piecesCount, [NSString stringForFileSize: fInfo->pieceSize]]];
+                                                            fInfo->pieceCount, [NSString stringForFileSize: fInfo->pieceSize]]];
     
     fLocation = [[[[fDefaults stringForKey: @"CreatorLocation"] stringByExpandingTildeInPath] stringByAppendingPathComponent:
                     [name stringByAppendingPathExtension: @"torrent"]] retain];
@@ -378,6 +377,27 @@
 
 - (void) createReal
 {
+    //check if the location currently exists
+    if (![[NSFileManager defaultManager] fileExistsAtPath: [fLocation stringByDeletingLastPathComponent]])
+    {
+        NSArray * pathComponents = [fLocation pathComponents];
+        NSInteger count = [pathComponents count];
+        
+        NSAlert * alert = [[[NSAlert alloc] init] autorelease];
+        [alert addButtonWithTitle: NSLocalizedString(@"OK", "Create torrent -> directory doesn't exist warning -> button")];
+        [alert setMessageText: NSLocalizedString(@"The chosen torrent file location does not exist.",
+                                                "Create torrent -> directory doesn't exist warning -> title")];
+        [alert setInformativeText: [NSString stringWithFormat:
+                NSLocalizedString(@"The directory \"%@\" does not currently exist. "
+                    "Create this directory or choose a different one to create the torrent file.",
+                    "Create torrent -> directory doesn't exist warning -> warning"),
+                    [fLocation stringByDeletingLastPathComponent]]];
+        [alert setAlertStyle: NSWarningAlertStyle];
+        
+        [alert beginSheetModalForWindow: [self window] modalDelegate: self didEndSelector: nil contextInfo: nil];
+        return;
+    }
+    
     //check if a file with the same name and location already exists
     if ([[NSFileManager defaultManager] fileExistsAtPath: fLocation])
     {
