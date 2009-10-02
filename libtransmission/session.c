@@ -222,6 +222,14 @@ tr_sessionGetPublicAddress( const tr_session * session, int tr_af_type )
     }
 }
 
+tr_bool
+tr_sessionShouldBindLocalPort( const tr_session * session )
+{
+    assert( tr_isSession( session ) );
+
+    return session->bindLocalPort;
+}
+
 /***
 ****
 ***/
@@ -296,6 +304,7 @@ tr_sessionGetDefaultSettings( const char * configDir, tr_benc * d )
     tr_bencDictAddInt ( d, TR_PREFS_KEY_UPLOAD_SLOTS_PER_TORRENT, 14 );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_BIND_ADDRESS_IPV4,        TR_DEFAULT_BIND_ADDRESS_IPV4 );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_BIND_ADDRESS_IPV6,        TR_DEFAULT_BIND_ADDRESS_IPV6 );
+    tr_bencDictAddBool( d, TR_PREFS_KEY_BIND_LOCAL_PORT,          FALSE );
 
     tr_free( incompleteDir );
 }
@@ -358,6 +367,7 @@ tr_sessionGetSettings( tr_session * s, struct tr_benc * d )
     tr_bencDictAddInt ( d, TR_PREFS_KEY_UPLOAD_SLOTS_PER_TORRENT, s->uploadSlotsPerTorrent );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_BIND_ADDRESS_IPV4,        tr_ntop_non_ts( &s->public_ipv4->addr ) );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_BIND_ADDRESS_IPV6,        tr_ntop_non_ts( &s->public_ipv6->addr ) );
+    tr_bencDictAddBool( d, TR_PREFS_KEY_BIND_LOCAL_PORT,          s->bindLocalPort );
 }
 
 tr_bool
@@ -734,6 +744,9 @@ sessionSetImpl( void * vdata )
     tr_sessionSetPeerPort( session, boolVal ? getRandomPort( session ) : i );
     if( tr_bencDictFindBool( settings, TR_PREFS_KEY_PORT_FORWARDING, &boolVal ) )
         tr_sessionSetPortForwardingEnabled( session, boolVal );
+
+    if( tr_bencDictFindBool( settings, TR_PREFS_KEY_BIND_LOCAL_PORT, &boolVal ) )
+        session->bindLocalPort = boolVal;
 
     /* file and peer socket limits */
     if( tr_bencDictFindInt( settings, TR_PREFS_KEY_PEER_LIMIT_GLOBAL, &i ) )

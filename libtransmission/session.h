@@ -189,8 +189,9 @@ struct tr_session
     /* a page-aligned buffer for use by the libtransmission thread.
      * @see SESSION_BUFFER_SIZE */
     void * buffer;
-
     tr_bool bufferInUse;
+    
+    tr_bool                      bindLocalPort;
 };
 
 tr_bool      tr_sessionAllowsDHT( const tr_session * session );
@@ -214,6 +215,8 @@ tr_bool      tr_sessionIsLocked( const tr_session * );
 const struct tr_address*  tr_sessionGetPublicAddress( const tr_session *, int tr_af_type );
 
 struct tr_bindsockets * tr_sessionGetBindSockets( tr_session * );
+
+tr_bool tr_sessionShouldBindLocalPort( const tr_session * session );
 
 enum
 {

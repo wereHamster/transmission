@@ -253,6 +253,7 @@ tr_netOpenPeerSocket( tr_session        * session,
     const tr_address      * source_addr;
     socklen_t               sourcelen;
     struct sockaddr_storage source_sock;
+    tr_port                 source_port = 0;
 
     assert( tr_isAddress( addr ) );
 
@@ -275,12 +276,19 @@ tr_netOpenPeerSocket( tr_session        * session,
         return -1;
     }
 
+    if( tr_sessionShouldBindLocalPort( session ) )
+    {
+        int optval = 1;
+        setsockopt( s, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval) );
+        source_port = htons( tr_sessionGetPeerPort( session ) );
+    }
+    
     addrlen = setup_sockaddr( addr, port, &sock );
 
     /* set source address */
     source_addr = tr_sessionGetPublicAddress( session, addr->type );
     assert( source_addr );
-    sourcelen = setup_sockaddr( source_addr, 0, &source_sock );
+    sourcelen = setup_sockaddr( source_addr, source_port, &source_sock );
     if( bind( s, ( struct sockaddr * ) &source_sock, sourcelen ) )
     {
         tr_err( _( "Couldn't set source address %s on %d: %s" ),

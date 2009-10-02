@@ -162,6 +162,7 @@ const char* tr_getDefaultDownloadDir( void );
 #define TR_PREFS_KEY_ALT_SPEED_TIME_DAY         "alt-speed-time-day"
 #define TR_PREFS_KEY_BIND_ADDRESS_IPV4          "bind-address-ipv4"
 #define TR_PREFS_KEY_BIND_ADDRESS_IPV6          "bind-address-ipv6"
+#define TR_PREFS_KEY_BIND_LOCAL_PORT            "bind-local-port"
 #define TR_PREFS_KEY_BLOCKLIST_ENABLED          "blocklist-enabled"
 #define TR_PREFS_KEY_DHT_ENABLED                "dht-enabled"
 #define TR_PREFS_KEY_DOWNLOAD_DIR               "download-dir"
