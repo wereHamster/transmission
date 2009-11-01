@@ -103,7 +103,7 @@
     if (ratio == TR_RATIO_NA)
         return NSLocalizedString(@"N/A", "No Ratio");
     
-    char buf[50];
+    char buf[12];
     return [NSString stringWithUTF8String: tr_strratio(buf, sizeof(buf), ratio, "\xE2\x88\x9E")];
 }
 
@@ -115,11 +115,11 @@
 + (NSString *) timeString: (uint64_t) seconds showSeconds: (BOOL) showSeconds maxFields: (NSUInteger) max
 {
     NSMutableArray * timeArray = [NSMutableArray arrayWithCapacity: MIN(max, 4)];
-    NSUInteger remaining = seconds;
+    NSUInteger remaining = seconds; //causes problems for some users when it's a uint64_t
     
     if (max > 0 && seconds >= (24 * 60 * 60))
     {
-        NSUInteger days = remaining / (24 * 60 * 60);
+        const NSUInteger days = remaining / (24 * 60 * 60);
         if (days == 1)
             [timeArray addObject: NSLocalizedString(@"1 day", "time string")];
         else

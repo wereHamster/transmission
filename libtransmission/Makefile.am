@@ -20,7 +20,6 @@ libtransmission_a_SOURCES = \
     completion.c \
     ConvertUTF.c \
     crypto.c \
-    fastresume.c \
     fdlimit.c \
     ggets.c \
     handshake.c \
@@ -48,8 +47,8 @@ libtransmission_a_SOURCES = \
     stats.c \
     torrent.c \
     torrent-ctor.c \
-    tr-getopt.c \
     tr-dht.c \
+    tr-getopt.c \
     trevent.c \
     upnp.c \
     utils.c \
@@ -68,7 +67,6 @@ noinst_HEADERS = \
     ConvertUTF.h \
     crypto.h \
     completion.h \
-    fastresume.h \
     fdlimit.h \
     ggets.h \
     handshake.h \

@@ -21,6 +21,9 @@
 
 #include <fcntl.h> /* open */
 #include <signal.h>
+#ifdef HAVE_SYSLOG
+#include <syslog.h>
+#endif
 #include <unistd.h> /* daemon */
 
 #include <event.h>
@@ -99,9 +102,26 @@ showUsage( void )
 }
 
 static void
-gotsig( int sig UNUSED )
+gotsig( int sig )
 {
-    closing = TRUE;
+    switch( sig )
+    {
+        case SIGHUP:
+        {
+            tr_benc settings;
+            const char * configDir = tr_sessionGetConfigDir( mySession );
+            tr_inf( "Reloading settings from \"%s\"", configDir );
+            tr_bencInitDict( &settings, 0 );
+            tr_sessionLoadSettings( &settings, configDir, MY_NAME );
+            tr_sessionSet( mySession, &settings );
+            tr_bencFree( &settings );
+            break;
+        }
+
+        default:
+            closing = TRUE;
+            break;
+    }
 }
 
 #if defined(WIN32)
@@ -201,6 +221,55 @@ onFileAdded( tr_session * session, const char * dir, const char * file )
     }
 }
 
+static void
+pumpLogMessages( tr_bool foreground )
+{
+    const tr_msg_list * l;
+    tr_msg_list * list = tr_getQueuedMessages( );
+
+    for( l=list; l!=NULL; l=l->next )
+    {
+#ifdef HAVE_SYSLOG
+        if( foreground )
+        {
+            char timestr[64];
+            tr_getLogTimeStr( timestr, sizeof( timestr ) );
+            if( l->name )
+                fprintf( stderr, "[%s] %s %s (%s:%d)\n", timestr, l->name, l->message, l->file, l->line );
+            else
+                fprintf( stderr, "[%s] %s (%s:%d)\n", timestr, l->message, l->file, l->line );
+        }
+        else /* daemon... write to syslog */
+        {
+            int priority;
+
+            /* figure out the syslog priority */
+            switch( l->level ) {
+                case TR_MSG_ERR: priority = LOG_ERR; break;
+                case TR_MSG_DBG: priority = LOG_DEBUG; break;
+                default: priority = LOG_INFO; break;
+            }
+
+            if( l->name )
+                syslog( priority, "%s %s (%s:%d)", l->name, l->message, l->file, l->line );
+            else
+                syslog( priority, "%s (%s:%d)", l->message, l->file, l->line );
+        }
+#else
+        {
+            char timestr[64];
+            tr_getLogTimeStr( timestr, sizeof( timestr ) );
+            if( l->name )
+                fprintf( stderr, "[%s] %s %s (%s:%d)\n", timestr, l->name, l->message, l->file, l->line );
+            else
+                fprintf( stderr, "[%s] %s (%s:%d)\n", timestr, l->message, l->file, l->line );
+        }
+#endif
+    }
+
+    tr_freeMessageList( list );
+}
+
 int
 main( int argc, char ** argv )
 {
@@ -216,9 +285,7 @@ main( int argc, char ** argv )
     signal( SIGINT, gotsig );
     signal( SIGTERM, gotsig );
 #ifndef WIN32
-    signal( SIGQUIT, gotsig );
-    signal( SIGPIPE, SIG_IGN );
-    signal( SIGHUP, SIG_IGN );
+    signal( SIGHUP, gotsig );
 #endif
 
     /* load settings from defaults + config file */
@@ -311,7 +378,8 @@ main( int argc, char ** argv )
     }
 
     /* start the session */
-    mySession = tr_sessionInit( "daemon", configDir, FALSE, &settings );
+    mySession = tr_sessionInit( "daemon", configDir, TRUE, &settings );
+    tr_sessionSaveSettings( mySession, configDir, &settings );
 
     if( tr_bencDictFindBool( &settings, TR_PREFS_KEY_RPC_AUTH_REQUIRED, &boolVal ) && boolVal )
         tr_ninf( MY_NAME, "requiring authentication" );
@@ -342,13 +410,24 @@ main( int argc, char ** argv )
         tr_ctorFree( ctor );
     }
 
-    while( !closing )
-    {
+#ifdef HAVE_SYSLOG
+    if( !foreground )
+        openlog( MY_NAME, LOG_CONS, LOG_DAEMON );
+#endif
+
+    while( !closing ) {
         tr_wait( 1000 ); /* sleep one second */
         dtr_watchdir_update( watchdir );
+        pumpLogMessages( foreground );
     }
 
+    closelog( );
+
     /* shutdown */
+#if HAVE_SYSLOG
+    if( !foreground )
+        syslog( LOG_INFO, "%s", "Closing session" );
+#endif
     printf( "Closing transmission session..." );
     tr_sessionSaveSettings( mySession, configDir, &settings );
     dtr_watchdir_free( watchdir );

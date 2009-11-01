@@ -24,7 +24,6 @@
 
 #import <Cocoa/Cocoa.h>
 #import <transmission.h>
-#import <Quartz/Quartz.h>
 
 @class Torrent;
 @class TrackerTableView;
@@ -32,7 +31,7 @@
 @class FileOutlineController;
 @class PiecesView;
 
-@interface InfoWindowController : NSWindowController <QLPreviewPanelDataSource, QLPreviewPanelDelegate>
+@interface InfoWindowController : NSWindowController
 {
     NSArray * fTorrents;
     
@@ -60,8 +59,7 @@
     
     NSArray * fPeers, * fWebSeeds;
     IBOutlet NSTableView * fPeerTable, * fWebSeedTable;
-    IBOutlet NSTextField * fConnectedPeersField, * fDownloadingFromField, * fUploadingToField, * fKnownField,
-                            * fSeedersField, * fLeechersField, * fCompletedFromTrackerField;
+    IBOutlet NSTextField * fConnectedPeersField;
     IBOutlet NSTextView * fErrorMessageView;
     IBOutlet PiecesView * fPiecesView;
     IBOutlet NSSegmentedControl * fPiecesControl;
@@ -79,7 +77,8 @@
     
     NSString * fInitialString;
     
-    QLPreviewPanel * fPreviewPanel;
+    #warning change to QLPreviewPanel
+    id fPreviewPanel;
 }
 
 - (void) setInfoForTorrents: (NSArray *) torrents;
@@ -92,6 +91,10 @@
 - (void) setPreviousTab;
 
 - (void) addRemoveTracker: (id) sender;
+
+- (NSArray *) quickLookURLs;
+- (BOOL) canQuickLook;
+- (NSRect) quickLookSourceFrameForPreviewItem: (id /*<QLPreviewItem>*/) item;
 
 - (void) setPiecesView: (id) sender;
 - (void) setPiecesViewForAvailable: (BOOL) available;

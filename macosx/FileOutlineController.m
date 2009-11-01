@@ -132,11 +132,9 @@ typedef enum
 
 - (void) outlineViewSelectionDidChange: (NSNotification *) notification
 {
-    if ([NSApp isOnSnowLeopardOrBetter] && [QLPreviewPanel sharedPreviewPanelExists] && [[QLPreviewPanel sharedPreviewPanel] isVisible])
-    {
-        [[QLPreviewPanel sharedPreviewPanel] reloadData];
-        [[QLPreviewPanel sharedPreviewPanel] updateController];
-    }
+    if ([NSApp isOnSnowLeopardOrBetter] && [QLPreviewPanelSL sharedPreviewPanelExists]
+        && [[QLPreviewPanelSL sharedPreviewPanel] isVisible])
+        [[QLPreviewPanelSL sharedPreviewPanel] reloadData];
 }
 
 - (NSInteger) outlineView: (NSOutlineView *) outlineView numberOfChildrenOfItem: (id) item
@@ -213,7 +211,7 @@ typedef enum
 {
     NSString * ident = [tableColumn identifier];
     if ([ident isEqualToString: @"Name"])
-        return [[fTorrent downloadFolder] stringByAppendingPathComponent: [(FileListNode *)item fullPath]];
+        return [fTorrent fileLocation: item];
     else if ([ident isEqualToString: @"Check"])
     {
         switch ([cell state])
@@ -316,21 +314,28 @@ typedef enum
 
 - (void) revealFile: (id) sender
 {
-    NSString * folder = [fTorrent downloadFolder];
     NSIndexSet * indexes = [fOutline selectedRowIndexes];
     if ([NSApp isOnSnowLeopardOrBetter])
     {
         NSMutableArray * paths = [NSMutableArray arrayWithCapacity: [indexes count]];
         for (NSUInteger i = [indexes firstIndex]; i != NSNotFound; i = [indexes indexGreaterThanIndex: i])
-            [paths addObject: [NSURL fileURLWithPath: [folder stringByAppendingPathComponent: [[fOutline itemAtRow: i] fullPath]]]];
+        {
+            NSString * path = [fTorrent fileLocation: [fOutline itemAtRow: i]];
+            if (path)
+                [paths addObject: [NSURL fileURLWithPath: path]];
+        }
         
-        [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs: paths];
+        if ([paths count])
+            [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs: paths];
     }
     else
     {
         for (NSUInteger i = [indexes firstIndex]; i != NSNotFound; i = [indexes indexGreaterThanIndex: i])
-            [[NSWorkspace sharedWorkspace] selectFile: [folder stringByAppendingPathComponent: [[fOutline itemAtRow: i] fullPath]]
-                inFileViewerRootedAtPath: nil];
+        {
+            NSString * path = [fTorrent fileLocation: [fOutline itemAtRow: i]];
+            if (path)
+                [[NSWorkspace sharedWorkspace] selectFile: path inFileViewerRootedAtPath: nil];
+        }
     }
 }
 
@@ -344,11 +349,9 @@ typedef enum
     
     if (action == @selector(revealFile:))
     {
-        NSString * downloadFolder = [fTorrent downloadFolder];
         NSIndexSet * indexSet = [fOutline selectedRowIndexes];
         for (NSInteger i = [indexSet firstIndex]; i != NSNotFound; i = [indexSet indexGreaterThanIndex: i])
-            if ([[NSFileManager defaultManager] fileExistsAtPath:
-                    [downloadFolder stringByAppendingPathComponent: [[fFileList objectAtIndex: i] fullPath]]])
+            if ([fTorrent fileLocation: [fFileList objectAtIndex: i]] != nil)
                 return YES;
         return NO;
     }

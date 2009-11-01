@@ -157,8 +157,15 @@ struct tr_torrent
      */
     uint8_t * peer_id;
 
-    /* Where to download */
+    /* Where the files will be when it's complete */
     char * downloadDir;
+
+    /* Where the files are when the torrent is incomplete */
+    char * incompleteDir;
+
+    /* Where the files are now.
+     * This pointer will be equal to downloadDir or incompleteDir */
+    const char * currentDir;
 
     /* How many bytes we ask for per request */
     uint32_t                   blockSize;
@@ -188,8 +195,10 @@ struct tr_torrent
     uint64_t                   corruptCur;
     uint64_t                   corruptPrev;
 
-    uint64_t                   etaSpeedCalculatedAt;
-    double                     etaSpeed;
+    uint64_t                   etaDLSpeedCalculatedAt;
+    double                     etaDLSpeed;
+    uint64_t                   etaULSpeedCalculatedAt;
+    double                     etaULSpeed;
 
     time_t                     addedDate;
     time_t                     activityDate;
@@ -346,5 +355,35 @@ static TR_INLINE const char * tr_torrentName( const tr_torrent * tor )
 
     return tor->info.name;
 }
+
+/**
+ * Tell the tr_torrent that one of its files has become complete
+ */
+void tr_torrentFileCompleted( tr_torrent * tor, tr_file_index_t fileNo );
+
+
+/**
+ * @brief Like tr_torrentFindFile(), but splits the filename into base and subpath;
+ *
+ * If the file is found, "tr_buildPath( base, subpath, NULL )"
+ * will generate the complete filename.
+ *
+ * @return true if the file is found, false otherwise.
+ *
+ * @param base if the torrent is found, this will be either
+ *             tor->downloadDir or tor->incompleteDir
+ * @param subpath on success, this pointer is assigned a newly-allocated
+ *                string holding the second half of the filename.
+ */
+tr_bool tr_torrentFindFile2( const tr_torrent *, tr_file_index_t fileNo,
+                             const char ** base, char ** subpath );
+
+
+/* Returns a newly-allocated version of the tr_file.name string
+ * that's been modified to denote that it's not a complete file yet.
+ * In the current implementation this is done by appending ".part"
+ * a la Firefox. */
+char* tr_torrentBuildPartial( const tr_torrent *, tr_file_index_t fileNo );
+
 
 #endif

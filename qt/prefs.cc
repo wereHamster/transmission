@@ -62,6 +62,7 @@ Prefs::PrefItem Prefs::myItems[] =
     { SESSION_REMOTE_AUTH, "remote-session-requres-authentication", QVariant::Bool },
     { SESSION_REMOTE_USERNAME, "remote-session-username", QVariant::String },
     { SESSION_REMOTE_PASSWORD, "remote-session-password", QVariant::String },
+    { USER_HAS_GIVEN_INFORMED_CONSENT, "user-has-given-informed-consent", QVariant::Bool },
 
     /* libtransmission settings */
     { ALT_SPEED_LIMIT_UP, TR_PREFS_KEY_ALT_SPEED_UP, QVariant::Int },
@@ -76,6 +77,8 @@ Prefs::PrefItem Prefs::myItems[] =
     { DSPEED_ENABLED, TR_PREFS_KEY_DSPEED_ENABLED, QVariant::Bool },
     { DOWNLOAD_DIR, TR_PREFS_KEY_DOWNLOAD_DIR, QVariant::String },
     { ENCRYPTION, TR_PREFS_KEY_ENCRYPTION, QVariant::Int },
+    { INCOMPLETE_DIR, TR_PREFS_KEY_INCOMPLETE_DIR, QVariant::String },
+    { INCOMPLETE_DIR_ENABLED, TR_PREFS_KEY_INCOMPLETE_DIR_ENABLED, QVariant::Bool },
     { LAZY_BITFIELD, TR_PREFS_KEY_LAZY_BITFIELD, QVariant::Bool },
     { MSGLEVEL, TR_PREFS_KEY_MSGLEVEL, QVariant::Int },
     { OPEN_FILE_LIMIT, TR_PREFS_KEY_OPEN_FILE_LIMIT, QVariant::Int },
@@ -259,6 +262,7 @@ Prefs :: initDefaults( tr_benc * d )
     tr_bencDictAddInt( d, keyStr(SESSION_REMOTE_PORT), atoi(TR_DEFAULT_RPC_PORT_STR) );
     tr_bencDictAddBool( d, keyStr(SESSION_IS_REMOTE), false );
     tr_bencDictAddBool( d, keyStr(SESSION_REMOTE_AUTH), false );
+    tr_bencDictAddBool( d, keyStr(USER_HAS_GIVEN_INFORMED_CONSENT), false );
 }
 
 /***

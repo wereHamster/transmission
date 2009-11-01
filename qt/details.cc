@@ -16,29 +16,28 @@
 
 #include <QCheckBox>
 #include <QComboBox>
-#include <QEvent>
-#include <QHeaderView>
-#include <QResizeEvent>
+#include <QDateTime>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QEvent>
 #include <QFont>
 #include <QFontMetrics>
 #include <QHBoxLayout>
-#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QHeaderView>
 #include <QLabel>
 #include <QLocale>
 #include <QPushButton>
-#include <QSpinBox>
 #include <QRadioButton>
+#include <QResizeEvent>
+#include <QSpinBox>
 #include <QStyle>
 #include <QTabWidget>
-#include <QTreeView>
 #include <QTextBrowser>
-#include <QDateTime>
+#include <QTreeView>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QVBoxLayout>
-#include <QHBoxLayout>
 
 #include <libtransmission/transmission.h>
 
@@ -328,6 +327,28 @@ Details :: refresh( )
             string = Utils::timeToString( baseline.secsTo( qdt_now ) );
     }
     myRunTimeLabel->setText( string );
+
+
+    // myETALabel
+    string.clear( );
+    if( torrents.empty( ) )
+        string = none;
+    else {
+        int baseline = torrents[0]->getETA( );
+        foreach( const Torrent * t, torrents ) {
+            if( baseline != t->getETA( ) ) {
+                string = mixed;
+                break;
+            }
+        }
+        if( string.isEmpty( ) ) {
+            if( baseline < 0 )
+                string = tr( "Unknown" );
+            else
+                string = Utils::timeToString( baseline );
+       } 
+    }
+    myETALabel->setText( string );
 
 
     // myLastActivityLabel
@@ -792,6 +813,7 @@ Details :: createInfoTab( )
     hig->addRow( tr( "Ratio:" ), myRatioLabel = new SqueezeLabel );
     hig->addRow( tr( "State:" ), myStateLabel = new SqueezeLabel );
     hig->addRow( tr( "Running time:" ), myRunTimeLabel = new SqueezeLabel );
+    hig->addRow( tr( "Remaining time:" ), myETALabel = new SqueezeLabel );
     hig->addRow( tr( "Last activity:" ), myLastActivityLabel = new SqueezeLabel );
     hig->addRow( tr( "Error:" ), myErrorLabel = new SqueezeLabel );
     hig->addSectionDivider( );

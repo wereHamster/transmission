@@ -380,9 +380,6 @@
     //check if the location currently exists
     if (![[NSFileManager defaultManager] fileExistsAtPath: [fLocation stringByDeletingLastPathComponent]])
     {
-        NSArray * pathComponents = [fLocation pathComponents];
-        NSInteger count = [pathComponents count];
-        
         NSAlert * alert = [[[NSAlert alloc] init] autorelease];
         [alert addButtonWithTitle: NSLocalizedString(@"OK", "Create torrent -> directory doesn't exist warning -> button")];
         [alert setMessageText: NSLocalizedString(@"The chosen torrent file location does not exist.",
@@ -423,7 +420,10 @@
     tr_tracker_info * trackerInfo = tr_new0(tr_tracker_info, [fTrackers count]);
     
     for (NSUInteger i = 0; i < [fTrackers count]; i++)
+    {
         trackerInfo[i].announce = (char *)[[fTrackers objectAtIndex: i] UTF8String];
+        trackerInfo[i].tier = i;
+    }
     
     //store values
     [fDefaults setObject: fTrackers forKey: @"CreatorTrackers"];

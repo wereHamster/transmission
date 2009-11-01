@@ -23,11 +23,12 @@
  *****************************************************************************/
 
 #import "TorrentTableView.h"
-#import "TorrentCell.h"
-#import "Torrent.h"
-#import "TorrentGroup.h"
+#import "Controller.h"
 #import "FileListNode.h"
 #import "NSApplicationAdditions.h"
+#import "Torrent.h"
+#import "TorrentCell.h"
+#import "TorrentGroup.h"
 
 #define MAX_GROUP 999999
 
@@ -48,8 +49,6 @@
 - (void) setGroupStatusColumns;
 
 - (void) createFileMenu: (NSMenu *) menu forFiles: (NSArray *) files;
-
-- (NSArray *) quickLookableTorrents;
 
 @end
 
@@ -84,8 +83,6 @@
 
 - (void) dealloc
 {
-    [fPreviewPanel release];
-    
     [fCollapsedGroups release];
     
     [fPiecesBarAnimation release];
@@ -142,7 +139,7 @@
 
 - (NSCell *) outlineView: (NSOutlineView *) outlineView dataCellForTableColumn: (NSTableColumn *) tableColumn item: (id) item
 {
-    BOOL group = ![item isKindOfClass: [Torrent class]];
+    const BOOL group = ![item isKindOfClass: [Torrent class]];
     if (!tableColumn)
         return !group ? fTorrentCell : nil;
     else
@@ -513,6 +510,7 @@
     return [fTorrentCell iconRectForBounds: [self rectOfRow: row]];
 }
 
+#warning catch string urls?
 - (void) paste: (id) sender
 {
     NSURL * url;
@@ -873,58 +871,6 @@
     return fPiecesBarPercent;
 }
 
-- (BOOL) acceptsPreviewPanelControl: (QLPreviewPanel *) panel
-{
-    return YES;
-}
-
-- (void) beginPreviewPanelControl: (QLPreviewPanel *) panel
-{
-    fPreviewPanel = [panel retain];
-    fPreviewPanel.delegate = self;
-    fPreviewPanel.dataSource = self;
-}
-
-- (void) endPreviewPanelControl: (QLPreviewPanel *) panel
-{
-    [fPreviewPanel release];
-    fPreviewPanel = nil;
-}
-
-- (NSInteger) numberOfPreviewItemsInPreviewPanel: (QLPreviewPanel *) panel
-{
-    return [[self quickLookableTorrents] count];
-}
-
-- (id <QLPreviewItem>) previewPanel: (QLPreviewPanel *)panel previewItemAtIndex: (NSInteger) index
-{
-    return [[self quickLookableTorrents] objectAtIndex: index];
-}
-
-- (BOOL) previewPanel: (QLPreviewPanel *) panel handleEvent: (NSEvent *) event
-{
-    if ([event type] == NSKeyDown)
-    {
-        [super keyDown: event];
-        return YES;
-    }
-    
-    return NO;
-}
-
-- (NSRect) previewPanel: (QLPreviewPanel *) panel sourceFrameOnScreenForPreviewItem: (id <QLPreviewItem>) item
-{
-    const NSInteger row = [self rowForItem: item];
-    if (row == -1)
-        return NSZeroRect;
-    
-    NSRect frame = [self iconRectForRow: row];
-    frame.origin = [self convertPoint: frame.origin toView: nil];
-    frame.origin = [[self window] convertBaseToScreen: frame.origin];
-    frame.origin.y -= frame.size.height;
-    return frame;
-}
-
 @end
 
 @implementation TorrentTableView (Private)
@@ -958,7 +904,7 @@
         
         NSImage * icon;
         if (![node isFolder])
-            icon = [[NSWorkspace sharedWorkspace] iconForFileType: [name pathExtension]];
+            icon = [node icon];
         else
         {
             NSMenu * itemMenu = [[NSMenu alloc] initWithTitle: name];
@@ -982,18 +928,6 @@
         [menu addItem: item];
         [item release];
     }
-}
-
-- (NSArray *) quickLookableTorrents
-{
-    NSArray * selectedTorrents = [self selectedTorrents];
-    NSMutableArray * qlArray = [NSMutableArray arrayWithCapacity: [selectedTorrents count]];
-    
-    for (Torrent * torrent in selectedTorrents)
-        if (([torrent isFolder] || [torrent isComplete]) && [[NSFileManager defaultManager] fileExistsAtPath: [torrent dataLocation]])
-            [qlArray addObject: torrent];
-    
-    return qlArray;
 }
 
 @end

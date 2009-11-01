@@ -272,8 +272,13 @@ signal_handler( int sig )
     else switch( sig )
     {
         case SIGINT:
+        case SIGTERM:
             g_message( _( "Got signal %d; trying to shut down cleanly.  Do it again if it gets stuck." ), sig );
             doAction( "quit", sighandler_cbdata );
+            break;
+
+        default:
+            g_message( "unhandled signal" );
             break;
     }
 }
@@ -282,6 +287,7 @@ static void
 setupsighandlers( void )
 {
     signal( SIGINT, signal_handler );
+    signal( SIGKILL, signal_handler );
 }
 
 static tr_rpc_callback_status
@@ -299,20 +305,15 @@ onRPCChanged( tr_session            * session UNUSED,
             tr_core_add_torrent( cbdata->core, tr_torrent_new_preexisting( tor ), TRUE );
             break;
 
-        case TR_RPC_TORRENT_STARTED:
-            /* this should be automatic */
-            break;
-
-        case TR_RPC_TORRENT_STOPPED:
-            /* this should be automatic */
-            break;
-
         case TR_RPC_TORRENT_REMOVING:
             tr_core_torrent_destroyed( cbdata->core, tr_torrentId( tor ) );
             break;
 
-        case TR_RPC_TORRENT_CHANGED:
         case TR_RPC_SESSION_CHANGED:
+        case TR_RPC_TORRENT_CHANGED:
+        case TR_RPC_TORRENT_MOVED:
+        case TR_RPC_TORRENT_STARTED:
+        case TR_RPC_TORRENT_STOPPED:
             /* nothing interesting to do here */
             break;
     }
@@ -344,7 +345,7 @@ main( int argc, char ** argv )
 #ifdef STATUS_ICON_SUPPORTED
         { "minimized",  'm', 0, G_OPTION_ARG_NONE,
           &startminimized,
-          _( "Start minimized in system tray" ), NULL },
+          _( "Start minimized in notification area" ), NULL },
 #endif
         { "config-dir", 'g', 0, G_OPTION_ARG_FILENAME, &configDir,
           _( "Where to look for configuration files" ), NULL },
@@ -437,6 +438,8 @@ main( int argc, char ** argv )
         if(( str = pref_string_get( PREF_KEY_DIR_WATCH )))
             gtr_mkdir_with_parents( str, 0777 );
         if(( str = pref_string_get( TR_PREFS_KEY_DOWNLOAD_DIR )))
+            gtr_mkdir_with_parents( str, 0777 );
+        if(( str = pref_string_get( TR_PREFS_KEY_INCOMPLETE_DIR )))
             gtr_mkdir_with_parents( str, 0777 );
 
         /* initialize the libtransmission session */
@@ -537,9 +540,32 @@ appsetup( TrWindow *      wind,
         gtk_widget_show( GTK_WIDGET( wind ) );
     else
     {
-        gtk_window_iconify( wind );
         gtk_window_set_skip_taskbar_hint( cbdata->wind,
                                           cbdata->icon != NULL );
+        cbdata->isIconified = FALSE; // ensure that the next toggle iconifies
+        action_toggle( "toggle-main-window", FALSE );
+    }
+
+    if( !pref_flag_get( PREF_KEY_USER_HAS_GIVEN_INFORMED_CONSENT ) )
+    {
+        GtkWidget * w = gtk_message_dialog_new( GTK_WINDOW( wind ),
+                                                GTK_DIALOG_DESTROY_WITH_PARENT,
+                                                GTK_MESSAGE_INFO,
+                                                GTK_BUTTONS_NONE,
+                                                "%s",
+            _( "Transmission is a file sharing program.  When you run a torrent, its data will be made available to others by means of upload.  And of course, any content you share is your sole responsibility.\n\nYou probably knew this, so we won't tell you again." ) );
+        gtk_dialog_add_button( GTK_DIALOG( w ), GTK_STOCK_QUIT, GTK_RESPONSE_REJECT );
+        gtk_dialog_add_button( GTK_DIALOG( w ), _( "I _Accept" ), GTK_RESPONSE_ACCEPT );
+        gtk_dialog_set_default_response( GTK_DIALOG( w ), GTK_RESPONSE_ACCEPT );
+        switch( gtk_dialog_run( GTK_DIALOG( w ) ) ) {
+            case GTK_RESPONSE_ACCEPT:
+                /* only show it once */
+                pref_flag_set( PREF_KEY_USER_HAS_GIVEN_INFORMED_CONSENT, TRUE );
+                gtk_widget_destroy( w );
+                break;
+            default:
+                exit( 0 );
+        }
     }
 }
 
@@ -1102,6 +1128,14 @@ prefschanged( TrCore * core UNUSED,
     else if( !strcmp( key, TR_PREFS_KEY_PEER_PORT_RANDOM_ON_START ) )
     {
         tr_sessionSetPeerPortRandomOnStart( tr, pref_flag_get( key ) );
+    }
+    else if( !strcmp( key, TR_PREFS_KEY_INCOMPLETE_DIR ) )
+    {
+        tr_sessionSetIncompleteDir( tr, pref_string_get( key ) );
+    }
+    else if( !strcmp( key, TR_PREFS_KEY_INCOMPLETE_DIR_ENABLED ) )
+    {
+        tr_sessionSetIncompleteDirEnabled( tr, pref_flag_get( key ) );
     }
 }
 

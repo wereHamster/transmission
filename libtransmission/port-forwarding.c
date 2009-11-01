@@ -89,17 +89,9 @@ natPulse( tr_shared * s, tr_bool doPortCheck )
 }
 
 static void
-onTimer( int fd UNUSED, short what UNUSED, void * vshared )
+set_evtimer_from_status( tr_shared * s )
 {
     int sec=0, msec=0;
-    tr_shared * s = vshared;
-
-    assert( s );
-    assert( s->timer );
-
-    /* do something */
-    natPulse( s, s->doPortCheck );
-    s->doPortCheck = FALSE;
 
     /* when to wake up again */
     switch( tr_sharedTraversalStatus( s ) )
@@ -122,7 +114,24 @@ onTimer( int fd UNUSED, short what UNUSED, void * vshared )
             break;
     }
 
-    tr_timerAdd( s->timer, sec, msec );
+    if( s->timer != NULL )
+        tr_timerAdd( s->timer, sec, msec );
+}
+
+static void
+onTimer( int fd UNUSED, short what UNUSED, void * vshared )
+{
+    tr_shared * s = vshared;
+
+    assert( s );
+    assert( s->timer );
+
+    /* do something */
+    natPulse( s, s->doPortCheck );
+    s->doPortCheck = FALSE;
+
+    /* set up the timer for the next pulse */
+    set_evtimer_from_status( s );
 }
 
 /***
@@ -130,21 +139,23 @@ onTimer( int fd UNUSED, short what UNUSED, void * vshared )
 ***/
 
 tr_shared *
-tr_sharedInit( tr_session  * session, tr_bool isEnabled )
+tr_sharedInit( tr_session  * session )
 {
     tr_shared * s = tr_new0( tr_shared, 1 );
 
     s->session      = session;
-    s->isEnabled    = isEnabled;
+    s->isEnabled    = FALSE;
     s->upnpStatus   = TR_PORT_UNMAPPED;
     s->natpmpStatus = TR_PORT_UNMAPPED;
 
+#if 0
     if( isEnabled )
     {
         s->timer = tr_new0( struct event, 1 );
         evtimer_set( s->timer, onTimer, s );
         tr_timerAdd( s->timer, 0, 333000 );
     }
+#endif
 
     return s;
 }
@@ -188,7 +199,7 @@ start_timer( tr_shared * s )
 {
     s->timer = tr_new0( struct event, 1 );
     evtimer_set( s->timer, onTimer, s );
-    onTimer( 0, 0, s );
+    set_evtimer_from_status( s );
 }
 
 void

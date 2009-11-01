@@ -114,7 +114,9 @@ int  tr_netAccept( tr_session * session,
 int  tr_netSetTOS( int s,
                    int tos );
 
-void tr_netClose( int s );
+void tr_netClose( tr_session * session, int s );
+
+void tr_netCloseSocket( int fd );
 
 void tr_netInit( void );
 

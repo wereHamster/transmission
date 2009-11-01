@@ -86,6 +86,8 @@ struct tr_web
     long timer_ms;
     CURLM * multi;
     tr_session * session;
+    tr_bool haveAddr;
+    tr_address addr;
     struct event timer_event;
     tr_list * fds;
 };
@@ -236,6 +238,8 @@ addTask( void * vtask )
                                            TR_NAME "/" LONG_VERSION_STRING );
         curl_easy_setopt( easy, CURLOPT_VERBOSE,
                                        getenv( "TR_CURL_VERBOSE" ) != NULL );
+        if( web->haveAddr )
+            curl_easy_setopt( easy, CURLOPT_INTERFACE, tr_ntop_non_ts( &web->addr ) );
         curl_easy_setopt( easy, CURLOPT_WRITEDATA, task );
         curl_easy_setopt( easy, CURLOPT_WRITEFUNCTION, writeFunc );
         if( task->range )
@@ -519,6 +523,13 @@ tr_webRun( tr_session         * session,
 
         tr_runInEventThread( session, addTask, task );
     }
+}
+
+void
+tr_webSetInterface( tr_web * web, const tr_address * addr )
+{
+    if(( web->haveAddr = ( addr != NULL )))
+        web->addr = *addr;
 }
 
 tr_web*

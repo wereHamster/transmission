@@ -1082,18 +1082,6 @@ tr_base64_decode( const void * input,
     return ret;
 }
 
-int
-tr_ptr2int( void* v )
-{
-    return (intptr_t)v;
-}
-
-void*
-tr_int2ptr( int i )
-{
-    return (void*)(intptr_t)i;
-}
-
 /***
 ****
 ***/
@@ -1108,32 +1096,25 @@ tr_lowerBound( const void * key,
 {
     size_t first = 0;
     const char * cbase = base;
+    tr_bool exact = FALSE;
 
-    while( nmemb )
+    while( nmemb != 0 )
     {
         const size_t half = nmemb / 2;
         const size_t middle = first + half;
         const int c = compar( key, cbase + size*middle );
 
-        if( c < 0 )
-        {
+        if( c <= 0 ) {
+            if( c == 0 )
+                exact = TRUE;
+            nmemb = half;
+        } else {
             first = middle + 1;
             nmemb = nmemb - half - 1;
         }
-        else if( !c )
-        {
-            if( exact_match )
-                *exact_match = TRUE;
-            return middle;
-        }
-        else
-        {
-            nmemb = half;
-        }
     }
 
-    if( exact_match )
-        *exact_match = FALSE;
+    *exact_match = exact;
 
     return first;
 }
@@ -1355,14 +1336,14 @@ tr_strratio( char * buf, size_t buflen, double ratio, const char * infinity )
 ***/
 
 int
-tr_moveFile( const char * oldpath, const char * newpath )
+tr_moveFile( const char * oldpath, const char * newpath, tr_bool * renamed )
 {
     int in;
     int out;
     char * buf;
     struct stat st;
-    size_t bytesLeft;
-    size_t buflen;
+    off_t bytesLeft;
+    off_t buflen;
 
     /* make sure the old file exists */
     if( stat( oldpath, &st ) ) {
@@ -1385,20 +1366,24 @@ tr_moveFile( const char * oldpath, const char * newpath )
             return i;
     }
 
-    /* they  might be on the same filesystem... */
-    if( !rename( oldpath, newpath ) )
-        return 0;
+    /* they might be on the same filesystem... */
+    {
+        const int i = rename( oldpath, newpath );
+        if( renamed != NULL )
+            *renamed = i == 0;
+        if( !i )
+            return 0;
+    }
 
     /* copy the file */
     in = tr_open_file_for_scanning( oldpath );
-    tr_preallocate_file( newpath, bytesLeft );
     out = tr_open_file_for_writing( newpath );
     buflen = stat( newpath, &st ) ? 4096 : st.st_blksize;
     buf = tr_new( char, buflen );
     while( bytesLeft > 0 )
     {
         ssize_t bytesWritten;
-        const size_t bytesThisPass = MIN( bytesLeft, buflen );
+        const off_t bytesThisPass = MIN( bytesLeft, buflen );
         const int numRead = read( in, buf, bytesThisPass );
         if( numRead < 0 )
             break;

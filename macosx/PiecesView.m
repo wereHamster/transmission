@@ -32,30 +32,23 @@
 
 #define HIGH_PEERS 30
 
-#define PIECE_NONE 0
-#define PIECE_SOME 1
-#define PIECE_HIGH_PEERS 2
-#define PIECE_FINISHED 3
-#define PIECE_FLASHING 4
+enum
+{
+    PIECE_NONE,
+    PIECE_SOME,
+    PIECE_HIGH_PEERS,
+    PIECE_FINISHED,
+    PIECE_FLASHING
+};
 
 @implementation PiecesView
 
 - (void) awakeFromNib
 {
-    //back image
-    fBack = [[NSImage alloc] initWithSize: [self bounds].size];
-    
-    [fBack lockFocus];
-    NSGradient * gradient = [[NSGradient alloc] initWithStartingColor: [NSColor colorWithCalibratedWhite: 0.0f alpha: 0.4f]
-                                endingColor: [NSColor colorWithCalibratedWhite: 0.2f alpha: 0.4f]];
-    [gradient drawInRect: [self bounds] angle: 90.0f];
-    [gradient release];
-    [fBack unlockFocus];
-    
     //store box colors
-    fGreenAvailabilityColor = [[NSColor colorWithCalibratedRed: 0.0f green: 1.0f blue: 0.4f alpha: 1.0f] retain];
-    fBluePieceColor = [[NSColor colorWithCalibratedRed: 0.0f green: 0.4f blue: 0.8f alpha: 1.0f] retain];
-            
+    fGreenAvailabilityColor = [[NSColor colorWithCalibratedRed: 0.0 green: 1.0 blue: 0.4 alpha: 1.0] retain];
+    fBluePieceColor = [[NSColor colorWithCalibratedRed: 0.0 green: 0.4 blue: 0.8 alpha: 1.0] retain];
+    
     //actually draw the box
     [self setTorrent: nil];
 }
@@ -63,8 +56,6 @@
 - (void) dealloc
 {
     tr_free(fPieces);
-    
-    [fBack release];
     
     [fGreenAvailabilityColor release];
     [fBluePieceColor release];
@@ -83,15 +74,22 @@
         fNumPieces = MIN([fTorrent pieceCount], MAX_ACROSS * MAX_ACROSS);
         fAcross = ceil(sqrt(fNumPieces));
         
-        CGFloat width = [self bounds].size.width;
+        const CGFloat width = [self bounds].size.width;
         fWidth = (width - (fAcross + 1) * BETWEEN) / fAcross;
         fExtraBorder = (width - ((fWidth + BETWEEN) * fAcross + BETWEEN)) / 2;
     }
     
-    //reset the view to blank
-    NSImage * newBack = [fBack copy];
-    [self setImage: newBack];
-    [newBack release];
+    NSImage * back = [[NSImage alloc] initWithSize: [self bounds].size];
+    [back lockFocus];
+    
+    NSGradient * gradient = [[NSGradient alloc] initWithStartingColor: [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.4]
+                                endingColor: [NSColor colorWithCalibratedWhite: 0.2 alpha: 0.4]];
+    [gradient drawInRect: [self bounds] angle: 90.0];
+    [gradient release];
+    [back unlockFocus];
+    
+    [self setImage: back];
+    [back release];
     
     [self setNeedsDisplay];
 }
@@ -132,71 +130,65 @@
     NSRect fillRects[fNumPieces];
     NSColor * fillColors[fNumPieces];
     
-    NSInteger index = -1, usedCount = 0;
+    NSInteger usedCount = 0;
     
-    for (NSInteger i = 0; i < fAcross; i++)
-        for (NSInteger j = 0; j < fAcross; j++)
+    for (NSInteger index = 0; index < fNumPieces; index++)
+    {
+        NSColor * pieceColor = nil;
+        
+        if (showAvailablity ? pieces[index] == -1 : piecesPercent[index] == 1.0)
         {
-            index++;
-            if (index >= fNumPieces)
+            if (first || fPieces[index] != PIECE_FINISHED)
             {
-                i = fAcross;
-                break;
-            }
-            
-            NSColor * pieceColor = nil;
-            
-            if (showAvailablity ? pieces[index] == -1 : piecesPercent[index] == 1.0)
-            {
-                if (first || fPieces[index] != PIECE_FINISHED)
+                if (!first && fPieces[index] != PIECE_FLASHING)
                 {
-                    if (!first && fPieces[index] != PIECE_FLASHING)
-                    {
-                        pieceColor = [NSColor orangeColor];
-                        fPieces[index] = PIECE_FLASHING;
-                    }
-                    else
-                    {
-                        pieceColor = fBluePieceColor;
-                        fPieces[index] = PIECE_FINISHED;
-                    }
+                    pieceColor = [NSColor orangeColor];
+                    fPieces[index] = PIECE_FLASHING;
                 }
-            }
-            else if (showAvailablity ? pieces[index] == 0 : piecesPercent[index] == 0.0)
-            {
-                if (first || fPieces[index] != PIECE_NONE)
+                else
                 {
-                    pieceColor = [NSColor whiteColor];
-                    fPieces[index] = PIECE_NONE;
+                    pieceColor = fBluePieceColor;
+                    fPieces[index] = PIECE_FINISHED;
                 }
-            }
-            else if (showAvailablity && pieces[index] >= HIGH_PEERS)
-            {
-                if (first || fPieces[index] != PIECE_HIGH_PEERS)
-                {
-                    pieceColor = fGreenAvailabilityColor;
-                    fPieces[index] = PIECE_HIGH_PEERS;
-                }
-            }
-            else
-            {
-                //always redraw "mixed"
-                CGFloat percent = showAvailablity ? (CGFloat)pieces[index]/HIGH_PEERS : piecesPercent[index];
-                NSColor * fullColor = showAvailablity ? fGreenAvailabilityColor : fBluePieceColor;
-                pieceColor = [[NSColor whiteColor] blendedColorWithFraction: percent ofColor: fullColor];
-                fPieces[index] = PIECE_SOME;
-            }
-            
-            if (pieceColor)
-            {
-                fillRects[usedCount] = NSMakeRect(j * (fWidth + BETWEEN) + BETWEEN + fExtraBorder,
-                                                    [image size].width - (i + 1) * (fWidth + BETWEEN) - fExtraBorder,
-                                                    fWidth, fWidth);
-                fillColors[usedCount] = pieceColor;
-                
-                usedCount++;
             }
         }
+        else if (showAvailablity ? pieces[index] == 0 : piecesPercent[index] == 0.0)
+        {
+            if (first || fPieces[index] != PIECE_NONE)
+            {
+                pieceColor = [NSColor whiteColor];
+                fPieces[index] = PIECE_NONE;
+            }
+        }
+        else if (showAvailablity && pieces[index] >= HIGH_PEERS)
+        {
+            if (first || fPieces[index] != PIECE_HIGH_PEERS)
+            {
+                pieceColor = fGreenAvailabilityColor;
+                fPieces[index] = PIECE_HIGH_PEERS;
+            }
+        }
+        else
+        {
+            //always redraw "mixed"
+            CGFloat percent = showAvailablity ? (CGFloat)pieces[index]/HIGH_PEERS : piecesPercent[index];
+            NSColor * fullColor = showAvailablity ? fGreenAvailabilityColor : fBluePieceColor;
+            pieceColor = [[NSColor whiteColor] blendedColorWithFraction: percent ofColor: fullColor];
+            fPieces[index] = PIECE_SOME;
+        }
+        
+        if (pieceColor)
+        {
+            const NSInteger across = index % fAcross,
+                            down = index / fAcross;
+            fillRects[usedCount] = NSMakeRect(across * (fWidth + BETWEEN) + BETWEEN + fExtraBorder,
+                                                [image size].width - (down + 1) * (fWidth + BETWEEN) - fExtraBorder,
+                                                fWidth, fWidth);
+            fillColors[usedCount] = pieceColor;
+            
+            usedCount++;
+        }
+    }
     
     if (usedCount > 0)
     {

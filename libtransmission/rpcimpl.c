@@ -374,15 +374,14 @@ addTrackerStats( const tr_tracker_stat * st, int n, tr_benc * list )
     for( i=0; i<n; ++i )
     {
         const tr_tracker_stat * s = &st[i];
-        tr_benc * d = tr_bencListAddDict( list, 24 );
+        tr_benc * d = tr_bencListAddDict( list, 22 );
         tr_bencDictAddStr ( d, "announce", s->announce );
+        tr_bencDictAddInt ( d, "announceState", s->announceState );
         tr_bencDictAddInt ( d, "downloadCount", s->downloadCount );
         tr_bencDictAddBool( d, "hasAnnounced", s->hasAnnounced );
         tr_bencDictAddBool( d, "hasScraped", s->hasScraped );
         tr_bencDictAddStr ( d, "host", s->host );
-        tr_bencDictAddBool( d, "isActive", s->isActive );
-        tr_bencDictAddBool( d, "isAnnouncing", s->isAnnouncing );
-        tr_bencDictAddBool( d, "isScraping", s->isScraping );
+        tr_bencDictAddBool( d, "isBackup", s->isBackup );
         tr_bencDictAddInt ( d, "lastAnnouncePeerCount", s->lastAnnouncePeerCount );
         tr_bencDictAddStr ( d, "lastAnnounceResult", s->lastAnnounceResult );
         tr_bencDictAddInt ( d, "lastAnnounceStartTime", s->lastAnnounceStartTime );
@@ -395,10 +394,9 @@ addTrackerStats( const tr_tracker_stat * st, int n, tr_benc * list )
         tr_bencDictAddInt ( d, "leecherCount", s->leecherCount );
         tr_bencDictAddInt ( d, "nextAnnounceTime", s->nextAnnounceTime );
         tr_bencDictAddInt ( d, "nextScrapeTime", s->nextScrapeTime );
+        tr_bencDictAddInt ( d, "scrapeState", s->scrapeState );
         tr_bencDictAddInt ( d, "seederCount", s->seederCount );
         tr_bencDictAddInt ( d, "tier", s->tier );
-        tr_bencDictAddBool( d, "willAnnounce", s->willAnnounce );
-        tr_bencDictAddBool( d, "willScrape", s->willScrape );
     }
 }
 
@@ -813,7 +811,7 @@ torrentSetLocation( tr_session               * session,
         {
             tr_torrent * tor = torrents[i];
             tr_torrentSetLocation( tor, location, move, NULL, NULL );
-            notify( session, TR_RPC_TORRENT_CHANGED, tor );
+            notify( session, TR_RPC_TORRENT_MOVED, tor );
         }
 
         tr_free( torrents );
@@ -1148,6 +1146,10 @@ sessionSet( tr_session               * session,
         tr_blocklistSetEnabled( session, boolVal );
     if( tr_bencDictFindStr( args_in, TR_PREFS_KEY_DOWNLOAD_DIR, &str ) )
         tr_sessionSetDownloadDir( session, str );
+    if( tr_bencDictFindStr( args_in, TR_PREFS_KEY_INCOMPLETE_DIR, &str ) )
+        tr_sessionSetIncompleteDir( session, str );
+    if( tr_bencDictFindBool( args_in, TR_PREFS_KEY_INCOMPLETE_DIR_ENABLED, &boolVal ) )
+        tr_sessionSetIncompleteDirEnabled( session, boolVal );
     if( tr_bencDictFindInt( args_in, TR_PREFS_KEY_PEER_LIMIT_GLOBAL, &i ) )
         tr_sessionSetPeerLimit( session, i );
     if( tr_bencDictFindInt( args_in, TR_PREFS_KEY_PEER_LIMIT_TORRENT, &i ) )
@@ -1257,12 +1259,14 @@ sessionGet( tr_session               * s,
     tr_bencDictAddStr ( d, TR_PREFS_KEY_DOWNLOAD_DIR, tr_sessionGetDownloadDir( s ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_LIMIT_GLOBAL, tr_sessionGetPeerLimit( s ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_LIMIT_TORRENT, tr_sessionGetPeerLimitPerTorrent( s ) );
+    tr_bencDictAddStr ( d, TR_PREFS_KEY_INCOMPLETE_DIR, tr_sessionGetIncompleteDir( s ) );
+    tr_bencDictAddBool( d, TR_PREFS_KEY_INCOMPLETE_DIR_ENABLED, tr_sessionIsIncompleteDirEnabled( s ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_PEX_ENABLED, tr_sessionIsPexEnabled( s ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_DHT_ENABLED, tr_sessionIsDHTEnabled( s ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_PORT, tr_sessionGetPeerPort( s ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_PORT_RANDOM_ON_START, tr_sessionGetPeerPortRandomOnStart( s ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_PORT_FORWARDING, tr_sessionIsPortForwardingEnabled( s ) );
-    tr_bencDictAddInt ( d, "rpc-version", 6 );
+    tr_bencDictAddInt ( d, "rpc-version", 7 );
     tr_bencDictAddInt ( d, "rpc-version-minimum", 1 );
     tr_bencDictAddReal( d, "seedRatioLimit", tr_sessionGetRatioLimit( s ) );
     tr_bencDictAddBool( d, "seedRatioLimited", tr_sessionIsRatioLimited( s ) );

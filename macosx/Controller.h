@@ -24,18 +24,19 @@
 
 #import <Cocoa/Cocoa.h>
 #import <transmission.h>
-#import "PrefsController.h"
-#import "InfoWindowController.h"
-#import "MessageWindowController.h"
-#import "AddWindowController.h"
-#import "DragOverlayWindow.h"
-#import "Badger.h"
-
+#import <Quartz/Quartz.h>
 #import <Growl/Growl.h>
 
-@class TorrentTableView;
-@class StatusBarView;
+@class AddWindowController;
+@class Badger;
+@class DragOverlayWindow;
 @class FilterButton;
+@class InfoWindowController;
+@class MessageWindowController;
+@class PrefsController;
+@class StatusBarView;
+@class Torrent;
+@class TorrentTableView;
 
 typedef enum
 {
@@ -46,9 +47,10 @@ typedef enum
     ADD_CREATED
 } addType;
 
-@interface Controller : NSObject <GrowlApplicationBridgeDelegate>
+#warning uncomment
+@interface Controller : NSObject <GrowlApplicationBridgeDelegate> //, QLPreviewPanelDataSource, QLPreviewPanelDelegate>
 {
-    tr_session                       * fLib;
+    tr_session                      * fLib;
     
     NSMutableArray                  * fTorrents, * fDisplayedTorrents;
     
@@ -95,6 +97,10 @@ typedef enum
     IBOutlet NSWindow               * fURLSheetWindow;
     IBOutlet NSTextField            * fURLSheetTextField;
     IBOutlet NSButton               * fURLSheetOpenButton;
+    
+    #warning change to QLPreviewPanel
+    id                              fPreviewPanel;
+    BOOL                            fQuitting;
     
     BOOL                            fUpdateInProgress;
     BOOL                            fPauseOnLaunch;
@@ -180,7 +186,7 @@ typedef enum
 - (void) updateSpeedFieldsToolTips;
 
 - (void) updateTorrentsInQueue;
-- (NSInteger) numToStartFromQueue: (BOOL) downloadQueue;
+- (NSUInteger) numToStartFromQueue: (BOOL) downloadQueue;
 
 - (void) torrentFinishedDownloading: (NSNotification *) notification;
 - (void) torrentRestartedDownloading: (NSNotification *) notification;
@@ -259,5 +265,6 @@ typedef enum
 - (void) rpcRemoveTorrent: (Torrent *) torrent;
 - (void) rpcStartedStoppedTorrent: (Torrent *) torrent;
 - (void) rpcChangedTorrent: (Torrent *) torrent;
+- (void) rpcMovedTorrent: (Torrent *) torrent;
 
 @end

@@ -98,7 +98,7 @@
     return fName;
 }
 
-- (NSString *) fullPath
+- (NSString *) path
 {
     return fPath;
 }
@@ -116,15 +116,14 @@
 - (NSImage *) icon
 {
     if (!fIsFolder && !fIcon)
-    {
         fIcon = [[[NSWorkspace sharedWorkspace] iconForFileType: [fName pathExtension]] retain];
-        [fIcon setFlipped: YES];
-    }
     return fIcon;
 }
 
 - (NSArray *) children
 {
+    NSAssert(fIsFolder, @"method can only be invoked on folders");
+    
     return fChildren;
 }
 
@@ -138,7 +137,7 @@
     {
         fIsFolder = isFolder;
         fName = [name retain];
-        fPath = [[path stringByAppendingPathComponent: name] retain];
+        fPath = [path retain];
         
         fIndexes = [[NSMutableIndexSet alloc] init];
     }

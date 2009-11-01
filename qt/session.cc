@@ -122,6 +122,8 @@ Session :: updatePref( int key )
         case Prefs :: BLOCKLIST_DATE:
         case Prefs :: DHT_ENABLED:
         case Prefs :: DOWNLOAD_DIR:
+        case Prefs :: INCOMPLETE_DIR:
+        case Prefs :: INCOMPLETE_DIR_ENABLED:
         case Prefs :: PEER_LIMIT_GLOBAL:
         case Prefs :: PEER_LIMIT_TORRENT:
         case Prefs :: USPEED_ENABLED:
@@ -262,7 +264,6 @@ Session :: start( )
     {
         tr_benc settings;
         tr_bencInitDict( &settings, 0 );
-        tr_sessionGetDefaultSettings( &settings );
         tr_sessionLoadSettings( &settings, myConfigDir.toUtf8().constData(), "qt" );
         mySession = tr_sessionInit( "qt", myConfigDir.toUtf8().constData(), true, &settings );
         tr_bencFree( &settings );
@@ -822,6 +823,12 @@ Session :: setBlocklistSize( int64_t i )
 void
 Session :: addTorrent( QString filename )
 {
+    addTorrent( filename, myPrefs.getString( Prefs::DOWNLOAD_DIR ) );
+}
+
+void
+Session :: addTorrent( QString filename, QString localPath )
+{
     QFile file( filename );
     file.open( QIODevice::ReadOnly );
     const QByteArray raw( file.readAll( ) );
@@ -836,7 +843,7 @@ Session :: addTorrent( QString filename )
         tr_bencInitDict( &top, 2 );
         tr_bencDictAddStr( &top, "method", "torrent-add" );
         args = tr_bencDictAddDict( &top, "arguments", 3 );
-        tr_bencDictAddStr( args, "download-dir", qPrintable(myPrefs.getString(Prefs::DOWNLOAD_DIR)) );
+        tr_bencDictAddStr( args, "download-dir", qPrintable(localPath) );
         tr_bencDictAddRaw( args, "metainfo", b64, b64len  );
         tr_bencDictAddInt( args, "paused", !myPrefs.getBool( Prefs::START ) );
         exec( &top );

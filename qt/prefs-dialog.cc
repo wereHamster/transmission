@@ -13,19 +13,22 @@
 #include <cassert>
 #include <iostream>
 
-#include <QCoreApplication>
 #include <QCheckBox>
-#include <QFileDialog>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QFileDialog>
+#include <QFileIconProvider>
+#include <QFileInfo>
 #include <QHBoxLayout>
+#include <QHttp>
+#include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
-#include <QFileInfo>
 #include <QList>
+#include <QMessageBox>
 #include <QPushButton>
-#include <QIcon>
 #include <QSpinBox>
 #include <QStyle>
 #include <QTabWidget>
@@ -33,8 +36,6 @@
 #include <QTimeEdit>
 #include <QTimer>
 #include <QVBoxLayout>
-#include <QHttp>
-#include <QMessageBox>
 
 #include "hig.h"
 #include "prefs.h"
@@ -485,13 +486,34 @@ PrefsDialog :: createPrivacyTab( )
 ***/
 
 void
+PrefsDialog :: onIncompleteClicked( void )
+{
+    const QString title = tr( "Select Incomplete Directory" );
+    const QString path = myPrefs.getString( Prefs::INCOMPLETE_DIR );
+    QFileDialog * d = new QFileDialog( this, title, path );
+    d->setFileMode( QFileDialog::Directory );
+    connect( d, SIGNAL(filesSelected(const QStringList&)),
+             this, SLOT(onIncompleteSelected(const QStringList&)) );
+    d->show( );
+}
+
+void
+PrefsDialog :: onIncompleteSelected( const QStringList& list )
+{
+    if( list.size() == 1 )
+        myPrefs.set( Prefs::INCOMPLETE_DIR, list.first( ) );
+}
+
+
+void
 PrefsDialog :: onWatchClicked( void )
 {
-    QFileDialog * d = new QFileDialog( this,
-                                       tr( "Select Watch Directory" ),
-                                       myPrefs.getString( Prefs::DIR_WATCH ) );
+    const QString title = tr( "Select Watch Directory" );
+    const QString path = myPrefs.getString( Prefs::DIR_WATCH );
+    QFileDialog * d = new QFileDialog( this, title, path );
     d->setFileMode( QFileDialog::Directory );
-    connect( d, SIGNAL(filesSelected(const QStringList&)), this, SLOT(onWatchSelected(const QStringList&)) );
+    connect( d, SIGNAL(filesSelected(const QStringList&)),
+             this, SLOT(onWatchSelected(const QStringList&)) );
     d->show( );
 }
 
@@ -505,11 +527,12 @@ PrefsDialog :: onWatchSelected( const QStringList& list )
 void
 PrefsDialog :: onDestinationClicked( void )
 {
-    QFileDialog * d = new QFileDialog( this,
-                                       tr( "Select Destination" ),
-                                       myPrefs.getString( Prefs::DOWNLOAD_DIR ) );
+    const QString title = tr( "Select Destination" );
+    const QString path = myPrefs.getString( Prefs::DOWNLOAD_DIR );
+    QFileDialog * d = new QFileDialog( this, title, path );
     d->setFileMode( QFileDialog::Directory );
-    connect( d, SIGNAL(filesSelected(const QStringList&)), this, SLOT(onDestinationSelected(const QStringList&)) );
+    connect( d, SIGNAL(filesSelected(const QStringList&)),
+             this, SLOT(onDestinationSelected(const QStringList&)) );
     d->show( );
 }
 
@@ -524,7 +547,8 @@ QWidget *
 PrefsDialog :: createTorrentsTab( )
 {
     const int iconSize( style( )->pixelMetric( QStyle :: PM_SmallIconSize ) );
-    const QIcon folderIcon = QtIconLoader :: icon( "folder", style()->standardIcon( QStyle::SP_DirIcon ) );
+    const QFileIconProvider iconProvider;
+    const QIcon folderIcon = iconProvider.icon( QFileIconProvider::Folder );
     const QPixmap folderPixmap = folderIcon.pixmap( iconSize );
 
     QWidget *l, *r;
@@ -539,9 +563,15 @@ PrefsDialog :: createTorrentsTab( )
         hig->addRow( l, b );
         enableBuddyWhenChecked( qobject_cast<QCheckBox*>(l), b );
 
-        hig->addWideControl( checkBoxNew( tr( "Display &options dialog" ), Prefs::OPTIONS_PROMPT ) );
+        hig->addWideControl( checkBoxNew( tr( "Show &options dialog" ), Prefs::OPTIONS_PROMPT ) );
         hig->addWideControl( checkBoxNew( tr( "&Start when added" ), Prefs::START ) );
-        hig->addWideControl( checkBoxNew( tr( "&Delete source files" ), Prefs::TRASH_ORIGINAL ) );
+        hig->addWideControl( checkBoxNew( tr( "Mo&ve .torrent file to the trash" ), Prefs::TRASH_ORIGINAL ) );
+
+        b = myIncompleteButton = new QPushButton;
+        b->setIcon( folderPixmap );
+        b->setStyleSheet( "text-align: left; padding-left: 5; padding-right: 5" );
+        connect( b, SIGNAL(clicked(bool)), this, SLOT(onDestinationClicked(void)) );
+        hig->addRow( tr( "Keep &incomplete files in:" ), b );
 
         b = myDestinationButton = new QPushButton;
         b->setIcon( folderPixmap );
@@ -598,7 +628,9 @@ PrefsDialog :: PrefsDialog( Session& session, Prefs& prefs, QWidget * parent ):
          << Prefs :: ENCRYPTION
          << Prefs :: BLOCKLIST_ENABLED
          << Prefs :: DIR_WATCH
-         << Prefs :: DOWNLOAD_DIR;
+         << Prefs :: DOWNLOAD_DIR
+         << Prefs :: INCOMPLETE_DIR
+         << Prefs :: INCOMPLETE_DIR_ENABLED;
     foreach( int key, keys )
         updatePref( key );
 
@@ -685,10 +717,23 @@ PrefsDialog :: updatePref( int key )
             break;
 
         case Prefs :: DOWNLOAD_DIR: {
-            QString path( myPrefs.getString( Prefs :: DOWNLOAD_DIR ) );
+            QString path( myPrefs.getString( key ) );
             myDestinationButton->setText( QFileInfo(path).fileName() );
             break;
         }
+
+        case Prefs :: INCOMPLETE_DIR: {
+            QString path( myPrefs.getString( key ) );
+            myIncompleteButton->setText( QFileInfo(path).fileName() );
+            break;
+        }
+
+        case Prefs :: INCOMPLETE_DIR_ENABLED: {
+            const bool enabled = myPrefs.getBool( key );
+            myIncompleteButton->setEnabled( enabled );
+            break;
+        }
+       
 
         default:
             break;

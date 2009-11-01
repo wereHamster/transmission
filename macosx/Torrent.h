@@ -28,16 +28,12 @@
 
 @class FileListNode;
 
-@interface Torrent : NSObject <QLPreviewItem>
+#warning uncomment
+@interface Torrent : NSObject //<QLPreviewItem>
 {
     tr_torrent * fHandle;
     const tr_info * fInfo;
     const tr_stat * fStat;
-    
-    BOOL fResumeOnWake;
-    
-    BOOL fUseIncompleteFolder;
-    NSString * fDownloadFolder, * fIncompleteFolder;
 	
     NSUserDefaults * fDefaults;
 
@@ -55,7 +51,9 @@
     
     NSInteger fGroupValue;
     
-    NSDictionary * fQuickPauseDict;
+    BOOL fResumeOnWake;
+    
+    NSString * fTimeMachineExclude;
 }
 
 - (id) initWithPath: (NSString *) path location: (NSString *) location deleteTorrentFile: (BOOL) torrentDelete
@@ -67,9 +65,9 @@
 
 - (void) closeRemoveTorrent;
 
-- (void) changeIncompleteDownloadFolder: (NSString *) folder;
-- (void) changeDownloadFolder: (NSString *) folder;
-- (NSString *) downloadFolder;
+- (void) changeDownloadFolderBeforeUsing: (NSString *) folder;
+
+- (NSString *) currentDirectory;
 
 - (void) getAvailability: (int8_t *) tab size: (NSInteger) size;
 - (void) getAmountFinished: (float *) tab size: (NSInteger) size;
@@ -118,8 +116,6 @@
 - (void) copyTorrentFileTo: (NSString *) path;
 
 - (BOOL) alertForRemainingDiskSpace;
-- (BOOL) alertForFolderAvailable;
-- (BOOL) alertForMoveFolderAvailable;
 
 - (NSImage *) icon;
 
@@ -129,9 +125,9 @@
 - (uint64_t) sizeLeft;
 
 - (NSMutableArray *) allTrackerStats;
-- (NSMutableArray *) allTrackersFlat; //used by GroupRules
+- (NSArray *) allTrackersFlat; //used by GroupRules
 - (BOOL) addTrackerToNewTier: (NSString *) tracker;
-- (void) removeTrackersWithAnnounceAddresses: (NSArray *) trackers;
+- (void) removeTrackersWithAnnounceAddresses: (NSSet *) trackers;
 
 - (NSString *) comment;
 - (NSString *) creator;
@@ -144,6 +140,7 @@
 
 - (NSString *) torrentLocation;
 - (NSString *) dataLocation;
+- (NSString *) fileLocation: (FileListNode *) node;
 
 - (CGFloat) progress;
 - (CGFloat) progressDone;
@@ -160,7 +157,7 @@
 - (BOOL) allDownloaded;
 - (BOOL) isComplete;
 - (BOOL) isError;
-- (BOOL) isErrorOrWarning;
+- (BOOL) isAnyErrorOrWarning;
 - (NSString *) errorMessage;
 
 - (NSArray *) peers;
@@ -224,7 +221,10 @@
 - (NSInteger) stalledMinutes;
 - (BOOL) isStalled;
 
+- (void) updateTimeMachineExclude;
+
 - (NSInteger) stateSortKey;
+- (NSString *) trackerSortKey;
 
 - (tr_torrent *) torrentStruct;
 

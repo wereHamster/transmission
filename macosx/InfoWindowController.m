@@ -86,8 +86,6 @@ typedef enum
 - (void) setWebSeedTableHidden: (BOOL) hide animate: (BOOL) animate;
 - (NSArray *) peerSortDescriptors;
 
-- (NSArray *) quickLookURLs;
-- (BOOL) canQuickLook;
 - (BOOL) canQuickLookFile: (FileListNode *) item;
 
 - (void) addTrackers;
@@ -156,20 +154,21 @@ typedef enum
     [fTabMatrix selectCellWithTag: tag];
     [self setTab: nil];
     
-    //reset images for reveal button, since the images are also used in the main table
-    NSImage * revealOn = [[NSImage imageNamed: @"RevealOn.png"] copy],
-            * revealOff = [[NSImage imageNamed: @"RevealOff.png"] copy];
     if (![NSApp isOnSnowLeopardOrBetter])
     {
+        //reset images for reveal button, since the images are also used in the main table
+        NSImage * revealOn = [[NSImage imageNamed: @"RevealOn.png"] copy],
+                * revealOff = [[NSImage imageNamed: @"RevealOff.png"] copy];
+        
         [revealOn setFlipped: NO];
         [revealOff setFlipped: NO];
+        
+        [fRevealDataButton setImage: revealOff];
+        [fRevealDataButton setAlternateImage: revealOn];
+        
+        [revealOn release];
+        [revealOff release];
     }
-    
-    [fRevealDataButton setImage: revealOff];
-    [fRevealDataButton setAlternateImage: revealOn];
-    
-    [revealOn release];
-    [revealOff release];
     
     //initially sort peer table by IP
     if ([[fPeerTable sortDescriptors] count] == 0)
@@ -354,12 +353,6 @@ typedef enum
         [fErrorMessageView setSelectable: NO];
         
         [fConnectedPeersField setStringValue: @""];
-        [fDownloadingFromField setStringValue: @""];
-        [fUploadingToField setStringValue: @""];
-        [fKnownField setStringValue: @""];
-        [fSeedersField setStringValue: @""];
-        [fLeechersField setStringValue: @""];
-        [fCompletedFromTrackerField setStringValue: @""];
         
         [fDateAddedField setStringValue: @""];
         [fDateCompletedField setStringValue: @""];
@@ -444,13 +437,10 @@ typedef enum
         
         [fDateAddedField setObjectValue: [torrent dateAdded]];
         
-        [fRevealDataButton setHidden: NO];
-        
         //allow these fields to be selected
         [fHashField setSelectable: YES];
         [fCommentView setSelectable: ![commentString isEqualToString: @""]];
         [fCreatorField setSelectable: ![creatorString isEqualToString: @""]];
-        [fDataLocationField setSelectable: YES];
         
         //set pieces view
         BOOL piecesAvailableSegment = [[NSUserDefaults standardUserDefaults] boolForKey: @"PiecesViewShowAvailability"];
@@ -680,6 +670,13 @@ typedef enum
     return proposedFrameSize;
 }
 
+- (void) windowWillClose: (NSNotification *) notification
+{
+    if ([NSApp isOnSnowLeopardOrBetter] && fCurrentTabTag == TAB_FILES_TAG
+        && ([QLPreviewPanelSL sharedPreviewPanelExists] && [[QLPreviewPanelSL sharedPreviewPanel] isVisible]))
+        [[QLPreviewPanelSL sharedPreviewPanel] reloadData];
+}
+
 - (void) setTab: (id) sender
 {
     const NSInteger oldTabTag = fCurrentTabTag;
@@ -770,6 +767,7 @@ typedef enum
             title = NSLocalizedString(@"Options", "Inspector -> title");
             break;
         default:
+            NSAssert1(NO, @"Unknown info tab selected: %d", fCurrentTabTag);
             return;
     }
     
@@ -817,8 +815,8 @@ typedef enum
     [view setHidden: NO];
     
     if ([NSApp isOnSnowLeopardOrBetter] && (fCurrentTabTag == TAB_FILES_TAG || oldTabTag == TAB_FILES_TAG)
-        && ([QLPreviewPanel sharedPreviewPanelExists] && [[QLPreviewPanel sharedPreviewPanel] isVisible]))
-        [[QLPreviewPanel sharedPreviewPanel] updateController];
+        && ([QLPreviewPanelSL sharedPreviewPanelExists] && [[QLPreviewPanelSL sharedPreviewPanel] isVisible]))
+        [[QLPreviewPanelSL sharedPreviewPanel] reloadData];
 }
 
 - (void) setNextTab
@@ -1014,7 +1012,8 @@ typedef enum
         [components addObject: [NSString stringWithFormat: @"%@: %@", NSLocalizedString(@"Port",
             "Inspector -> Peers tab -> table row tooltip"), portString]];
         
-        switch ([[peer objectForKey: @"From"] intValue])
+        const NSInteger peerFrom = [[peer objectForKey: @"From"] integerValue];
+        switch (peerFrom)
         {
             case TR_PEER_FROM_TRACKER:
                 [components addObject: NSLocalizedString(@"From: tracker", "Inspector -> Peers tab -> table row tooltip")];
@@ -1031,9 +1030,11 @@ typedef enum
             case TR_PEER_FROM_DHT:
                 [components addObject: NSLocalizedString(@"From: distributed hash table", "Inspector -> Peers tab -> table row tooltip")];
                 break;
+            default:
+                NSAssert1(NO, @"Peer from unknown source: %d", peerFrom);
         }
         
-        //determing status strings from flags 
+        //determing status strings from flags
         NSMutableArray * statusArray = [NSMutableArray arrayWithCapacity: 6];
         NSString * flags = [peer objectForKey: @"Flags"];
         
@@ -1091,6 +1092,8 @@ typedef enum
     [fTrackerTable setTrackers: fTrackers];
     [fTrackerTable reloadData];
     [fTrackerTable deselectAll: self];
+    
+    [[NSNotificationCenter defaultCenter] postNotificationName: @"UpdateUI" object: nil]; //incase sort by tracker
 }
 
 - (void) addRemoveTracker: (id) sender
@@ -1105,71 +1108,61 @@ typedef enum
         [self addTrackers];
 }
 
-#warning what?!
-/*- (BOOL) tableView: (NSTableView *) tableView shouldEditTableColumn: (NSTableColumn *) tableColumn row: (NSInteger) row
+- (NSArray *) quickLookURLs
 {
-    if (tableView != fTrackerTable)
+    FileOutlineView * fileOutlineView = [fFileController outlineView];
+    Torrent * torrent = [fTorrents objectAtIndex: 0];
+    NSIndexSet * indexes = [fileOutlineView selectedRowIndexes];
+    NSMutableArray * urlArray = [NSMutableArray arrayWithCapacity: [indexes count]];
+    
+    for (NSUInteger i = [indexes firstIndex]; i != NSNotFound; i = [indexes indexGreaterThanIndex: i])
+    {
+        FileListNode * item = [fileOutlineView itemAtRow: i];
+        if ([self canQuickLookFile: item])
+            [urlArray addObject: [NSURL fileURLWithPath: [torrent fileLocation: item]]];
+    }
+    
+    return urlArray;
+}
+
+- (BOOL) canQuickLook
+{
+    if (fCurrentTabTag != TAB_FILES_TAG || ![[self window] isVisible] || [fTorrents count] != 1 || ![NSApp isOnSnowLeopardOrBetter])
         return NO;
     
-    NSUInteger i;
-    for (i = row-1; ![[fTrackers objectAtIndex: i] isKindOfClass: [NSNumber class]]; i--);
+    Torrent * torrent = [fTorrents objectAtIndex: 0];
+    if (![torrent isFolder])
+        return NO;
     
-    return [[fTrackers objectAtIndex: i] intValue] == 0;
-}*/
-
-- (BOOL) acceptsPreviewPanelControl: (QLPreviewPanel *) panel
-{
-    return fCurrentTabTag == TAB_FILES_TAG && [self canQuickLook];
-}
-
-- (void) beginPreviewPanelControl: (QLPreviewPanel *) panel
-{
-    fPreviewPanel = [panel retain];
-    fPreviewPanel.delegate = self;
-    fPreviewPanel.dataSource = self;
-}
-
-- (void) endPreviewPanelControl: (QLPreviewPanel *) panel
-{
-    [fPreviewPanel release];
-    fPreviewPanel = nil;
-}
-
-- (NSInteger) numberOfPreviewItemsInPreviewPanel: (QLPreviewPanel *) panel
-{
-    return [[self quickLookURLs] count];
-}
-
-- (id <QLPreviewItem>) previewPanel: (QLPreviewPanel *)panel previewItemAtIndex: (NSInteger) index
-{
-    return [[self quickLookURLs] objectAtIndex: index];
-}
-
-- (BOOL) previewPanel: (QLPreviewPanel *) panel handleEvent: (NSEvent *) event
-{
-    if ([event type] == NSKeyDown)
-    {
-        [super keyDown: event];
-        return YES;
-    }
+    FileOutlineView * fileOutlineView = [fFileController outlineView];
+    NSIndexSet * indexes = [fileOutlineView selectedRowIndexes];
+    
+    for (NSUInteger i = [indexes firstIndex]; i != NSNotFound; i = [indexes indexGreaterThanIndex: i])
+        if ([self canQuickLookFile: [fileOutlineView itemAtRow: i]])
+            return YES;
     
     return NO;
 }
 
-- (NSRect) previewPanel: (QLPreviewPanel *) panel sourceFrameOnScreenForPreviewItem: (id <QLPreviewItem>) item
+#warning uncomment (in header too)
+- (NSRect) quickLookSourceFrameForPreviewItem: (id /*<QLPreviewItem>*/) item
 {
     FileOutlineView * fileOutlineView = [fFileController outlineView];
     
-    NSString * fullPath = [(NSURL *) item path];
-    NSString * folder = [[fTorrents objectAtIndex: 0] downloadFolder];
+    NSString * fullPath = [(NSURL *)item path];
+    Torrent * torrent = [fTorrents objectAtIndex: 0];
     NSRange visibleRows = [fileOutlineView rowsInRect: [fileOutlineView bounds]];
     
     for (NSUInteger row = visibleRows.location; row < NSMaxRange(visibleRows); row++)
     {
         FileListNode * rowItem = [fileOutlineView itemAtRow: row];
-        if ([[folder stringByAppendingPathComponent: [rowItem fullPath]] isEqualToString: fullPath])
+        if ([[torrent fileLocation: rowItem] isEqualToString: fullPath])
         {
             NSRect frame = [fileOutlineView iconRectForRow: row];
+            
+            if (!NSIntersectsRect([fileOutlineView visibleRect], frame))
+                return NSZeroRect;
+            
             frame.origin = [fileOutlineView convertPoint: frame.origin toView: nil];
             frame.origin = [[self window] convertBaseToScreen: frame.origin];
             frame.origin.y -= frame.size.height;
@@ -1199,13 +1192,17 @@ typedef enum
     if ([fTorrents count] > 0)
     {
         Torrent * torrent = [fTorrents objectAtIndex: 0];
+        NSString * location = [torrent dataLocation];
+        if (!location)
+            return;
+        
         if ([NSApp isOnSnowLeopardOrBetter])
         {
-            NSURL * file = [NSURL fileURLWithPath: [torrent dataLocation]];
+            NSURL * file = [NSURL fileURLWithPath: location];
             [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs: [NSArray arrayWithObject: file]];
         }
         else
-            [[NSWorkspace sharedWorkspace] selectFile: [torrent dataLocation] inFileViewerRootedAtPath: nil];
+            [[NSWorkspace sharedWorkspace] selectFile: location inFileViewerRootedAtPath: nil];
     }
 }
 
@@ -1273,6 +1270,7 @@ typedef enum
             setting = TR_RATIOLIMIT_GLOBAL;
             break;
         default:
+            NSAssert1(NO, @"Unknown option selected in ratio popup: %d", [sender indexOfSelectedItem]);
             return;
     }
     
@@ -1310,6 +1308,7 @@ typedef enum
             priority = TR_PRI_LOW;
             break;
         default:
+            NSAssert1(NO, @"Unknown option selected in priority popup: %d", [sender indexOfSelectedItem]);
             return;
     }
     
@@ -1359,8 +1358,11 @@ typedef enum
     Torrent * torrent = [fTorrents objectAtIndex: 0];
     
     NSString * location = [torrent dataLocation];
-    [fDataLocationField setStringValue: [location stringByAbbreviatingWithTildeInPath]];
-    [fDataLocationField setToolTip: location];
+    [fDataLocationField setStringValue: location ? [location stringByAbbreviatingWithTildeInPath] : @""];
+    [fDataLocationField setToolTip: location ? location : @""];
+    [fDataLocationField setSelectable: location != nil];
+    
+    [fRevealDataButton setHidden: !location];
 }
 
 - (void) updateInfoActivity
@@ -1441,8 +1443,7 @@ typedef enum
         return;
     Torrent * torrent = [fTorrents objectAtIndex: 0];
     
-    #warning still update unselected rows
-    //get update tracker stats
+    //get updated tracker stats
     if ([fTrackerTable editedRow] == -1)
     {
         [fTrackers release];
@@ -1477,56 +1478,57 @@ typedef enum
         return;
     Torrent * torrent = [fTorrents objectAtIndex: 0];
     
-    #warning remove corresponding fields
-    /*NSInteger seeders = [torrent seeders], leechers = [torrent leechers], completed = [torrent completedFromTracker];
-    [fSeedersField setStringValue: seeders >= 0 ? [NSString stringWithFormat: @"%d", seeders] : @""];
-    [fLeechersField setStringValue: leechers >= 0 ? [NSString stringWithFormat: @"%d", leechers] : @""];
-    [fCompletedFromTrackerField setStringValue: completed >= 0 ? [NSString stringWithFormat: @"%d", completed] : @""];*/
-    
-    BOOL active = [torrent isActive];
-    
-    if (active)
+    NSString * knownString = [NSString stringWithFormat: NSLocalizedString(@"%d known", "Inspector -> Peers tab -> peers"),
+                                [torrent totalPeersKnown]];
+    if ([torrent isActive])
     {
-        NSInteger total = [torrent totalPeersConnected];
-        NSString * connected = [NSString stringWithFormat:
-                                NSLocalizedString(@"%d Connected", "Inspector -> Peers tab -> peers"), total];
+        const NSInteger total = [torrent totalPeersConnected];
+        NSString * connectedText = [NSString stringWithFormat: NSLocalizedString(@"%d Connected", "Inspector -> Peers tab -> peers"),
+                                    total];
         
         if (total > 0)
         {
-            NSMutableArray * components = [NSMutableArray arrayWithCapacity: 5];
+            NSMutableArray * fromComponents = [NSMutableArray arrayWithCapacity: 5];
             NSInteger count;
             if ((count = [torrent totalPeersTracker]) > 0)
-                [components addObject: [NSString stringWithFormat:
+                [fromComponents addObject: [NSString stringWithFormat:
                                         NSLocalizedString(@"%d tracker", "Inspector -> Peers tab -> peers"), count]];
             if ((count = [torrent totalPeersIncoming]) > 0)
-                [components addObject: [NSString stringWithFormat:
+                [fromComponents addObject: [NSString stringWithFormat:
                                         NSLocalizedString(@"%d incoming", "Inspector -> Peers tab -> peers"), count]];
             if ((count = [torrent totalPeersCache]) > 0)
-                [components addObject: [NSString stringWithFormat:
+                [fromComponents addObject: [NSString stringWithFormat:
                                         NSLocalizedString(@"%d cache", "Inspector -> Peers tab -> peers"), count]];
             if ((count = [torrent totalPeersPex]) > 0)
-                [components addObject: [NSString stringWithFormat:
+                [fromComponents addObject: [NSString stringWithFormat:
                                         NSLocalizedString(@"%d PEX", "Inspector -> Peers tab -> peers"), count]];
             if ((count = [torrent totalPeersDHT]) > 0)
-                [components addObject: [NSString stringWithFormat:
+                [fromComponents addObject: [NSString stringWithFormat:
                                         NSLocalizedString(@"%d DHT", "Inspector -> Peers tab -> peers"), count]];
             
-            connected = [connected stringByAppendingFormat: @": %@", [components componentsJoinedByString: @", "]];
+            NSMutableArray * upDownComponents = [NSMutableArray arrayWithCapacity: 3];
+            if ((count = [torrent peersSendingToUs]) > 0)
+                [upDownComponents addObject: [NSString stringWithFormat:
+                                        NSLocalizedString(@"DL from %d", "Inspector -> Peers tab -> peers"), count]];
+            if ((count = [torrent peersGettingFromUs]) > 0)
+                [upDownComponents addObject: [NSString stringWithFormat:
+                                        NSLocalizedString(@"UL to %d", "Inspector -> Peers tab -> peers"), count]];
+            [upDownComponents addObject: knownString];
+            
+            connectedText = [connectedText stringByAppendingFormat: @": %@\n%@", [fromComponents componentsJoinedByString: @", "],
+                                [upDownComponents componentsJoinedByString: @", "]];
         }
+        else
+            connectedText = [connectedText stringByAppendingFormat: @"\n%@", knownString];
         
-        [fConnectedPeersField setStringValue: connected];
-        
-        [fDownloadingFromField setIntValue: [torrent peersSendingToUs]];
-        [fUploadingToField setIntValue: [torrent peersGettingFromUs]];
+        [fConnectedPeersField setStringValue: connectedText];
     }
     else
     {
-        [fConnectedPeersField setStringValue: @""];
-        [fDownloadingFromField setStringValue: @""];
-        [fUploadingToField setStringValue: @""];
+        NSString * connectedText = [NSString stringWithFormat: @"%@\n%@",
+                                    NSLocalizedString(@"Not Connected", "Inspector -> Peers tab -> peers"), knownString];
+        [fConnectedPeersField setStringValue: connectedText];
     }
-    
-    [fKnownField setIntValue: [torrent totalPeersKnown]];
     
     [fPeers release];
     fPeers = [[[torrent peers] sortedArrayUsingDescriptors: [self peerSortDescriptors]] retain];
@@ -1563,6 +1565,7 @@ typedef enum
         case TAB_OPTIONS_TAG:
             return fOptionsView;
         default:
+            NSAssert1(NO, @"Unknown tab view for tag: %d", tag);
             return nil;
     }
 }
@@ -1654,47 +1657,10 @@ typedef enum
     return descriptors;
 }
 
-- (NSArray *) quickLookURLs
-{
-    FileOutlineView * fileOutlineView = [fFileController outlineView];
-    Torrent * torrent = [fTorrents objectAtIndex: 0];
-    NSString * folder = [torrent downloadFolder];
-    NSIndexSet * indexes = [fileOutlineView selectedRowIndexes];
-    NSMutableArray * urlArray = [NSMutableArray arrayWithCapacity: [indexes count]];
-    
-    for (NSUInteger i = [indexes firstIndex]; i != NSNotFound; i = [indexes indexGreaterThanIndex: i])
-    {
-        FileListNode * item = [fileOutlineView itemAtRow: i];
-        if ([self canQuickLookFile: item])
-            [urlArray addObject: [NSURL fileURLWithPath: [folder stringByAppendingPathComponent: [item fullPath]]]];
-    }
-    
-    return urlArray;
-}
-
-- (BOOL) canQuickLook
-{
-    if (![NSApp isOnSnowLeopardOrBetter])
-        return NO;
-    
-    FileOutlineView * fileOutlineView = [fFileController outlineView];
-    NSIndexSet * indexes = [fileOutlineView selectedRowIndexes];
-    
-    for (NSUInteger i = [indexes firstIndex]; i != NSNotFound; i = [indexes indexGreaterThanIndex: i])
-        if ([self canQuickLookFile: [fileOutlineView itemAtRow: i]])
-            return YES;
-    
-    return NO;
-}
-
 - (BOOL) canQuickLookFile: (FileListNode *) item
 {
     Torrent * torrent = [fTorrents objectAtIndex: 0];
-    
-    if (![[NSFileManager defaultManager] fileExistsAtPath: [[torrent downloadFolder] stringByAppendingPathComponent: [item fullPath]]])
-        return NO;
-    
-    return [item isFolder] || [torrent fileProgress: item] == 1.0;
+    return ([item isFolder] || [torrent fileProgress: item] >= 1.0) && [torrent fileLocation: item];
 }
 
 #warning doesn't like blank addresses
@@ -1714,7 +1680,7 @@ typedef enum
 - (void) removeTrackers
 {
     const NSInteger oldCount = [fTrackers count] - [(TrackerNode *)[fTrackers lastObject] tier];
-    NSMutableArray * addresses = [NSMutableArray arrayWithCapacity: oldCount];
+    NSMutableSet * addresses = [NSMutableSet setWithCapacity: oldCount];
     
     NSIndexSet * indexes = [fTrackerTable selectedRowIndexes];
     for (NSUInteger i = [indexes firstIndex]; i != NSNotFound; i = [indexes indexGreaterThanIndex: i])
@@ -1778,6 +1744,8 @@ typedef enum
     [fTrackerTable setTrackers: fTrackers];
     [fTrackerTable reloadData];
     [fTrackerTable deselectAll: self];
+    
+    [[NSNotificationCenter defaultCenter] postNotificationName: @"UpdateUI" object: nil]; //incase sort by tracker
 }
 
 @end

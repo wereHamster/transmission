@@ -168,6 +168,8 @@ const char* tr_getDefaultDownloadDir( void );
 #define TR_PREFS_KEY_DHT_ENABLED                "dht-enabled"
 #define TR_PREFS_KEY_DOWNLOAD_DIR               "download-dir"
 #define TR_PREFS_KEY_ENCRYPTION                 "encryption"
+#define TR_PREFS_KEY_INCOMPLETE_DIR             "incomplete-dir"
+#define TR_PREFS_KEY_INCOMPLETE_DIR_ENABLED     "incomplete-dir-enabled"
 #define TR_PREFS_KEY_LAZY_BITFIELD              "lazy-bitfield-enabled"
 #define TR_PREFS_KEY_MSGLEVEL                   "message-level"
 #define TR_PREFS_KEY_OPEN_FILE_LIMIT            "open-file-limit"
@@ -190,6 +192,7 @@ const char* tr_getDefaultDownloadDir( void );
 #define TR_PREFS_KEY_PROXY_USERNAME             "proxy-auth-username"
 #define TR_PREFS_KEY_RATIO                      "ratio-limit"
 #define TR_PREFS_KEY_RATIO_ENABLED              "ratio-limit-enabled"
+#define TR_PREFS_KEY_RENAME_PARTIAL_FILES       "rename-partial-files"
 #define TR_PREFS_KEY_RPC_AUTH_REQUIRED          "rpc-authentication-required"
 #define TR_PREFS_KEY_RPC_BIND_ADDRESS           "rpc-bind-address"
 #define TR_PREFS_KEY_RPC_ENABLED                "rpc-enabled"
@@ -226,7 +229,7 @@ const char* tr_getDefaultDownloadDir( void );
  * @see tr_sessionInit()
  * @see tr_getDefaultConfigDir()
  */
-void tr_sessionGetDefaultSettings( struct tr_benc * dictionary );
+void tr_sessionGetDefaultSettings( const char * configDir, struct tr_benc * dictionary );
 
 /**
  * Add the session's current configuration settings to the benc dictionary.
@@ -300,6 +303,9 @@ tr_session * tr_sessionInit( const char     * tag,
                              tr_bool          messageQueueingEnabled,
                              struct tr_benc * settings );
 
+void tr_sessionSet( tr_session      * session,
+                    struct tr_benc  * settings );
+
 /** @brief End a libtransmission session
     @see tr_sessionInit() */
 void tr_sessionClose( tr_session * );
@@ -328,6 +334,47 @@ void tr_sessionSetDownloadDir( tr_session * session, const char * downloadDir );
  * and can be overridden on a per-torrent basis by tr_ctorSetDownloadDir().
  */
 const char * tr_sessionGetDownloadDir( const tr_session * session );
+
+/**
+ * @brief Set the per-session incomplete download folder.
+ *
+ * When you add a new torrent and the session's incomplete directory is enabled,
+ * the new torrent will start downloading into that directory, and then be moved
+ * to tr_torrent.downloadDir when the torrent is finished downloading.
+ *
+ * Torrents are not moved as a result of changing the session's incomplete dir --
+ * it's applied to new torrents, not existing ones.
+ *
+ * tr_torrentSetLocation() overrules the incomplete dir: when a user specifies
+ * a new location, that becomes the torrent's new downloadDir and the torrent
+ * is moved there immediately regardless of whether or not it's complete.
+ *
+ * @see tr_sessionInit()
+ * @see tr_sessionGetIncompleteDir()
+ * @see tr_sessionSetIncompleteDirEnabled()
+ * @see tr_sessionGetIncompleteDirEnabled()
+ */
+void tr_sessionSetIncompleteDir( tr_session * session, const char * dir );
+
+const char* tr_sessionGetIncompleteDir( const tr_session * session );
+
+void tr_sessionSetIncompleteDirEnabled( tr_session * session, tr_bool );
+
+tr_bool tr_sessionIsIncompleteDirEnabled( const tr_session * session );
+
+
+/**
+ * @brief When enabled, newly-created files will have ".part" appended
+ *        to their filename until the file is fully downloaded
+ *
+ * This is not retroactive -- toggling this will not rename existing files.
+ * It only applies to new files created by Transmission after this API call.
+ *
+ * @see tr_sessionIsIncompleteFileNamingEnabled()
+ */
+void tr_sessionSetIncompleteFileNamingEnabled( tr_session * session, tr_bool );
+
+tr_bool tr_sessionIsIncompleteFileNamingEnabled( const tr_session * session );
 
 /**
  * @brief Set whether or not RPC calls are allowed in this session.
@@ -408,6 +455,7 @@ typedef enum
     TR_RPC_TORRENT_STOPPED,
     TR_RPC_TORRENT_REMOVING,
     TR_RPC_TORRENT_CHANGED, /* catch-all for the "torrent-set" rpc method */
+    TR_RPC_TORRENT_MOVED,
     TR_RPC_SESSION_CHANGED
 }
 tr_rpc_callback_type;
@@ -833,6 +881,16 @@ void        tr_ctorSetDownloadDir( tr_ctor *    ctor,
                                    tr_ctorMode  mode,
                                    const char * directory );
 
+/**
+ * @brief Set the incompleteDir for this torrent.
+ *
+ * This is not a supported API call.
+ * It only exists so the mac client can migrate
+ * its older incompleteDir settings, and that's
+ * the only place where it should be used.
+ */
+void tr_ctorSetIncompleteDir( tr_ctor * ctor, const char * directory );
+ 
 /** Set whether or not the torrent begins downloading/seeding when created.
     (Default: not paused) */
 void        tr_ctorSetPaused( tr_ctor      * ctor,
@@ -861,6 +919,9 @@ int         tr_ctorGetPaused( const tr_ctor * ctor,
 int         tr_ctorGetDownloadDir( const tr_ctor  * ctor,
                                    tr_ctorMode      mode,
                                    const char    ** setmeDownloadDir );
+
+int         tr_ctorGetIncompleteDir( const tr_ctor  * ctor,
+                                     const char    ** setmeIncompleteDir );
 
 int         tr_ctorGetMetainfo( const tr_ctor         * ctor,
                                 const struct tr_benc ** setme );
@@ -979,6 +1040,17 @@ int tr_torrentId( const tr_torrent * torrent );
 tr_torrent* tr_torrentFindFromId( tr_session * session, int id );
 
 
+/**
+ * @brief find the location of a torrent's file by looking with and without
+ *        the ".part" suffix, looking in downloadDir and incompleteDir, etc.
+ * @return a newly-allocated string (that must be tr_freed() by the caller when done)
+ *         that gives the location of this file on disk, or NULL if no file exists yet.
+ * @param tor the torrent whose file we're looking for
+ * @param fileNum the fileIndex, in [0...tr_info.fileCount)
+ */
+char* tr_torrentFindFile( const tr_torrent * tor, tr_file_index_t fileNo );
+
+
 /***
 ****  Torrent speed limits
 ****
@@ -1073,10 +1145,10 @@ int tr_torrentGetFileDL( const tr_torrent  * torrent,
                          tr_file_index_t     file );
 
 /** @brief Set a batch of files to be downloaded or not. */
-void            tr_torrentSetFileDLs( tr_torrent       * torrent,
-                                      tr_file_index_t  * files,
-                                      tr_file_index_t    fileCount,
-                                      tr_bool            do_download );
+void tr_torrentSetFileDLs( tr_torrent       * torrent,
+                           tr_file_index_t  * files,
+                           tr_file_index_t    fileCount,
+                           tr_bool            do_download );
 
 
 const tr_info * tr_torrentInfo( const tr_torrent * torrent );
@@ -1087,6 +1159,15 @@ const tr_info * tr_torrentInfo( const tr_torrent * torrent );
 void tr_torrentSetDownloadDir( tr_torrent  * torrent, const char * path );
 
 const char * tr_torrentGetDownloadDir( const tr_torrent * torrent );
+
+/**
+ * This returns the the root directory of where the torrent is.
+ *
+ * This will usually be the downloadDir.  However if the torrent
+ * has an incompleteDir enabled and hasn't finished downloading
+ * yet, that will be returned instead.
+ */
+const char * tr_torrentGetCurrentDir( const tr_torrent * tor );
 
 /**
 ***
@@ -1101,6 +1182,15 @@ typedef struct tr_tracker_info
 }
 tr_tracker_info;
 
+
+typedef enum
+{
+  TR_ANNOUNCE_LIST_OK,
+  TR_ANNOUNCE_LIST_HAS_DUPLICATES,
+  TR_ANNOUNCE_LIST_HAS_BAD
+}
+tr_announce_list_err;
+
 /**
  * @brief Modify a torrent's tracker list.
  *
@@ -1113,9 +1203,10 @@ tr_tracker_info;
  *                 libtransmission derives `scrape' from `announce'.
  * @param trackerCount size of the `trackers' array
  */
-void tr_torrentSetAnnounceList( tr_torrent *            torrent,
-                                const tr_tracker_info * trackers,
-                                int                     trackerCount );
+tr_announce_list_err
+tr_torrentSetAnnounceList( tr_torrent             * torrent,
+                           const tr_tracker_info  * trackers,
+                           int                      trackerCount );
 
 
 /**
@@ -1230,6 +1321,25 @@ void           tr_torrentPeersFree( tr_peer_stat * peerStats,
 ****  tr_tracker_stat
 ***/
 
+typedef enum
+{
+    /* we won't (announce,scrape) this torrent to this tracker because
+     * the torrent is stopped, or because of an error, or whatever */
+    TR_TRACKER_INACTIVE,
+
+    /* we will (announce,scrape) this torrent to this tracker, and are
+     * waiting for enough time to pass to satisfy the tracker's interval */
+    TR_TRACKER_WAITING,
+
+    /* it's time to (announce,scrape) this torrent, and we're waiting on a
+     * a free slot to open up in the announce manager */
+    TR_TRACKER_QUEUED,
+
+    /* we're (announcing,scraping) this torrent right now */
+    TR_TRACKER_ACTIVE
+}
+tr_tracker_state;
+
 typedef struct
 {
     /* how many downloads this tracker knows of (-1 means it does not know) */
@@ -1241,21 +1351,21 @@ typedef struct
     /* whether or not we've ever scraped to this tracker */
     tr_bool hasScraped;
 
-    /* ex: legaltorrents.com */
+    /* ex: http://www.legaltorrents.com:7070 */
     char host[1024];
 
     /* the full announce URL */
     char announce[1024];
 
-    /* true if we're trying to use this tracker.
-       Transmission typically uses one tracker per tier. */
-    tr_bool isActive;
+    /* Transmission uses one tracker per tier,
+     * and the others are kept as backups */
+    tr_bool isBackup;
 
-    /* true if we've sent an announce and waiting for the response */
-    tr_bool isAnnouncing;
+    /* is the tracker announcing, waiting, queued, etc */
+    tr_tracker_state announceState;
 
-    /* true if we've got a scrape request pending right now */
-    tr_bool isScraping;
+    /* is the tracker scraping, waiting, queued, etc */
+    tr_tracker_state scrapeState;
 
     /* number of peers the tracker told us about last time.
      * if "lastAnnounceSucceeded" is false, this field is undefined */
@@ -1297,11 +1407,11 @@ typedef struct
     int leecherCount;
 
     /* when the next periodic announce message will be sent out.
-       if "willAnnounce" is false, this field is undefined */
+       if announceState isn't TR_TRACKER_WAITING, this field is undefined */
     time_t nextAnnounceTime;
 
     /* when the next periodic scrape message will be sent out.
-       if "willScrape" is false, this field is undefined */
+       if scrapeState isn't TR_TRACKER_WAITING, this field is undefined */
     time_t nextScrapeTime;
 
     /* number of seeders this tracker knows of (-1 means it does not know) */
@@ -1309,12 +1419,6 @@ typedef struct
 
     /* which tier this tracker is in */
     int tier;
-
-    /* true if the torrent's not announcing now, but will at nextAnnounceTime */
-    tr_bool willAnnounce;
-
-    /* true if we're not scraping now but will at nextScrapeTime */
-    tr_bool willScrape;
 }
 tr_tracker_stat;
 
@@ -1524,10 +1628,10 @@ typedef struct tr_stat
         @see tr_stat.leftUntilDone */
     float    percentDone;
 
-    /** The percentage of the actual ratio to the seed ratio.  This will be
-        equal to 1 if the ratio is reached or the torrent is set to seed forever.
-        Range is [0..1] */
-    float    percentRatio;
+    /** The percentage of the actual ratio to the seed ratio.  This will be 
+        equal to 1 if the ratio is reached or the torrent is set to seed forever. 
+        Range is [0..1] */ 
+    float    percentRatio; 
 
     /** Speed all data being sent for this torrent. (KiB/s)
         This includes piece data, protocol messages, and TCP overhead */
