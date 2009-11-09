@@ -457,10 +457,11 @@ int trashDataFile(const char * filename)
         return;
     }
     
-    int status;
+    volatile int status;
     tr_torrentSetLocation(fHandle, [folder UTF8String], YES, NULL, &status);
     
-    while (status == TR_LOC_MOVING); //block while moving (for now)
+    while (status == TR_LOC_MOVING) //block while moving (for now)
+        [NSThread sleepForTimeInterval: 0.05];
     
     if (status == TR_LOC_DONE)
         [[NSNotificationCenter defaultCenter] postNotificationName: @"UpdateStats" object: nil];
@@ -615,12 +616,10 @@ int trashDataFile(const char * filename)
     tr_tracker_info * trackerStructs = tr_new(tr_tracker_info, oldTrackerCount-1);
     
     NSInteger newCount = 0;
-    for (NSInteger oldIndex = 0; oldIndex < oldTrackerCount; ++newCount, ++oldIndex)
+    for (NSInteger oldIndex = 0; oldIndex < oldTrackerCount; ++oldIndex)
     {
         if (![trackers member: [NSString stringWithUTF8String: fInfo->trackers[oldIndex].announce]])
-            trackerStructs[newCount] = fInfo->trackers[oldIndex];
-        else
-            --newCount;
+            trackerStructs[newCount++] = fInfo->trackers[oldIndex];
     }
     
     const tr_announce_list_err result = tr_torrentSetAnnounceList(fHandle, trackerStructs, newCount);
@@ -729,6 +728,11 @@ int trashDataFile(const char * filename)
     return fStat->percentDone;
 }
 
+- (CGFloat) progressLeft
+{
+    return (CGFloat)[self sizeLeft] / [self size];
+}
+
 - (CGFloat) checkingProgress
 {
     return fStat->recheckProgress;
@@ -793,6 +797,9 @@ int trashDataFile(const char * filename)
     if (!(error = [NSString stringWithUTF8String: fStat->errorString])
         && !(error = [NSString stringWithCString: fStat->errorString encoding: NSISOLatin1StringEncoding]))
         error = [NSString stringWithFormat: @"(%@)", NSLocalizedString(@"unreadable error", "Torrent -> error string unreadable")];
+    
+    //libtransmission uses "Set Location", Mac client uses "Move data file to..." - very hacky!
+    error = [error stringByReplacingOccurrencesOfString: @"Set Location" withString: [@"Move Data File To" stringByAppendingEllipsis]];
     
     return error;
 }
@@ -955,8 +962,8 @@ int trashDataFile(const char * filename)
                 break;
 
             case TR_STATUS_CHECK:
-                string = [NSString localizedStringWithFormat: NSLocalizedString(@"Checking existing data (%.2f%%)",
-                                        "Torrent -> status string"), 100.0 * [self checkingProgress]];
+                string = [NSString localizedStringWithFormat: @"%@ (%.2f%%)",
+                            NSLocalizedString(@"Checking existing data", "Torrent -> status string"), 100.0 * [self checkingProgress]];
                 break;
 
             case TR_STATUS_DOWNLOAD:
@@ -1034,8 +1041,8 @@ int trashDataFile(const char * filename)
             break;
 
         case TR_STATUS_CHECK:
-            string = [NSString localizedStringWithFormat: NSLocalizedString(@"Checking existing data (%.2f%%)",
-                                    "Torrent -> status string"), 100.0 * [self checkingProgress]];
+            string = [NSString localizedStringWithFormat: @"%@ (%.2f%%)",
+                        NSLocalizedString(@"Checking existing data", "Torrent -> status string"), 100.0 * [self checkingProgress]];
             break;
         
         case TR_STATUS_DOWNLOAD:
@@ -1069,8 +1076,8 @@ int trashDataFile(const char * filename)
             return NSLocalizedString(@"Paused", "Torrent -> status string");
 
         case TR_STATUS_CHECK:
-            return [NSString localizedStringWithFormat: NSLocalizedString(@"Checking existing data (%.2f%%)",
-                                    "Torrent -> status string"), 100.0 * [self checkingProgress]];
+            return [NSString localizedStringWithFormat: @"%@ (%.2f%%)",
+                    NSLocalizedString(@"Checking existing data", "Torrent -> status string"), 100.0 * [self checkingProgress]];
         
         case TR_STATUS_CHECK_WAIT:
             return [NSLocalizedString(@"Waiting to check existing data", "Torrent -> status string") stringByAppendingEllipsis];
@@ -1222,6 +1229,9 @@ int trashDataFile(const char * filename)
     if ([self isComplete])
         return 1.0;
     
+    if ([self fileCount] == 1)
+        return [self progress];
+    
     if (!fFileStat)
         [self updateFileStat];
     
@@ -1245,15 +1255,20 @@ int trashDataFile(const char * filename)
 
 - (BOOL) canChangeDownloadCheckForFile: (NSInteger) index
 {
+    NSAssert2(index < [self fileCount], @"Index %d is greater than file count %d", index, [self fileCount]);
+    
+    if ([self fileCount] == 1 || [self isComplete])
+        return NO;
+    
     if (!fFileStat)
         [self updateFileStat];
     
-    return [self fileCount] > 1 && fFileStat[index].progress < 1.0;
+    return fFileStat[index].progress < 1.0;
 }
 
 - (BOOL) canChangeDownloadCheckForFiles: (NSIndexSet *) indexSet
 {
-    if ([self fileCount] <= 1 || [self isComplete])
+    if ([self fileCount] == 1 || [self isComplete])
         return NO;
     
     if (!fFileStat)
@@ -1413,7 +1428,6 @@ int trashDataFile(const char * filename)
     if (currentLocation)
     {
         [self setTimeMachineExclude: YES forPath: currentLocation];
-        [fTimeMachineExclude release];
         fTimeMachineExclude = [currentLocation retain];
     }
 }

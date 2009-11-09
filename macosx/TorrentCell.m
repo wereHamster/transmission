@@ -117,7 +117,7 @@
     
     NSRect result = bounds;
     result.origin.x += PADDING_HORIZONTAL;
-    result.origin.y += floorf((result.size.height - imageSize) * 0.5f);
+    result.origin.y += floor((result.size.height - imageSize) * 0.5);
     result.size = NSMakeSize(imageSize, imageSize);
     
     return result;
@@ -149,7 +149,7 @@
 
 - (NSRect) barRectForBounds: (NSRect) bounds
 {
-    BOOL minimal = [fDefaults boolForKey: @"SmallView"];
+    const BOOL minimal = [fDefaults boolForKey: @"SmallView"];
     
     NSRect result = bounds;
     result.size.height = BAR_HEIGHT;
@@ -161,7 +161,7 @@
     else
         result.origin.y += PADDING_BETWEEN_TITLE_AND_PROGRESS + HEIGHT_STATUS + PADDING_BETWEEN_PROGRESS_AND_BAR;
     
-    result.size.width = round(NSMaxX(bounds) - result.origin.x - PADDING_HORIZONTAL - 2.0f * (PADDING_HORIZONTAL + NORMAL_BUTTON_WIDTH));
+    result.size.width = floor(NSMaxX(bounds) - result.origin.x - PADDING_HORIZONTAL - 2.0 * (PADDING_HORIZONTAL + NORMAL_BUTTON_WIDTH));
     
     return result;
 }
@@ -244,11 +244,11 @@
     
     NSPoint point = [controlView convertPoint: [event locationInWindow] fromView: nil];
     
-    NSRect controlRect= [self controlButtonRectForBounds: cellFrame];
-    BOOL checkControl = NSMouseInRect(point, controlRect, [controlView isFlipped]);
+    const NSRect controlRect= [self controlButtonRectForBounds: cellFrame];
+    const BOOL checkControl = NSMouseInRect(point, controlRect, [controlView isFlipped]);
     
-    NSRect revealRect = [self revealButtonRectForBounds: cellFrame];
-    BOOL checkReveal = NSMouseInRect(point, revealRect, [controlView isFlipped]);
+    const NSRect revealRect = [self revealButtonRectForBounds: cellFrame];
+    const BOOL checkReveal = NSMouseInRect(point, revealRect, [controlView isFlipped]);
     
     [(TorrentTableView *)controlView removeButtonTrackingAreas];
     
@@ -258,7 +258,7 @@
         
         if (checkControl)
         {
-            BOOL inControlButton = NSMouseInRect(point, controlRect, [controlView isFlipped]);
+            const BOOL inControlButton = NSMouseInRect(point, controlRect, [controlView isFlipped]);
             if (fMouseDownControlButton != inControlButton)
             {
                 fMouseDownControlButton = inControlButton;
@@ -267,7 +267,7 @@
         }
         else if (checkReveal)
         {
-            BOOL inRevealButton = NSMouseInRect(point, revealRect, [controlView isFlipped]);
+            const BOOL inRevealButton = NSMouseInRect(point, revealRect, [controlView isFlipped]);
             if (fMouseDownRevealButton != inRevealButton)
             {
                 fMouseDownRevealButton = inRevealButton;
@@ -573,7 +573,7 @@
     if (piecesBarPercent > 0.0)
     {
         NSRect piecesBarRect, regularBarRect;
-        NSDivideRect(barRect, &piecesBarRect, &regularBarRect, floorf(NSHeight(barRect) * PIECES_TOTAL_PERCENT * piecesBarPercent),
+        NSDivideRect(barRect, &piecesBarRect, &regularBarRect, floor(NSHeight(barRect) * PIECES_TOTAL_PERCENT * piecesBarPercent),
                     NSMaxYEdge);
         
         [self drawRegularBar: regularBarRect];
@@ -595,7 +595,7 @@
     Torrent * torrent = [self representedObject];
     
     NSRect haveRect, missingRect;
-    NSDivideRect(barRect, &haveRect, &missingRect, floorf([torrent progress] * NSWidth(barRect)), NSMinXEdge);
+    NSDivideRect(barRect, &haveRect, &missingRect, round([torrent progress] * NSWidth(barRect)), NSMinXEdge);
     
     if (!NSIsEmptyRect(haveRect))
     {
@@ -606,7 +606,7 @@
             else if ([torrent isSeeding])
             {
                 NSRect ratioHaveRect, ratioRemainingRect;
-                NSDivideRect(haveRect, &ratioHaveRect, &ratioRemainingRect, floorf([torrent progressStopRatio] * NSWidth(haveRect)),
+                NSDivideRect(haveRect, &ratioHaveRect, &ratioRemainingRect, round([torrent progressStopRatio] * NSWidth(haveRect)),
                             NSMinXEdge);
                 
                 [[ProgressGradients progressGreenGradient] drawInRect: ratioHaveRect angle: 90];
@@ -629,34 +629,31 @@
         }
     }
     
-    if (!NSIsEmptyRect(missingRect))
+    if (![torrent allDownloaded])
     {
-        if (![torrent allDownloaded])
+        const CGFloat widthRemaining = round(NSWidth(barRect) * [torrent progressLeft]);
+        
+        NSRect wantedRect;
+        NSDivideRect(missingRect, &wantedRect, &missingRect, widthRemaining, NSMinXEdge);
+        
+        //not-available section
+        if ([torrent isActive] && ![torrent isChecking] && [fDefaults boolForKey: @"DisplayProgressBarAvailable"]
+            && [torrent availableDesired] < 1.0)
         {
-            //the ratio of total progress to total width equals ratio of progress of amount wanted to wanted width
-            const CGFloat widthRemaining = floorf(NSWidth(barRect) * (1.0 - [torrent progressDone]) / [torrent progress]);
+            NSRect unavailableRect;
+            NSDivideRect(wantedRect, &wantedRect, &unavailableRect, round(NSWidth(wantedRect) * [torrent availableDesired]),
+                        NSMinXEdge);
             
-            NSRect wantedRect;
-            NSDivideRect(missingRect, &wantedRect, &missingRect, widthRemaining, NSMinXEdge);
-            
-            //not-available section
-            if ([torrent isActive] && ![torrent isChecking] && [fDefaults boolForKey: @"DisplayProgressBarAvailable"]
-                && [torrent availableDesired] > 0.0)
-            {
-                NSRect unavailableRect;
-                NSDivideRect(wantedRect, &wantedRect, &unavailableRect, floorf([torrent availableDesired] * NSWidth(wantedRect)),
-                            NSMinXEdge);
-                
-                [[ProgressGradients progressRedGradient] drawInRect: unavailableRect angle: 90];
-            }
-            
-            //remaining section
-            [[ProgressGradients progressWhiteGradient] drawInRect: wantedRect angle: 90];
+            [[ProgressGradients progressRedGradient] drawInRect: unavailableRect angle: 90];
         }
         
-        //unwanted section
-        [[ProgressGradients progressLightGrayGradient] drawInRect: missingRect angle: 90];
+        //remaining section
+        [[ProgressGradients progressWhiteGradient] drawInRect: wantedRect angle: 90];
     }
+    
+    //unwanted section
+    if (!NSIsEmptyRect(missingRect))
+        [[ProgressGradients progressLightGrayGradient] drawInRect: missingRect angle: 90];
 }
 
 - (void) drawPiecesBar: (NSRect) barRect

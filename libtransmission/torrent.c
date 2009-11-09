@@ -1677,16 +1677,14 @@ tr_torrentSetFilePriorities( tr_torrent *      tor,
                              tr_priority_t     priority )
 {
     tr_file_index_t i;
-
     assert( tr_isTorrent( tor ) );
-
     tr_torrentLock( tor );
 
     for( i = 0; i < fileCount; ++i )
         tr_torrentInitFilePriority( tor, files[i], priority );
-
-    tr_peerMgrFilePrioritiesChanged( tor );
     tr_torrentSetDirty( tor );
+    tr_peerMgrRebuildRequests( tor );
+
     tr_torrentUnlock( tor );
 }
 
@@ -1827,10 +1825,12 @@ tr_torrentSetFileDLs( tr_torrent *      tor,
                       tr_bool           doDownload )
 {
     assert( tr_isTorrent( tor ) );
-
     tr_torrentLock( tor );
+
     tr_torrentInitFileDLs( tor, files, fileCount, doDownload );
     tr_torrentSetDirty( tor );
+    tr_peerMgrRebuildRequests( tor );
+
     tr_torrentUnlock( tor );
 }
 

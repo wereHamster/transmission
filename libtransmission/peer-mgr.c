@@ -85,16 +85,9 @@ enum
     MYFLAG_UNREACHABLE = 2,
 
     /* the minimum we'll wait before attempting to reconnect to a peer */
-    MINIMUM_RECONNECT_INTERVAL_SECS = 5,
-
-    /* this is how many blocks we'll try to queue up
-     * for the iterator to walk through */
-    ITERATOR_BLOCK_BUFFER_SIZE = 4096,
-
-    /* if the number of blocks in the iterator queue drops
-     * below this number, fill it up with more */
-    ITERATOR_LOW_MARK = 256
+    MINIMUM_RECONNECT_INTERVAL_SECS = 5
 };
+
 
 /**
 ***
@@ -143,21 +136,18 @@ tr_atomAddrStr( const struct peer_atom * atom )
     return tr_peerIoAddrStr( &atom->addr, atom->port );
 }
 
-struct tr_blockIteratorItem
+struct block_request
 {
     tr_block_index_t block;
-    uint8_t requestCount;
+    tr_peer * peer;
+    time_t sentAt;
 };
 
-struct tr_blockIterator
+struct weighted_piece
 {
-    tr_bool didLoop;
-    int pos;
-    int size;
-    int begin;
-    struct tr_blockIteratorItem items[ITERATOR_BLOCK_BUFFER_SIZE];
-    struct tr_torrent_peers * t;
-    tr_priority_t priority;
+    tr_piece_index_t index;
+    int16_t salt;
+    int16_t requestCount;
 };
 
 typedef struct tr_torrent_peers
@@ -171,10 +161,22 @@ typedef struct tr_torrent_peers
 
     tr_torrent               * tor;
     tr_peer                  * optimistic; /* the optimistic peer, or NULL if none */
-    struct tr_blockIterator  * refillQueue; /* used in refillPulse() */
     struct tr_peerMgr        * manager;
+    //int                      * pendingRequestCount;
 
     tr_bool                    isRunning;
+    tr_bool                    needsCompletenessCheck;
+
+    struct block_request     * requests;
+    int                        requestsSort;
+    int                        requestCount;
+    int                        requestAlloc;
+
+    struct weighted_piece    * pieces;
+    int                        piecesSort;
+    int                        pieceCount;
+
+    tr_bool                    isInEndgame;
 }
 Torrent;
 
@@ -185,6 +187,7 @@ struct tr_peerMgr
     tr_timer        * bandwidthTimer;
     tr_timer        * rechokeTimer;
     tr_timer        * reconnectTimer;
+    tr_timer        * refillUpkeepTimer;
 };
 
 #define tordbg( t, ... ) \
@@ -365,10 +368,14 @@ getPeer( Torrent * torrent, struct peer_atom * atom )
     return peer;
 }
 
+static void peerDeclinedAllRequests( Torrent *, const tr_peer * );
+
 static void
-peerDestructor( tr_peer * peer )
+peerDestructor( Torrent * t, tr_peer * peer )
 {
-    assert( peer );
+    assert( peer != NULL );
+
+    peerDeclinedAllRequests( t, peer );
 
     if( peer->msgs != NULL )
     {
@@ -399,7 +406,7 @@ removePeer( Torrent * t, tr_peer * peer )
 
     removed = tr_ptrArrayRemoveSorted( &t->peers, peer, peerCompare );
     assert( removed == peer );
-    peerDestructor( removed );
+    peerDestructor( t, removed );
 }
 
 static void
@@ -408,8 +415,6 @@ removeAllPeers( Torrent * t )
     while( !tr_ptrArrayEmpty( &t->peers ) )
         removePeer( t, tr_ptrArrayNth( &t->peers, 0 ) );
 }
-
-static void blockIteratorFree( struct tr_blockIterator ** inout );
 
 static void
 torrentDestructor( void * vt )
@@ -424,17 +429,18 @@ torrentDestructor( void * vt )
 
     evtimer_del( &t->refillTimer );
 
-    blockIteratorFree( &t->refillQueue );
     tr_ptrArrayDestruct( &t->webseeds, (PtrArrayForeachFunc)tr_webseedFree );
     tr_ptrArrayDestruct( &t->pool, (PtrArrayForeachFunc)tr_free );
     tr_ptrArrayDestruct( &t->outgoingHandshakes, NULL );
     tr_ptrArrayDestruct( &t->peers, NULL );
 
+    tr_free( t->requests );
+    tr_free( t->pieces );
     tr_free( t );
 }
 
 
-static void refillPulse( int, short, void* );
+//static void refillPulse( int, short, void* );
 
 static void peerCallbackFunc( void * vpeer,
                               void * vevent,
@@ -454,7 +460,8 @@ torrentConstructor( tr_peerMgr * manager,
     t->peers = TR_PTR_ARRAY_INIT;
     t->webseeds = TR_PTR_ARRAY_INIT;
     t->outgoingHandshakes = TR_PTR_ARRAY_INIT;
-    evtimer_set( &t->refillTimer, refillPulse, t );
+    t->requests = 0;
+    //evtimer_set( &t->refillTimer, refillPulse, t );
 
 
     for( i = 0; i < tor->info.webseedCount; ++i )
@@ -471,6 +478,7 @@ torrentConstructor( tr_peerMgr * manager,
 static int bandwidthPulse ( void * vmgr );
 static int rechokePulse   ( void * vmgr );
 static int reconnectPulse ( void * vmgr );
+static int refillUpkeep   ( void * vmgr );
 
 tr_peerMgr*
 tr_peerMgrNew( tr_session * session )
@@ -492,6 +500,9 @@ deleteTimers( struct tr_peerMgr * m )
 
     if( m->reconnectTimer )
         tr_timerFree( &m->reconnectTimer );
+
+    if( m->refillUpkeepTimer )
+        tr_timerFree( &m->refillUpkeepTimer );
 }
 
 void
@@ -542,339 +553,548 @@ tr_peerMgrPeerIsSeed( const tr_torrent  * tor,
     return isSeed;
 }
 
-/****
-*****
-*****  REFILL
-*****
-****/
+/**
+***  REQUESTS
+***
+*** There are two data structures associated with managing block requests:
+*** 
+*** 1. Torrent::requests, an array of "struct block_request" which keeps
+***    track of which blocks have been requested, and when, and by which peers.
+***    This is list is used for (a) cancelling requests that have been pending
+***    for too long and (b) avoiding duplicate requests before endgame.
+*** 
+*** 2. Torrent::pieces, an array of "struct weighted_piece" which lists the
+***    pieces that we want to request.  It's used to decide which pieces to
+***    return next when tr_peerMgrGetBlockRequests() is called.
+**/ 
 
-static struct tr_blockIterator*
-blockIteratorNew( Torrent * t )
+/**
+*** struct block_request
+**/
+
+enum
 {
-    struct tr_blockIterator * i = tr_new0( struct tr_blockIterator, 1 );
-    i->pos = 0;
-    i->size = 0;
-    i->priority = TR_PRI_HIGH;
-    i->t = t;
-    return i;
-}
+    REQ_UNSORTED,
+    REQ_SORTED_BY_BLOCK,
+    REQ_SORTED_BY_TIME
+};
 
 static int
-compareIteratorItems( const void * va, const void * vb )
+compareReqByBlock( const void * va, const void * vb )
 {
-    const struct tr_blockIteratorItem * a = va;
-    const struct tr_blockIteratorItem * b = vb;
+    const struct block_request * a = va;
+    const struct block_request * b = vb;
     if( a->block < b->block ) return -1;
     if( a->block > b->block ) return 1;
     return 0;
 }
 
-static void
-blockIteratorRefill( struct tr_blockIterator * it )
+static int
+compareReqByTime( const void * va, const void * vb )
 {
-    int pieceCount;
-    tr_piece_index_t * pieces;
-    const tr_torrent * tor = it->t->tor;
-    const tr_info * inf = tr_torrentInfo( tor );
+    const struct block_request * a = va;
+    const struct block_request * b = vb;
+    if( a->sentAt < b->sentAt ) return -1;
+    if( a->sentAt > b->sentAt ) return 1;
+    return 0;
+}
 
-    /* build a pool of the pieces we might request blocks from */
-    pieces = tr_new( tr_piece_index_t, inf->pieceCount );
-    pieceCount = 0;
+static void
+requestListSort( Torrent * t, int mode )
+{
+    assert( mode==REQ_SORTED_BY_BLOCK || mode==REQ_SORTED_BY_TIME );
+
+    if( t->requestsSort != mode )
     {
-        tr_piece_index_t i;
-        for( i=0; i<inf->pieceCount; ++i )
-            if( !inf->pieces[i].dnd )
-                if( inf->pieces[i].priority == it->priority )
-                    if( !tr_cpPieceIsComplete( &tor->completion, i ) )
-                        pieces[pieceCount++] = i;
+        int(*compar)(const void *, const void *);
+
+        t->requestsSort = mode;
+
+        switch( mode ) {
+            case REQ_SORTED_BY_BLOCK: compar = compareReqByBlock; break;
+            case REQ_SORTED_BY_TIME: compar = compareReqByTime; break;
+            default: assert( 0 && "unhandled" );
+        }
+
+//fprintf( stderr, "sorting requests by %s\n", (mode==REQ_SORTED_BY_BLOCK)?"block":"time" ); 
+        qsort( t->requests, t->requestCount,
+               sizeof( struct block_request ), compar );
+    }
+}
+
+static void
+requestListAdd( Torrent * t, tr_block_index_t block, tr_peer * peer )
+{
+    struct block_request key;
+
+    /* ensure enough room is available... */
+    if( t->requestCount + 1 >= t->requestAlloc )
+    {
+        const int CHUNK_SIZE = 128;
+        t->requestAlloc += CHUNK_SIZE;
+        t->requests = tr_renew( struct block_request,
+                                t->requests, t->requestAlloc );
     }
 
-    /* while we're short on blocks and there are still pieces left... */
-    while( ( it->size < ITERATOR_BLOCK_BUFFER_SIZE ) && ( pieceCount > 0 ) )
+    /* populate the record we're inserting */
+    key.block = block;
+    key.peer = peer;
+    key.sentAt = time( NULL );
+
+    /* insert the request to our array... */
+    switch( t->requestsSort )
     {
-        tr_block_index_t i;
-        tr_block_index_t b;
-        tr_block_index_t e;
+        case REQ_UNSORTED:
+        case REQ_SORTED_BY_TIME:
+            t->requests[t->requestCount++] = key;
+            break;
 
-        /* pull a random piece out of the pool */
-        const int poolIndex = tr_cryptoRandInt( pieceCount );
-        const tr_piece_index_t piece = pieces[poolIndex];
-        pieces[poolIndex] = pieces[--pieceCount];
-
-        /* add the piece's blocks that we don't have to our iterator */
-        b = tr_torPieceFirstBlock( tor, piece );
-        e = b + tr_torPieceCountBlocks( tor, piece );
-        for( i=b; (i!=e) && (it->size < ITERATOR_BLOCK_BUFFER_SIZE); ++i ) {
-            if( !tr_cpBlockIsCompleteFast( &tor->completion, i ) ) {
-                int pos;
-                struct tr_blockIteratorItem tmp;
-                tr_bool match;
-                tmp.block = i;
-                tmp.requestCount = 0;
-                pos = tr_lowerBound( &tmp, it->items, it->size, sizeof(struct tr_blockIteratorItem), compareIteratorItems, &match );
-                if( match )
-                    continue;
-                memmove( it->items+pos+1, it->items+pos, sizeof(struct tr_blockIteratorItem)*(it->size-pos) );
-                it->items[pos] = tmp;
-                ++it->size;
-            }
+        case REQ_SORTED_BY_BLOCK: {
+            tr_bool exact;
+            const int pos = tr_lowerBound( &key, t->requests, t->requestCount,
+                                           sizeof( struct block_request ),
+                                           compareReqByBlock, &exact );
+            assert( !exact );
+            memmove( t->requests + pos + 1,
+                     t->requests + pos,
+                     sizeof( struct block_request ) * ( t->requestCount++ - pos ) );
+            t->requests[pos] = key;
+            break;
         }
     }
+}
 
-    if( it->pos >= it->size )
-        it->pos = 0;
+static struct block_request *
+requestListLookup( Torrent * t, tr_block_index_t block )
+{
+    struct block_request key;
+    key.block = block;
 
-    /* cleanup */
-    tr_free( pieces );
+    requestListSort( t, REQ_SORTED_BY_BLOCK );
+
+    return bsearch( &key, t->requests, t->requestCount,
+                    sizeof( struct block_request ),
+                    compareReqByBlock );
 }
 
 static void
-blockIteratorRewind( struct tr_blockIterator * it )
+requestListRemove( Torrent * t, tr_block_index_t block )
 {
-    /* if we don't have any blocks in the iterator,
-     * try to regenerate a list of blocks in the current priority.
-     * if that fails, go to the next lower priority and retry. */
-    for( ;; ) {
-        if( it->size <= ITERATOR_LOW_MARK )
-            blockIteratorRefill( it );
-        if( it->size > 0 )
-            break;
-        if( it->priority == TR_PRI_LOW )
-            return;
-        --it->priority; /* try a lower priority */
-    }
-
-    it->begin = it->pos;
-    it->didLoop = FALSE;
-}
-
-static tr_bool
-blockIteratorNext( struct tr_blockIterator * it, tr_block_index_t * setme )
-{
-    static const int single_req_threshold = 100;
-    static const int double_req_threshold = 50;
-
-    while( !it->didLoop )
+    const struct block_request * b = requestListLookup( t, block );
+    if( b != NULL )
     {
-        ++it->pos;
-        it->pos %= it->size;
-        it->didLoop |= it->pos == it->begin;
+        const int pos = b - t->requests;
+        assert( pos < t->requestCount );
+        memmove( t->requests + pos,
+                 t->requests + pos + 1,
+                 sizeof( struct block_request ) * ( --t->requestCount - pos ) );
+    }
+}
 
-        if( ( it->items[it->pos].requestCount >= 1 ) && ( it->size >= single_req_threshold ) )
-            continue;
-        if( ( it->items[it->pos].requestCount >= 2 ) && ( it->size >= double_req_threshold ) )
-            continue;
+/**
+*** struct weighted_piece
+**/
 
-        *setme = it->items[it->pos].block;
-        return TRUE;
+enum
+{
+    PIECES_UNSORTED,
+    PIECES_SORTED_BY_INDEX,
+    PIECES_SORTED_BY_WEIGHT
+};
+
+const tr_torrent * weightTorrent;
+
+/* we try to create a "weight" s.t. high-priority pieces come before others,
+ * and that partially-complete pieces come before empty ones. */
+static int
+comparePieceByWeight( const void * va, const void * vb )
+{
+    const struct weighted_piece * a = va;
+    const struct weighted_piece * b = vb;
+    int ia, ib, missing, pending;
+    const tr_torrent * tor = weightTorrent;
+
+    /* primary key: weight */
+    missing = tr_cpMissingBlocksInPiece( &tor->completion, a->index );
+    pending = a->requestCount;
+    ia = missing > pending ? missing - pending : (int)(tor->blockCountInPiece + pending);
+    missing = tr_cpMissingBlocksInPiece( &tor->completion, b->index );
+    pending = b->requestCount;
+    ib = missing > pending ? missing - pending : (int)(tor->blockCountInPiece + pending);
+    if( ia < ib ) return -1;
+    if( ia > ib ) return 1;
+
+    /* secondary key: higher priorities go first */
+    ia = tor->info.pieces[a->index].priority;
+    ib = tor->info.pieces[b->index].priority;
+    if( ia > ib ) return -1;
+    if( ia < ib ) return 1;
+
+    /* tertiary key: random */
+    return a->salt - b->salt;
+}
+
+static int
+comparePieceByIndex( const void * va, const void * vb )
+{
+    const struct weighted_piece * a = va;
+    const struct weighted_piece * b = vb;
+    if( a->index < b->index ) return -1;
+    if( a->index > b->index ) return 1;
+    return 0;
+}
+
+static void
+pieceListSort( Torrent * t, int mode )
+{
+    int(*compar)(const void *, const void *);
+
+    assert( mode==PIECES_SORTED_BY_INDEX
+         || mode==PIECES_SORTED_BY_WEIGHT );
+
+    if( t->piecesSort != mode )
+    {
+//fprintf( stderr, "sort mode was %d, is now %d\n", t->piecesSort, mode );
+        t->piecesSort = mode;
+
+        switch( mode ) {
+            case PIECES_SORTED_BY_WEIGHT: compar = comparePieceByWeight; break;
+            case PIECES_SORTED_BY_INDEX: compar = comparePieceByIndex; break;
+            default: assert( 0 && "unhandled" );  break;
+        }
+
+//fprintf( stderr, "sorting pieces by %s...\n", (mode==PIECES_SORTED_BY_WEIGHT)?"weight":"index" );
+        weightTorrent = t->tor;
+        qsort( t->pieces, t->pieceCount,
+               sizeof( struct weighted_piece ), compar );
     }
 
-    return FALSE;
+    /* Also, as long as we've got the pieces sorted by weight,
+     * let's also update t.isInEndgame */
+    if( t->piecesSort == PIECES_SORTED_BY_WEIGHT )
+    {
+        tr_bool endgame = TRUE;
+
+        if( ( t->pieces != NULL ) && ( t->pieceCount > 0 ) )
+        {
+            const tr_completion * cp = &t->tor->completion;
+            const struct weighted_piece * p = t->pieces;
+            const int pending = p->requestCount;
+            const int missing = tr_cpMissingBlocksInPiece( cp, p->index );
+            endgame = pending >= missing;
+        }
+
+        t->isInEndgame = endgame;
+    }
 }
-static void
-blockIteratorInvalidate( struct tr_blockIterator * it )
+
+static struct weighted_piece *
+pieceListLookup( Torrent * t, tr_piece_index_t index )
 {
-    it->size = 0;
-    it->priority = TR_PRI_HIGH;
+    struct weighted_piece key;
+    key.index = index;
+
+    pieceListSort( t, PIECES_SORTED_BY_INDEX );
+
+    return bsearch( &key, t->pieces, t->pieceCount,
+                    sizeof( struct weighted_piece ),
+                    comparePieceByIndex );
+}
+
+static void
+pieceListRebuild( Torrent * t )
+{
+    if( !tr_torrentIsSeed( t->tor ) )
+    {
+        tr_piece_index_t i;
+        tr_piece_index_t * pool;
+        tr_piece_index_t poolCount = 0;
+        const tr_torrent * tor = t->tor;
+        const tr_info * inf = tr_torrentInfo( tor );
+        struct weighted_piece * pieces;
+        int pieceCount;
+
+        /* build the new list */
+        pool = tr_new( tr_piece_index_t, inf->pieceCount );
+        for( i=0; i<inf->pieceCount; ++i )
+            if( !inf->pieces[i].dnd )
+                if( !tr_cpPieceIsComplete( &tor->completion, i ) )
+                    pool[poolCount++] = i;
+        pieceCount = poolCount;
+        pieces = tr_new0( struct weighted_piece, pieceCount );
+        for( i=0; i<poolCount; ++i ) {
+            struct weighted_piece * piece = pieces + i;
+            piece->index = pool[i];
+            piece->requestCount = 0;
+            piece->salt = tr_cryptoWeakRandInt( 255 );
+        }
+
+        /* if we already had a list of pieces, merge it into
+         * the new list so we don't lose its requestCounts */
+        if( t->pieces != NULL )
+        {
+            struct weighted_piece * o = t->pieces;
+            struct weighted_piece * oend = o + t->pieceCount;
+            struct weighted_piece * n = pieces;
+            struct weighted_piece * nend = n + pieceCount;
+
+            pieceListSort( t, PIECES_SORTED_BY_INDEX );
+
+            while( o!=oend && n!=nend ) {
+                if( o->index < n->index )
+                    ++o;
+                else if( o->index > n->index )
+                    ++n;
+                else
+                    *n++ = *o++;
+            }
+
+            tr_free( t->pieces );
+        }
+
+        t->pieces = pieces;
+        t->pieceCount = pieceCount;
+        t->piecesSort = PIECES_SORTED_BY_INDEX;
+
+        /* cleanup */
+        tr_free( pool );
+    }
+}
+
+static void
+pieceListRemovePiece( Torrent * t, tr_piece_index_t piece )
+{
+    struct weighted_piece * p = pieceListLookup( t, piece );
+
+    if( p != NULL )
+    {
+        const int pos = p - t->pieces;
+
+        memmove( t->pieces + pos,
+                 t->pieces + pos + 1,
+                 sizeof( struct weighted_piece ) * ( --t->pieceCount - pos ) );
+
+        if( t->pieceCount == 0 )
+        {
+            tr_free( t->pieces );
+            t->pieces = NULL;
+        }
+    }
+}
+
+static void
+pieceListRemoveRequest( Torrent * t, tr_block_index_t block )
+{
+    struct weighted_piece * p;
+    const tr_piece_index_t index = tr_torBlockPiece( t->tor, block );
+
+    if(( p = pieceListLookup( t, index )))
+        if( p->requestCount > 0 )
+            --p->requestCount;
+
+    /* note: this invalidates the weighted.piece.weight field,
+     * but that's OK since the call to pieceListLookup ensured
+     * that we were sorted by index anyway.. next time we resort
+     * by weight, pieceListSort() will update the weights */
+}
+
+/**
+***
+**/
+
+void
+tr_peerMgrRebuildRequests( tr_torrent * tor )
+{
+    assert( tr_isTorrent( tor ) );
+
+    pieceListRebuild( tor->torrentPeers );
 }
 
 void
-tr_peerMgrFilePrioritiesChanged( tr_torrent * tor )
+tr_peerMgrGetNextRequests( tr_torrent           * tor,
+                           tr_peer              * peer,
+                           int                    numwant,
+                           tr_block_index_t     * setme,
+                           int                  * numgot )
 {
-    if( ( tor != NULL ) && ( tor->torrentPeers != NULL ) && ( tor->torrentPeers->refillQueue != NULL ) )
-        blockIteratorInvalidate( tor->torrentPeers->refillQueue );
-}
+    int i;
+    int got;
+    Torrent * t;
+    struct weighted_piece * pieces;
+    const tr_bitfield * have = peer->have;
 
-static void
-blockIteratorRemoveBlock( struct tr_blockIterator * it, tr_block_index_t block )
+    /* sanity clause */
+    assert( tr_isTorrent( tor ) );
+    assert( numwant > 0 );
+
+    /* walk through the pieces and find blocks that should be requested */
+    got = 0;
+    t = tor->torrentPeers;
+
+    /* prep the pieces list */
+    if( t->pieces == NULL )
+        pieceListRebuild( t );
+    pieceListSort( t, PIECES_SORTED_BY_WEIGHT );
+//if( t->isInEndgame ) fprintf( stderr, "endgame\n" );
+
+#if 0
 {
-    if( it != NULL )
+int i=0, n=MIN(10,t->pieceCount);
+fprintf( stderr, "the next pieces we want to request are " );
+for( i=0; i<n; i++ ) fprintf( stderr, "%d(weight:%d) ", (int)t->pieces[i].index, (int)t->pieces[i].weight );
+fprintf( stderr, "\n" );
+}
+#endif
+
+    pieces = t->pieces;
+    for( i=0; i<t->pieceCount && got<numwant; ++i )
     {
-        struct tr_blockIteratorItem tmp, *pos;
-        tmp.block = block;
-        pos = bsearch( &tmp, it->items, it->size, sizeof(struct tr_blockIteratorItem), compareIteratorItems );
-        if( pos != NULL )
+        struct weighted_piece * p = pieces + i;
+
+        /* if the peer has this piece that we want... */
+        if( tr_bitfieldHasFast( have, p->index ) )
         {
-            const int i = pos - it->items;
+            tr_block_index_t b = tr_torPieceFirstBlock( tor, p->index );
+            const tr_block_index_t e = b + tr_torPieceCountBlocks( tor, p->index );
 
-            assert( pos->block == block );
-            assert( i >= 0 );
-            assert( i < it->size );
-
-            --it->size;
-
-            memmove( it->items+i, it->items+i+1, sizeof(struct tr_blockIteratorItem) * (it->size-i) );
-
-            if( it->pos > i )
-                --it->pos;
-        }
-    }
-}
-
-static void
-blockIteratorFree( struct tr_blockIterator ** inout )
-{
-    tr_free( *inout );
-    *inout = NULL;
-}
-
-static tr_peer**
-getPeersUploadingToClient( Torrent * t, int * setmeCount )
-{
-    int j;
-    int peerCount = 0;
-    int retCount = 0;
-    tr_peer ** peers = (tr_peer **) tr_ptrArrayPeek( &t->peers, &peerCount );
-    tr_peer ** ret = tr_new( tr_peer *, peerCount );
-
-    j = 0; /* this is a temporary test to make sure we walk through all the peers */
-    if( peerCount )
-    {
-        /* Get a list of peers we're downloading from.
-           Pick a different starting point each time so all peers
-           get a chance at being the first in line */
-        const int fencepost = tr_cryptoWeakRandInt( peerCount );
-        int i = fencepost;
-        do {
-            if( clientIsDownloadingFrom( peers[i] ) )
-                ret[retCount++] = peers[i];
-            i = ( i + 1 ) % peerCount;
-            ++j;
-        } while( i != fencepost );
-    }
-    assert( j == peerCount );
-    *setmeCount = retCount;
-    return ret;
-}
-
-static uint32_t
-getBlockOffsetInPiece( const tr_torrent * tor, uint64_t b )
-{
-    const uint64_t piecePos = tor->info.pieceSize * tr_torBlockPiece( tor, b );
-    const uint64_t blockPos = tor->blockSize * b;
-    assert( blockPos >= piecePos );
-    return (uint32_t)( blockPos - piecePos );
-}
-
-static void
-sortPeersByLiveliness( tr_peer ** peers, void ** clientData, int n, uint64_t now );
-
-static void
-refillPulse( int fd UNUSED, short type UNUSED, void * vtorrent )
-{
-    tr_block_index_t block;
-    int peerCount;
-    int webseedCount;
-    tr_peer ** peers;
-    tr_webseed ** webseeds;
-    Torrent * t = vtorrent;
-    tr_torrent * tor = t->tor;
-    tr_bool hasNext = TRUE;
-
-    if( !t->isRunning )
-        return;
-    if( tr_torrentIsSeed( t->tor ) ) {
-        blockIteratorFree( &t->refillQueue );
-        return;
-    }
-
-    torrentLock( t );
-    tordbg( t, "Refilling Request Buffers..." );
-
-    if( t->refillQueue == NULL )
-        t->refillQueue = blockIteratorNew( t );
-
-    peers = getPeersUploadingToClient( t, &peerCount );
-    sortPeersByLiveliness( peers, NULL, peerCount, tr_date( ) );
-    webseedCount = tr_ptrArraySize( &t->webseeds );
-    webseeds = tr_memdup( tr_ptrArrayBase( &t->webseeds ),
-                          webseedCount * sizeof( tr_webseed* ) );
-
-    blockIteratorRewind( t->refillQueue );
-
-    while( ( webseedCount || peerCount )
-        && (( hasNext = blockIteratorNext( t->refillQueue, &block ))) )
-    {
-        int j;
-        tr_bool handled = FALSE;
-
-        const tr_piece_index_t index = tr_torBlockPiece( tor, block );
-        const uint32_t offset = getBlockOffsetInPiece( tor, block );
-        const uint32_t length = tr_torBlockCountBytes( tor, block );
-
-        assert( block < tor->blockCount );
-
-        /* find a peer who can ask for this block */
-        for( j=0; !handled && j<peerCount; )
-        {
-            const tr_addreq_t val = tr_peerMsgsAddRequest( peers[j]->msgs, index, offset, length );
-            switch( val )
+            for( ; b!=e && got<numwant; ++b )
             {
-                case TR_ADDREQ_FULL:
-                case TR_ADDREQ_CLIENT_CHOKED:
-                    peers[j] = peers[--peerCount];
-                    break;
+                struct block_request * breq;
 
-                case TR_ADDREQ_MISSING:
-                case TR_ADDREQ_DUPLICATE:
-                    ++j;
-                    break;
+                /* don't request blocks we've already got */
+                if( tr_cpBlockIsCompleteFast( &tor->completion, b ) )
+                    continue;
 
-                case TR_ADDREQ_OK:
-                    ++t->refillQueue->items[t->refillQueue->pos].requestCount;
-                    handled = TRUE;
-                    break;
+                /* don't request blocks we've already requested (FIXME) */
+                breq = requestListLookup( t, b );
+                if( breq != NULL ) {
+                    assert( breq->peer != NULL );
+                    if( breq->peer == peer ) continue;
+                    if( !t->isInEndgame ) continue;
+                }
 
-                default:
-                    assert( 0 && "unhandled value" );
-                    break;
-            }
-        }
+                setme[got++] = b;
+//fprintf( stderr, "peer %p is requesting block %"PRIu64"\n", peer, b );
 
-        /* maybe one of the webseeds can do it */
-        for( j=0; !handled && j<webseedCount; )
-        {
-            const tr_addreq_t val = tr_webseedAddRequest( webseeds[j], index, offset, length );
-            switch( val )
-            {
-                case TR_ADDREQ_FULL:
-                    webseeds[j] = webseeds[--webseedCount];
-                    break;
-
-                case TR_ADDREQ_OK:
-                    handled = TRUE;
-                    break;
-
-                default:
-                    assert( 0 && "unhandled value" );
-                    break;
+                /* update our own tables */
+                if( breq == NULL )
+                    requestListAdd( t, b, peer );
+                ++p->requestCount;
             }
         }
     }
 
-    /* cleanup */
-    tr_free( webseeds );
-    tr_free( peers );
+    /* We almost always change only a handful of pieces in the array.
+     * In these cases, it's cheaper to sort those changed pieces and merge,
+     * than qsort()ing the whole array again */
+    if( got > 0 )
+    {
+        struct weighted_piece * p;
+        struct weighted_piece * pieces;
+        struct weighted_piece * a = t->pieces;
+        struct weighted_piece * a_end = t->pieces + i;
+        struct weighted_piece * b = a_end;
+        struct weighted_piece * b_end = t->pieces + t->pieceCount;
 
-    torrentUnlock( t );
+        /* rescore the pieces that we changed */
+        weightTorrent = t->tor;
+//fprintf( stderr, "sorting %d changed pieces...\n", (int)(a_end-a) );
+        qsort( a, a_end-a, sizeof( struct weighted_piece ), comparePieceByWeight );
+
+        /* allocate a new array */
+        p = pieces = tr_new( struct weighted_piece, t->pieceCount );
+
+        /* merge the two sorted arrays into this new array */
+        weightTorrent = t->tor;
+        while( a!=a_end && b!=b_end )
+            *p++ = comparePieceByWeight( a, b ) < 0 ? *a++ : *b++;
+        while( a!=a_end ) *p++ = *a++;
+        while( b!=b_end ) *p++ = *b++;
+
+#if 0
+        /* make sure we did it right */
+        assert( p - pieces == t->pieceCount );
+        for( it=pieces; it+1<p; ++it )
+            assert( it->weight <= it[1].weight );
+#endif
+
+        /* update */
+        tr_free( t->pieces );
+        t->pieces = pieces;
+    }
+
+    //fprintf( stderr, "peer %p wanted %d requests; got %d\n", peer, numwant, got );
+    *numgot = got;
 }
 
-static void
-broadcastGotBlock( Torrent * t, uint32_t index, uint32_t offset, uint32_t length )
+tr_bool
+tr_peerMgrDidPeerRequest( const tr_torrent  * tor,
+                          const tr_peer     * peer,
+                          tr_block_index_t    block )
 {
-    size_t i;
-    size_t peerCount;
-    tr_peer ** peers;
+    const Torrent * t = tor->torrentPeers;
+    const struct block_request * b = requestListLookup( (Torrent*)t, block );
+    if( b == NULL ) return FALSE;
+    if( b->peer == peer ) return TRUE;
+    if( t->isInEndgame ) return TRUE;
+    return FALSE;
+}
 
-    assert( torrentIsLocked( t ) );
+/* cancel requests that are too old */
+static int
+refillUpkeep( void * vmgr )
+{
+    time_t now;
+    time_t too_old;
+    tr_torrent * tor;
+    tr_peerMgr * mgr = vmgr;
+    managerLock( mgr );
 
-    tordbg( t, "got a block; cancelling any duplicate requests from peers %"PRIu32":%"PRIu32"->%"PRIu32, index, offset, length );
+    now = time( NULL );
+    too_old = now - REQUEST_TTL_SECS;
 
-    peerCount = tr_ptrArraySize( &t->peers );
-    peers = (tr_peer**) tr_ptrArrayBase( &t->peers );
-    for( i=0; i<peerCount; ++i )
-        if( peers[i]->msgs )
-            tr_peerMsgsCancel( peers[i]->msgs, index, offset, length );
+    tor = NULL;
+    while(( tor = tr_torrentNext( mgr->session, tor )))
+    {
+        Torrent * t = tor->torrentPeers;
+        const int n = t->requestCount;
+        if( n > 0 )
+        {
+            int keepCount = 0;
+            int cancelCount = 0;
+            struct block_request * keep = tr_new( struct block_request, n );
+            struct block_request * cancel = tr_new( struct block_request, n );
+            const struct block_request * it;
+            const struct block_request * end;
+
+            for( it=t->requests, end=it+n; it!=end; ++it )
+                if( it->sentAt <= too_old )
+                    cancel[cancelCount++] = *it;
+                else
+                    keep[keepCount++] = *it;
+
+            /* prune out the ones we aren't keeping */
+            tr_free( t->requests );
+            t->requests = keep;
+            t->requestCount = keepCount;
+            t->requestAlloc = n;
+
+            /* send cancel messages for all the "cancel" ones */
+            for( it=cancel, end=it+cancelCount; it!=end; ++it )
+                if( ( it->peer != NULL ) && ( it->peer->msgs != NULL ) )
+                    tr_peerMsgsCancel( it->peer->msgs, it->block );
+
+            /* decrement the pending request counts for the timed-out blocks */
+            for( it=cancel, end=it+cancelCount; it!=end; ++it )
+                pieceListRemoveRequest( t, it->block );
+
+            /* cleanup loop */
+            tr_free( cancel );
+        }
+    }
+
+    managerUnlock( mgr );
+    return TRUE;
 }
 
 static void
@@ -893,21 +1113,13 @@ addStrike( Torrent * t, tr_peer * peer )
 }
 
 static void
-gotBadPiece( Torrent *        t,
-             tr_piece_index_t pieceIndex )
+gotBadPiece( Torrent * t, tr_piece_index_t pieceIndex )
 {
     tr_torrent *   tor = t->tor;
     const uint32_t byteCount = tr_torPieceCountBytes( tor, pieceIndex );
 
     tor->corruptCur += byteCount;
     tor->downloadedCur -= MIN( tor->downloadedCur, byteCount );
-}
-
-static void
-refillSoon( Torrent * t )
-{
-    if( !evtimer_pending( &t->refillTimer, NULL ) )
-        tr_timerAdd( &t->refillTimer, 0, REFILL_PERIOD_MSEC );
 }
 
 static void
@@ -959,6 +1171,43 @@ peerSuggestedPiece( Torrent            * t UNUSED,
 }
 
 static void
+decrementDownloadedCount( tr_torrent * tor, uint32_t byteCount )
+{
+    tor->downloadedCur -= MIN( tor->downloadedCur, byteCount );
+}
+
+static void
+clientGotUnwantedBlock( tr_torrent * tor, tr_block_index_t block )
+{
+    decrementDownloadedCount( tor, tr_torBlockCountBytes( tor, block ) );
+}
+
+static void
+removeRequestFromTables( Torrent * t, tr_block_index_t block )
+{
+    requestListRemove( t, block );
+    pieceListRemoveRequest( t, block );
+}
+
+/* peer choked us, or maybe it disconnected.
+   either way we need to remove all its requests */
+static void
+peerDeclinedAllRequests( Torrent * t, const tr_peer * peer )
+{
+    int i, n;
+    tr_block_index_t * blocks = tr_new( tr_block_index_t, t->requestCount );
+
+    for( i=n=0; i<t->requestCount; ++i )
+        if( peer == t->requests[i].peer )
+            blocks[n++] = t->requests[i].block;
+
+    for( i=0; i<n; ++i )
+        removeRequestFromTables( t, blocks[i] );
+
+    tr_free( blocks );
+}
+
+static void
 peerCallbackFunc( void * vpeer, void * vevent, void * vt )
 {
     tr_peer * peer = vpeer; /* may be NULL if peer is a webseed */
@@ -980,14 +1229,6 @@ peerCallbackFunc( void * vpeer, void * vevent, void * vt )
                     peer->atom->flags &= ~ADDED_F_SEED_FLAG;
                 }
             }
-            break;
-
-        case TR_PEER_NEED_REQ:
-            refillSoon( t );
-            break;
-
-        case TR_PEER_CANCEL:
-            blockIteratorRemoveBlock( t->refillQueue, _tr_block( t->tor, e->pieceIndex, e->offset ) );
             break;
 
         case TR_PEER_PEER_GOT_DATA:
@@ -1014,6 +1255,14 @@ peerCallbackFunc( void * vpeer, void * vevent, void * vt )
 
             break;
         }
+
+        case TR_PEER_CLIENT_GOT_REJ:
+            removeRequestFromTables( t, _tr_block( t->tor, e->pieceIndex, e->offset ) );
+            break;
+
+        case TR_PEER_CLIENT_GOT_CHOKE:
+            peerDeclinedAllRequests( t, peer );
+            break;
 
         case TR_PEER_CLIENT_GOT_PORT:
             if( peer )
@@ -1076,53 +1325,67 @@ peerCallbackFunc( void * vpeer, void * vevent, void * vt )
         case TR_PEER_CLIENT_GOT_BLOCK:
         {
             tr_torrent * tor = t->tor;
-
             tr_block_index_t block = _tr_block( tor, e->pieceIndex, e->offset );
+//static int numBlocks = 0;
+//fprintf( stderr, "got a total of %d blocks\n", ++numBlocks );
 
-            tr_cpBlockAdd( &tor->completion, block );
-            tr_torrentSetDirty( tor );
-            blockIteratorRemoveBlock( t->refillQueue, block );
+            requestListRemove( t, block );
+            pieceListRemoveRequest( t, block );
 
-            broadcastGotBlock( t, e->pieceIndex, e->offset, e->length );
-
-            if( tr_cpPieceIsComplete( &tor->completion, e->pieceIndex ) )
+            if( tr_cpBlockIsComplete( &tor->completion, block ) )
             {
-                const tr_piece_index_t p = e->pieceIndex;
-                const tr_bool ok = tr_ioTestPiece( tor, p, NULL, 0 );
+                tordbg( t, "we have this block already..." );
+                clientGotUnwantedBlock( tor, block );
+            }
+            else
+            {
+                tr_cpBlockAdd( &tor->completion, block );
+                tr_torrentSetDirty( tor );
 
-                if( !ok )
+                if( tr_cpPieceIsComplete( &tor->completion, e->pieceIndex ) )
                 {
-                    tr_torerr( tor, _( "Piece %lu, which was just downloaded, failed its checksum test" ),
-                               (unsigned long)p );
-                }
+                    const tr_piece_index_t p = e->pieceIndex;
+                    const tr_bool ok = tr_ioTestPiece( tor, p, NULL, 0 );
+//fprintf( stderr, "we now have piece #%d\n", (int)p );
 
-                tr_torrentSetHasPiece( tor, p, ok );
-                tr_torrentSetPieceChecked( tor, p, TRUE );
-                tr_peerMgrSetBlame( tor, p, ok );
+                    if( !ok )
+                    {
+                        tr_torerr( tor, _( "Piece %lu, which was just downloaded, failed its checksum test" ),
+                                   (unsigned long)p );
+                    }
 
-                if( !ok )
-                {
-                    gotBadPiece( t, p );
-                }
-                else
-                {
-                    int i;
-                    int peerCount;
-                    tr_peer ** peers;
-                    tr_file_index_t fileIndex;
+                    tr_torrentSetHasPiece( tor, p, ok );
+                    tr_torrentSetPieceChecked( tor, p, TRUE );
+                    tr_peerMgrSetBlame( tor, p, ok );
 
-                    peerCount = tr_ptrArraySize( &t->peers );
-                    peers = (tr_peer**) tr_ptrArrayBase( &t->peers );
-                    for( i=0; i<peerCount; ++i )
-                        tr_peerMsgsHave( peers[i]->msgs, p );
+                    if( !ok )
+                    {
+                        gotBadPiece( t, p );
+                    }
+                    else
+                    {
+                        int i;
+                        int peerCount;
+                        tr_peer ** peers;
+                        tr_file_index_t fileIndex;
 
-                    for( fileIndex=0; fileIndex<tor->info.fileCount; ++fileIndex ) {
-                        const tr_file * file = &tor->info.files[fileIndex];
-                        if( ( file->firstPiece <= p ) && ( p <= file->lastPiece ) )
-                            if( tr_cpFileIsComplete( &tor->completion, fileIndex ) )
-                                tr_torrentFileCompleted( tor, fileIndex );
+                        peerCount = tr_ptrArraySize( &t->peers );
+                        peers = (tr_peer**) tr_ptrArrayBase( &t->peers );
+                        for( i=0; i<peerCount; ++i )
+                            tr_peerMsgsHave( peers[i]->msgs, p );
+
+                        for( fileIndex=0; fileIndex<tor->info.fileCount; ++fileIndex ) {
+                            const tr_file * file = &tor->info.files[fileIndex];
+                            if( ( file->firstPiece <= p ) && ( p <= file->lastPiece ) )
+                                if( tr_cpFileIsComplete( &tor->completion, fileIndex ) )
+                                    tr_torrentFileCompleted( tor, fileIndex );
+                        }
+
+                        pieceListRemovePiece( t, p );
                     }
                 }
+
+                t->needsCompletenessCheck = TRUE;
             }
             break;
         }
@@ -1568,6 +1831,9 @@ ensureMgrTimersExist( struct tr_peerMgr * m )
 
     if( m->reconnectTimer == NULL )
         m->reconnectTimer = tr_timerNew( s, reconnectPulse, m, RECONNECT_PERIOD_MSEC );
+
+    if( m->refillUpkeepTimer == NULL )
+        m->refillUpkeepTimer = tr_timerNew( s, refillUpkeep, m, REFILL_UPKEEP_PERIOD_MSEC );
 }
 
 void
@@ -1579,13 +1845,7 @@ tr_peerMgrStartTorrent( tr_torrent * tor )
     managerLock( t->manager );
     ensureMgrTimersExist( t->manager );
 
-    if( !t->isRunning )
-    {
-        t->isRunning = TRUE;
-
-        if( !tr_ptrArrayEmpty( &t->webseeds ) )
-            refillSoon( t );
-    }
+    t->isRunning = TRUE;
 
     rechokePulse( t->manager );
     managerUnlock( t->manager );
@@ -1594,12 +1854,15 @@ tr_peerMgrStartTorrent( tr_torrent * tor )
 static void
 stopTorrent( Torrent * t )
 {
+    int i, n;
+
     assert( torrentIsLocked( t ) );
 
     t->isRunning = FALSE;
 
     /* disconnect the peers. */
-    tr_ptrArrayForeach( &t->peers, (PtrArrayForeachFunc)peerDestructor );
+    for( i=0, n=tr_ptrArraySize( &t->peers ); i<n; ++i )
+        peerDestructor( t, tr_ptrArrayNth( &t->peers, i ) );
     tr_ptrArrayClear( &t->peers );
 
     /* disconnect the handshakes.  handshakeAbort calls handshakeDoneCB(),
@@ -2620,6 +2883,15 @@ bandwidthPulse( void * vmgr )
         if( tor->needsSeedRatioCheck ) {
             tor->needsSeedRatioCheck = FALSE;
             tr_torrentCheckSeedRatio( tor );
+        }
+    }
+
+    /* run the completeness check for any torrents that need it */
+    tor = NULL;
+    while(( tor = tr_torrentNext( mgr->session, tor ))) {
+        if( tor->torrentPeers->needsCompletenessCheck ) {
+            tor->torrentPeers->needsCompletenessCheck  = FALSE;
+            tr_torrentRecheckCompleteness( tor );
         }
     }
 
