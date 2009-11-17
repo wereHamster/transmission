@@ -146,18 +146,6 @@ decodeBitCometClient( char * buf, size_t buflen, const uint8_t * id )
     return TRUE;
 }
 
-static int
-decodeBitSpiritClient( char * buf, size_t buflen, const uint8_t * id )
-{
-    const int isBS = !memcmp( id+2, "BS", 2 );
-    if( isBS )
-    {
-        const int version = id[1] ? id[1] : 1;
-        tr_snprintf( buf, buflen, "BitSpirit v%d", version );
-    }
-    return isBS;
-}
-
 void
 tr_clientForId( char * buf, size_t buflen, const void * id_in )
 {
@@ -312,8 +300,6 @@ tr_clientForId( char * buf, size_t buflen, const void * id_in )
 
     if( decodeBitCometClient( buf, buflen, id ) )
         return;
-    if( decodeBitSpiritClient( buf, buflen, id ) )
-        return;
 
     /* Clients with no version */
          if( !memcmp( id, "AZ2500BT", 8 ) )  no_version( buf, buflen, "BitTyrant (Azureus Mod)" );
@@ -369,7 +355,11 @@ tr_clientForId( char * buf, size_t buflen, const void * id_in )
     {
         tr_snprintf( buf, buflen, "Blizzard Downloader %d.%d", id[3]+1, id[4] );
     }
-    else if( '\0' == id[0] && !memcmp( &id[1], "BS", 2 ) )
+    else if( !memcmp( id, "-SP", 3 ) )
+    {
+        three_digits( buf, buflen, "BitSpirit", id+3 );
+    }
+    else if( '\0' == id[0] && !memcmp( id+2, "BS", 2 ) )
     {
         tr_snprintf( buf, buflen, "BitSpirit %u", ( id[1] == 0 ? 1 : id[1] ) );
     }

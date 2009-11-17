@@ -20,6 +20,13 @@ RPC._DownloadDir            = 'download-dir';
 RPC._PeerPort               = 'peer-port';
 RPC._UpSpeedLimited         = 'speed-limit-up-enabled';
 RPC._DownSpeedLimited       = 'speed-limit-down-enabled';
+RPC._TurtleState            = 'alt-speed-enabled';
+RPC._TurtleUpSpeedLimit     = 'alt-speed-up';
+RPC._TurtleDownSpeedLimit   = 'alt-speed-down';
+RPC._TurtleTimeEnabled      = 'alt-speed-time-enabled';
+RPC._TurtleTimeBegin        = 'alt-speed-time-begin';
+RPC._TurtleTimeEnd          = 'alt-speed-time-end';
+RPC._TurtleTimeDay          = 'alt-speed-time-day';
 
 function TransmissionRemote( controller )
 {
@@ -66,6 +73,7 @@ TransmissionRemote.prototype =
 			null,
 			'Dismiss');
 		remote._controller.togglePeriodicRefresh(false);
+		remote._controller.togglePeriodicSessionRefresh(false);
 	},
 
 	appendSessionId: function(XHR) {

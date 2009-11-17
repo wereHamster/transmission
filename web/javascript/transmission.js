@@ -52,6 +52,10 @@ Transmission.prototype =
 		$('#open_link').bind('click', function(e){ tr.openTorrentClicked(e); });
 		$('#upload_confirm_button').bind('click', function(e){ tr.confirmUploadClicked(e); return false;});
 		$('#upload_cancel_button').bind('click', function(e){ tr.cancelUploadClicked(e); return false; });
+		$('#turtle_button').bind('click', function(e){ tr.toggleTurtleClicked(e); return false; });
+		$('#prefs_tab_general_tab').click(function(e){ changeTab(this, 'prefs_tab_general') });
+		$('#prefs_tab_speed_tab').click(function(e){ changeTab(this, 'prefs_tab_speed') });
+
 		if (iPhone) {
 			$('#inspector_close').bind('click', function(e){ tr.hideInspector(); });
 			$('#preferences_link').bind('click', function(e){ tr.releaseClutchPreferencesButton(e); });
@@ -65,6 +69,7 @@ Transmission.prototype =
 			this.createContextMenu();
 			this.createSettingsMenu();
 		}
+		this.initTurtleDropDowns();
 
 		this._torrent_list             = $('#torrent_list')[0];
 		this._inspector_file_list      = $('#inspector_file_list')[0];
@@ -116,6 +121,7 @@ Transmission.prototype =
 		this.initializeAllTorrents();
 
 		this.togglePeriodicRefresh( true );
+		this.togglePeriodicSessionRefresh( true );
 	},
 
 	loadDaemonPrefs: function( async ){
@@ -308,6 +314,19 @@ Transmission.prototype =
 		$('#unlimited_upload_rate').selectMenuItem();
 	},
 
+
+	initTurtleDropDowns: function() {
+		var i, out, hour, mins;
+		// Build the list of times
+		out = "";
+		for (i = 0; i < 24 * 4; i++) {
+			hour = parseInt(i / 4);
+			mins = ((i % 4) * 15);
+			out += "<option value='" + (i * 15) + "'>" + hour + ":" + (mins == 0 ? "00" : mins) + "</option>";
+		}
+		setInnerHTML( $('#turtle_start_time')[0], out );
+		setInnerHTML( $('#turtle_end_time')[0], out );
+	},
 
 	/*--------------------------------------------
 	 *
@@ -604,15 +623,22 @@ Transmission.prototype =
 		
 		// pass the new prefs upstream to the RPC server
 		var o = { };
-		o[RPC._PeerPort]         = parseInt( $('#prefs_form #port')[0].value );
-		o[RPC._UpSpeedLimit]     = parseInt( $('#prefs_form #upload_rate')[0].value );
-		o[RPC._DownSpeedLimit]   = parseInt( $('#prefs_form #download_rate')[0].value );
-		o[RPC._DownloadDir]      = $('#prefs_form #download_location')[0].value;
-		o[RPC._UpSpeedLimited]   = $('#prefs_form #limit_upload')[0].checked;
-		o[RPC._DownSpeedLimited] = $('#prefs_form #limit_download')[0].checked;
-		o[RPC._Encryption]       = $('#prefs_form #encryption')[0].checked
-		                               ? RPC._EncryptionRequired
-		                               : RPC._EncryptionPreferred;
+		o[RPC._PeerPort]             = parseInt( $('#prefs_form #port')[0].value );
+		o[RPC._UpSpeedLimit]         = parseInt( $('#prefs_form #upload_rate')[0].value );
+		o[RPC._DownSpeedLimit]       = parseInt( $('#prefs_form #download_rate')[0].value );
+		o[RPC._DownloadDir]          = $('#prefs_form #download_location')[0].value;
+		o[RPC._UpSpeedLimited]       = $('#prefs_form #limit_upload')[0].checked;
+		o[RPC._DownSpeedLimited]     = $('#prefs_form #limit_download')[0].checked;
+		o[RPC._Encryption]           = $('#prefs_form #encryption')[0].checked
+		                                   ? RPC._EncryptionRequired
+		                                   : RPC._EncryptionPreferred;
+		o[RPC._TurtleDownSpeedLimit] = parseInt( $('#prefs_form #turtle_download_rate')[0].value );
+		o[RPC._TurtleUpSpeedLimit]   = parseInt( $('#prefs_form #turtle_upload_rate')[0].value );
+		o[RPC._TurtleTimeEnabled]    = $('#prefs_form #turtle_schedule')[0].checked;
+		o[RPC._TurtleTimeBegin]      = parseInt( $('#prefs_form #turtle_start_time').val() );
+		o[RPC._TurtleTimeEnd]        = parseInt( $('#prefs_form #turtle_end_time').val() );
+		o[RPC._TurtleTimeDay]        = parseInt( $('#prefs_form #turtle_days').val() );
+
 		tr.remote.savePrefs( o );
 		
 		tr.hidePrefsDialog( );
@@ -714,7 +740,7 @@ Transmission.prototype =
 	},
 
 	/*
-	 * Turn the periodic ajax-refresh on & off
+	 * Turn the periodic ajax torrents refresh on & off
 	 */
 	togglePeriodicRefresh: function(state) {
 		var tr = this;
@@ -727,6 +753,44 @@ Transmission.prototype =
 		} else {
 			clearInterval(this._periodic_refresh);
 			this._periodic_refresh = null;
+		}
+	},
+
+	/*
+	 * Turn the periodic ajax session refresh on & off
+	 */
+	togglePeriodicSessionRefresh: function(state) {
+		var tr = this;
+		if (state && this._periodic_session_refresh == null) {
+			// sanity check
+			if( !this[Prefs._SessionRefreshRate] )
+			     this[Prefs._SessionRefreshRate] = 5;
+			remote = this.remote;
+			this._periodic_session_refresh = setInterval(
+				function(){ tr.loadDaemonPrefs(); }, this[Prefs._SessionRefreshRate] * 1000
+			);
+		} else {
+			clearInterval(this._periodic_session_refresh);
+			this._periodic_session_refresh = null;
+		}
+	},
+
+	toggleTurtleClicked: function() {
+		// Toggle the value
+		this[Prefs._TurtleState] = !this[Prefs._TurtleState];
+		// Store the result
+		var args = { };
+		args[RPC._TurtleState] = this[Prefs._TurtleState];
+		this.remote.savePrefs( args );
+	},
+
+	updateTurtleButton: function() {
+		if ( this[Prefs._TurtleState] ) {
+			$('#turtle_button').addClass('turtleEnabled');
+			$('#turtle_button').removeClass('turtleDisabled');
+		} else {
+			$('#turtle_button').removeClass('turtleEnabled');
+			$('#turtle_button').addClass('turtleDisabled');
 		}
 	},
 
@@ -743,6 +807,7 @@ Transmission.prototype =
 		if( Safari3 )
 			setTimeout("$('div#prefs_container div.dialog_window').css('top', '0px');",10);
 		this.updateButtonStates( );
+		this.togglePeriodicSessionRefresh(false);
 	},
 
 	hidePrefsDialog: function( )
@@ -758,6 +823,7 @@ Transmission.prototype =
 			$('#prefs_container').hide();
 		}
 		this.updateButtonStates( );
+		this.togglePeriodicSessionRefresh(true);
 	},
 
 	/*
@@ -782,6 +848,12 @@ Transmission.prototype =
 		$('input#upload_rate')[0].value           = up_limit;
 		$('input#refresh_rate')[0].value          = prefs[Prefs._RefreshRate];
 		$('div.encryption input')[0].checked      = prefs[RPC._Encryption] == RPC._EncryptionRequired;
+		$('input#turtle_download_rate')[0].value  = prefs[RPC._TurtleDownSpeedLimit];
+		$('input#turtle_upload_rate')[0].value    = prefs[RPC._TurtleUpSpeedLimit];
+		$('input#turtle_schedule')[0].checked     = prefs[RPC._TurtleTimeEnabled];
+		$('select#turtle_start_time').val(          prefs[RPC._TurtleTimeBegin] );
+		$('select#turtle_end_time').val(            prefs[RPC._TurtleTimeEnd] );
+		$('select#turtle_days').val(                prefs[RPC._TurtleTimeDay] );
 
 		if (!iPhone)
 		{
@@ -795,6 +867,9 @@ Transmission.prototype =
 			                 : '#unlimited_upload_rate';
 			$(key).deselectMenuSiblings().selectMenuItem();
 		}
+
+		this[Prefs._TurtleState] = prefs[RPC._TurtleState];
+		this.updateTurtleButton();
 	},
 
 	setSearch: function( search ) {

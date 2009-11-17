@@ -172,6 +172,8 @@ struct tr_peermsgs
     int             activeRequestCount;
     int             desiredRequestCount;
 
+    int             prefetchCount;
+
     /* how long the outMessages batch should be allowed to grow before
      * it's flushed -- some messages (like requests >:) should be sent
      * very quickly; others aren't as urgent. */
@@ -197,7 +199,7 @@ struct tr_peermsgs
 
     struct peer_request    peerAskedFor[REQQ];
     int                    peerAskedForCount;
-    
+ 
     tr_pex               * pex;
     tr_pex               * pex6;
 
@@ -807,28 +809,6 @@ tr_peerMsgsCancel( tr_peermsgs * msgs, tr_block_index_t block )
 ***
 **/
 
-/* Return our global IPv6 address, with caching. */
-
-static const unsigned char *
-globalIPv6( void )
-{
-    static unsigned char ipv6[16];
-    static time_t last_time = 0;
-    static int have_ipv6 = 0;
-    const time_t now = time( NULL );
-
-    /* Re-check every half hour */
-    if( last_time < now - 1800 )
-    {
-        int addrlen = 16;
-        const int rc = tr_globalAddress( AF_INET6, ipv6, &addrlen );
-        have_ipv6 = ( rc >= 0 ) && ( addrlen == 16 );
-        last_time = now;
-    }
-
-    return have_ipv6 ? ipv6 : NULL;
-}
-
 static void
 sendLtepHandshake( tr_peermsgs * msgs )
 {
@@ -837,7 +817,7 @@ sendLtepHandshake( tr_peermsgs * msgs )
     int len;
     int pex;
     struct evbuffer * out = msgs->outMessages;
-    const unsigned char * ipv6 = globalIPv6();
+    const unsigned char * ipv6 = tr_globalIPv6();
 
     if( msgs->clientSentLtepHandshake )
         return;
@@ -858,7 +838,7 @@ sendLtepHandshake( tr_peermsgs * msgs )
     if( ipv6 )
         tr_bencDictAddRaw( &val, "ipv6", ipv6, 16 );
     tr_bencDictAddInt( &val, "p", tr_sessionGetPeerPort( getSession(msgs) ) );
-    tr_bencDictAddInt( &val, "reqq", REQQ ); 
+    tr_bencDictAddInt( &val, "reqq", REQQ );
     tr_bencDictAddInt( &val, "upload_only", tr_torrentIsSeed( msgs->torrent ) );
     tr_bencDictAddStr( &val, "v", TR_NAME " " USERAGENT_PREFIX );
     m  = tr_bencDictAddDict( &val, "m", 1 );
@@ -1578,7 +1558,7 @@ updateDesiredRequestCount( tr_peermsgs * msgs, uint64_t now )
         int estimatedBlocksInPeriod;
         double rate;
         const int floor = 16;
-        const int seconds = REQUEST_BUF_SECS; 
+        const int seconds = REQUEST_BUF_SECS;
 
         /* Get the rate limit we should use.
          * FIXME: this needs to consider all the other peers as well... */
@@ -1616,7 +1596,7 @@ updateRequests( tr_peermsgs * msgs )
         int n;
         tr_block_index_t * blocks = tr_new( tr_block_index_t, numwant );
 
-        tr_peerMgrGetNextRequests( msgs->torrent, msgs->peer, numwant, blocks, &n ); 
+        tr_peerMgrGetNextRequests( msgs->torrent, msgs->peer, numwant, blocks, &n );
 
         for( i=0; i<n; ++i )
         {
@@ -1628,6 +1608,31 @@ updateRequests( tr_peermsgs * msgs )
         msgs->activeRequestCount += n;
 
         tr_free( blocks );
+    }
+}
+
+static void
+prefetchPieces( tr_peermsgs *msgs )
+{
+    int i;
+    uint64_t next = 0;
+
+    /* Maintain at least 8 prefetched blocks per unchoked peer, but allow
+       up to 4 extra blocks if that would cause sequential writes. */
+    for( i=msgs->prefetchCount; i<msgs->peerAskedForCount; ++i )
+    {
+        const struct peer_request * req = msgs->peerAskedFor + i;
+        const uint64_t begin = tr_pieceOffset( msgs->torrent, req->index, req->offset, 0 );
+        const uint64_t end = begin + req->length;
+        const tr_bool isSequential = next == begin;
+
+        if( ( i >= 12 ) || ( !isSequential && ( i >= 8 ) ) )
+            break;
+
+        tr_ioPrefetch( msgs->torrent, req->index, req->offset, req->length );
+        ++msgs->prefetchCount;
+
+        next = end;
     }
 }
 
@@ -1667,6 +1672,8 @@ fillOutputBuffer( tr_peermsgs * msgs, time_t now )
     if( ( tr_peerIoGetWriteBufferSpace( msgs->peer->io, now ) >= msgs->torrent->blockSize )
         && popNextRequest( msgs, &req ) )
     {
+        --msgs->prefetchCount;
+
         if( requestIsValid( msgs, &req )
             && tr_cpPieceIsComplete( &msgs->torrent->completion, req.index ) )
         {
@@ -1712,6 +1719,8 @@ fillOutputBuffer( tr_peermsgs * msgs, time_t now )
         {
             protocolSendReject( msgs, &req );
         }
+
+        prefetchPieces( msgs );
     }
 
     /**
@@ -1968,69 +1977,77 @@ sendPex( tr_peermsgs * msgs )
             tr_bencInitDict( &val, 3 ); /* ipv6 support: left as 3:
                                          * speed vs. likelihood? */
 
-            /* "added" */
-            tmp = walk = tr_new( uint8_t, diffs.addedCount * 6 );
-            for( i = 0; i < diffs.addedCount; ++i )
+            if( diffs.addedCount > 0)
             {
-                memcpy( walk, &diffs.added[i].addr.addr, 4 ); walk += 4;
-                memcpy( walk, &diffs.added[i].port, 2 ); walk += 2;
+                /* "added" */
+                tmp = walk = tr_new( uint8_t, diffs.addedCount * 6 );
+                for( i = 0; i < diffs.addedCount; ++i ) {
+                    memcpy( walk, &diffs.added[i].addr.addr, 4 ); walk += 4;
+                    memcpy( walk, &diffs.added[i].port, 2 ); walk += 2;
+                }
+                assert( ( walk - tmp ) == diffs.addedCount * 6 );
+                tr_bencDictAddRaw( &val, "added", tmp, walk - tmp );
+                tr_free( tmp );
+
+                /* "added.f" */
+                tmp = walk = tr_new( uint8_t, diffs.addedCount );
+                for( i = 0; i < diffs.addedCount; ++i )
+                    *walk++ = diffs.added[i].flags;
+                assert( ( walk - tmp ) == diffs.addedCount );
+                tr_bencDictAddRaw( &val, "added.f", tmp, walk - tmp );
+                tr_free( tmp );
             }
-            assert( ( walk - tmp ) == diffs.addedCount * 6 );
-            tr_bencDictAddRaw( &val, "added", tmp, walk - tmp );
-            tr_free( tmp );
 
-            /* "added.f" */
-            tmp = walk = tr_new( uint8_t, diffs.addedCount );
-            for( i = 0; i < diffs.addedCount; ++i )
-                *walk++ = diffs.added[i].flags;
-            assert( ( walk - tmp ) == diffs.addedCount );
-            tr_bencDictAddRaw( &val, "added.f", tmp, walk - tmp );
-            tr_free( tmp );
-
-            /* "dropped" */
-            tmp = walk = tr_new( uint8_t, diffs.droppedCount * 6 );
-            for( i = 0; i < diffs.droppedCount; ++i )
+            if( diffs.droppedCount > 0 )
             {
-                memcpy( walk, &diffs.dropped[i].addr.addr, 4 ); walk += 4;
-                memcpy( walk, &diffs.dropped[i].port, 2 ); walk += 2;
+                /* "dropped" */
+                tmp = walk = tr_new( uint8_t, diffs.droppedCount * 6 );
+                for( i = 0; i < diffs.droppedCount; ++i ) {
+                    memcpy( walk, &diffs.dropped[i].addr.addr, 4 ); walk += 4;
+                    memcpy( walk, &diffs.dropped[i].port, 2 ); walk += 2;
+                }
+                assert( ( walk - tmp ) == diffs.droppedCount * 6 );
+                tr_bencDictAddRaw( &val, "dropped", tmp, walk - tmp );
+                tr_free( tmp );
             }
-            assert( ( walk - tmp ) == diffs.droppedCount * 6 );
-            tr_bencDictAddRaw( &val, "dropped", tmp, walk - tmp );
-            tr_free( tmp );
 
-            /* "added6" */
-            tmp = walk = tr_new( uint8_t, diffs6.addedCount * 18 );
-            for( i = 0; i < diffs6.addedCount; ++i )
+            if( diffs6.addedCount > 0 )
             {
-                memcpy( walk, &diffs6.added[i].addr.addr.addr6.s6_addr, 16 );
-                walk += 16;
-                memcpy( walk, &diffs6.added[i].port, 2 );
-                walk += 2;
+                /* "added6" */
+                tmp = walk = tr_new( uint8_t, diffs6.addedCount * 18 );
+                for( i = 0; i < diffs6.addedCount; ++i ) {
+                    memcpy( walk, &diffs6.added[i].addr.addr.addr6.s6_addr, 16 );
+                    walk += 16;
+                    memcpy( walk, &diffs6.added[i].port, 2 );
+                    walk += 2;
+                }
+                assert( ( walk - tmp ) == diffs6.addedCount * 18 );
+                tr_bencDictAddRaw( &val, "added6", tmp, walk - tmp );
+                tr_free( tmp );
+
+                /* "added6.f" */
+                tmp = walk = tr_new( uint8_t, diffs6.addedCount );
+                for( i = 0; i < diffs6.addedCount; ++i )
+                    *walk++ = diffs6.added[i].flags;
+                assert( ( walk - tmp ) == diffs6.addedCount );
+                tr_bencDictAddRaw( &val, "added6.f", tmp, walk - tmp );
+                tr_free( tmp );
             }
-            assert( ( walk - tmp ) == diffs6.addedCount * 18 );
-            tr_bencDictAddRaw( &val, "added6", tmp, walk - tmp );
-            tr_free( tmp );
 
-            /* "added6.f" */
-            tmp = walk = tr_new( uint8_t, diffs6.addedCount );
-            for( i = 0; i < diffs6.addedCount; ++i )
-                *walk++ = diffs6.added[i].flags;
-            assert( ( walk - tmp ) == diffs6.addedCount );
-            tr_bencDictAddRaw( &val, "added6.f", tmp, walk - tmp );
-            tr_free( tmp );
-
-            /* "dropped6" */
-            tmp = walk = tr_new( uint8_t, diffs6.droppedCount * 18 );
-            for( i = 0; i < diffs6.droppedCount; ++i )
+            if( diffs6.droppedCount > 0 )
             {
-                memcpy( walk, &diffs6.dropped[i].addr.addr.addr6.s6_addr, 16 );
-                walk += 16;
-                memcpy( walk, &diffs6.dropped[i].port, 2 );
-                walk += 2;
+                /* "dropped6" */
+                tmp = walk = tr_new( uint8_t, diffs6.droppedCount * 18 );
+                for( i = 0; i < diffs6.droppedCount; ++i ) {
+                    memcpy( walk, &diffs6.dropped[i].addr.addr.addr6.s6_addr, 16 );
+                    walk += 16;
+                    memcpy( walk, &diffs6.dropped[i].port, 2 );
+                    walk += 2;
+                }
+                assert( ( walk - tmp ) == diffs6.droppedCount * 18);
+                tr_bencDictAddRaw( &val, "dropped6", tmp, walk - tmp );
+                tr_free( tmp );
             }
-            assert( ( walk - tmp ) == diffs6.droppedCount * 18);
-            tr_bencDictAddRaw( &val, "dropped6", tmp, walk - tmp );
-            tr_free( tmp );
 
             /* write the pex message */
             benc = tr_bencToStr( &val, TR_FMT_BENC, &bencLen );
@@ -2108,8 +2125,14 @@ tr_peerMsgsNew( struct tr_torrent * torrent,
     if( tr_peerIoSupportsLTEP( peer->io ) )
         sendLtepHandshake( m );
 
-    if(tr_peerIoSupportsDHT(peer->io))
-        protocolSendPort(m, tr_dhtPort(torrent->session));
+    if(tr_peerIoSupportsDHT(peer->io)) {
+        /* We don't have an IPv6 DHT yet.
+         * According to BEP-32, we can't send PORT over IPv6. */
+        const struct tr_address *addr = tr_peerIoGetAddress( peer->io, NULL );
+        if( addr->type == TR_AF_INET ) {
+            protocolSendPort( m, tr_dhtPort( torrent->session ) );
+        }
+    }
 
     tellPeerWhatWeHave( m );
 
