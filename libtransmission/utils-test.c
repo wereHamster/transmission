@@ -8,6 +8,7 @@
 #include "utils.h"
 #include "crypto.h"
 
+/* #define VERBOSE */
 #undef VERBOSE
 #define NUM_LOOPS 1
 #define SPEED_TEST 0
@@ -259,7 +260,6 @@ test_lowerbound( void )
 #endif
         check( pos == expected_pos[i-1] )
         check( exact == expected_exact[i-1] )
-     
     }
 
     return 0;
@@ -277,6 +277,22 @@ test_memmem( void )
     check( tr_memmem( haystack, sizeof haystack, "", 0) == haystack )
     check( tr_memmem( haystack, sizeof haystack, NULL, 0) == haystack )
     check( tr_memmem( haystack, 0, "", 0) == haystack )
+
+    return 0;
+}
+
+static int
+test_hex( void )
+{
+    char hex1[41];
+    char hex2[41];
+    uint8_t sha1[20];
+    /*uint8_t sha2[20];*/
+
+    memcpy( hex1, "fb5ef5507427b17e04b69cef31fa3379b456735a", 41 );
+    tr_hex_to_sha1( sha1, hex1 );
+    tr_sha1_to_hex( hex2, sha1 );
+    check( !strcmp( hex1, hex2 ) )
 
     return 0;
 }
@@ -308,6 +324,8 @@ main( void )
     tr_free( in );
     tr_free( out );
 
+    if( ( i = test_hex( ) ) )
+        return i;
     if( ( i = test_lowerbound( ) ) )
         return i;
     if( ( i = test_strstrip( ) ) )

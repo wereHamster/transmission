@@ -32,7 +32,6 @@
 #define LEVEL_DEBUG 2
 
 #define UPDATE_SECONDS  0.6
-#define MAX_MESSAGES    8000
 
 @interface MessageWindowController (Private)
 
@@ -154,38 +153,27 @@
         NSString * name = currentMessage->name != NULL ? [NSString stringWithUTF8String: currentMessage->name]
                             : [[NSProcessInfo processInfo] processName];
         
+        NSString * file = [NSString stringWithFormat: @"%@:%d", [[NSString stringWithUTF8String: currentMessage->file] lastPathComponent],
+                            currentMessage->line];
+        
         NSDictionary * message  = [NSDictionary dictionaryWithObjectsAndKeys:
                                     [NSString stringWithUTF8String: currentMessage->message], @"Message",
                                     [NSDate dateWithTimeIntervalSince1970: currentMessage->when], @"Date",
                                     [NSNumber numberWithUnsignedInteger: currentIndex++], @"Index", //more accurate when sorting by date
                                     [NSNumber numberWithInteger: currentMessage->level], @"Level",
                                     name, @"Name",
-                                    [NSString stringWithUTF8String: currentMessage->file], @"File",
-                                    [NSNumber numberWithInteger: currentMessage->line], @"Line", nil];
-                                
+                                    file, @"File", nil];
+        
         [fMessages addObject: message];
     }
     
     tr_freeMessageList(messages);
     
-    NSUInteger total = [fMessages count];
-    if (total > MAX_MESSAGES)
-    {
-        //remove the oldest - move oldest to end for (assumedly) most efficient removal
-        NSSortDescriptor * descriptor = [[[NSSortDescriptor alloc] initWithKey: @"Index" ascending: NO] autorelease];
-        [fMessages sortUsingDescriptors: [NSArray arrayWithObject: descriptor]];
-        
-        [fMessages removeObjectsAtIndexes: [NSIndexSet indexSetWithIndexesInRange: NSMakeRange(MAX_MESSAGES, total-MAX_MESSAGES)]];
-        
-        [fMessageTable noteHeightOfRowsWithIndexesChanged: [NSIndexSet indexSetWithIndexesInRange: NSMakeRange(0, MAX_MESSAGES)]];
-        total = MAX_MESSAGES;
-    }
-    
     [fMessages sortUsingDescriptors: [fMessageTable sortDescriptors]];
     
     [fMessageTable reloadData];
     if (shouldScroll)
-        [fMessageTable scrollRowToVisible: total-1];
+        [fMessageTable scrollRowToVisible: [fMessages count]-1];
 }
 
 - (NSInteger) numberOfRowsInTableView: (NSTableView *) tableView
@@ -245,7 +233,7 @@
                 tableColumn: (NSTableColumn *) column row: (NSInteger) row mouseLocation: (NSPoint) mouseLocation
 {
     NSDictionary * message = [fMessages objectAtIndex: row];
-    return [NSString stringWithFormat: @"%@:%@", [[message objectForKey: @"File"] lastPathComponent], [message objectForKey: @"Line"]];
+    return [message objectForKey: @"File"];
 }
 
 - (void) copy: (id) sender
@@ -383,8 +371,8 @@
             level = @"";
     }
     
-    return [NSString stringWithFormat: @"%@ %@:%@ [%@] %@: %@", [message objectForKey: @"Date"],
-            [[message objectForKey: @"File"] lastPathComponent], [message objectForKey: @"Line"], level,
+    return [NSString stringWithFormat: @"%@ %@ [%@] %@: %@", [message objectForKey: @"Date"],
+            [message objectForKey: @"File"], level,
             [message objectForKey: @"Name"], [message objectForKey: @"Message"], nil];
 }
 

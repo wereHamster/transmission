@@ -624,8 +624,6 @@ torrentRealInit( tr_torrent * tor, const tr_ctor * ctor )
 
     tr_torrentInitFilePieces( tor );
 
-    tr_rcConstruct( &tor->swarmSpeed );
-
     tr_sha1( tor->obfuscatedHash, "req2", 4,
              info->hash, SHA_DIGEST_LENGTH,
              NULL );
@@ -921,7 +919,6 @@ tr_torrentStat( tr_torrent * tor )
 
     now = tr_date( );
     d = tr_peerMgrGetWebseedSpeed( tor, now );
-    s->swarmSpeed         = tr_rcRate( &tor->swarmSpeed, now );
     s->rawUploadSpeed     = tr_bandwidthGetRawSpeed  ( tor->bandwidth, now, TR_UP );
     s->pieceUploadSpeed   = tr_bandwidthGetPieceSpeed( tor->bandwidth, now, TR_UP );
     s->rawDownloadSpeed   = d + tr_bandwidthGetRawSpeed  ( tor->bandwidth, now, TR_DOWN );
@@ -1259,8 +1256,6 @@ freeTorrent( tr_torrent * tor )
     tr_peerMgrRemoveTorrent( tor );
 
     tr_cpDestruct( &tor->completion );
-
-    tr_rcDestruct( &tor->swarmSpeed );
 
     tr_announcerUnsubscribe( tor->tiers, tor->tiersSubscription );
     tr_announcerRemoveTorrent( session->announcer, tor );
