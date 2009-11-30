@@ -31,11 +31,13 @@
     IBOutlet NSPopUpButton * fLevelButton;
     IBOutlet NSButton * fSaveButton, * fClearButton;
     
-    NSMutableArray * fMessages;
+    NSMutableArray * fMessages, * fDisplayedMessages;
     
     NSDictionary * fAttributes;
     
     NSTimer * fTimer;
+    
+    NSLock * fLock;
 }
 
 - (void) updateLog: (NSTimer *) timer;

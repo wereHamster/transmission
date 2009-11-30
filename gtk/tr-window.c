@@ -365,7 +365,7 @@ alt_speed_toggled_cb( GtkToggleButton * button, gpointer vprivate )
 
 static int
 checkFilterText( filter_text_mode_t    filter_text_mode,
-                 const tr_info       * torInfo,
+                 const tr_info       * inf,
                  const char          * text )
 {
     tr_file_index_t i;
@@ -375,22 +375,25 @@ checkFilterText( filter_text_mode_t    filter_text_mode,
     switch( filter_text_mode )
     {
         case FILTER_TEXT_MODE_FILES:
-            for( i = 0; i < torInfo->fileCount && !ret; ++i )
+            for( i = 0; i < inf->fileCount && !ret; ++i )
             {
-                pch = g_utf8_casefold( torInfo->files[i].name, -1 );
+                pch = g_utf8_casefold( inf->files[i].name, -1 );
                 ret = !text || strstr( pch, text ) != NULL;
                 g_free( pch );
             }
             break;
 
         case FILTER_TEXT_MODE_TRACKER:
-            pch = g_utf8_casefold( torInfo->trackers[0].announce, -1 );
-            ret = !text || ( strstr( pch, text ) != NULL );
-            g_free( pch );
+            if( inf->trackerCount > 0 )
+            {
+                pch = g_utf8_casefold( inf->trackers[0].announce, -1 );
+                ret = !text || ( strstr( pch, text ) != NULL );
+                g_free( pch );
+            }
             break;
 
         default: /* NAME */
-            pch = g_utf8_casefold( torInfo->name, -1 );
+            pch = g_utf8_casefold( inf->name, -1 );
             ret = !text || ( strstr( pch, text ) != NULL );
             g_free( pch );
             break;
@@ -957,7 +960,7 @@ tr_window_new( GtkUIManager * ui_mgr, TrCore * core )
         g_signal_connect( w, "clicked", G_CALLBACK(onOptionsClicked), p );
 
         p->alt_speed_image[0] = gtk_image_new_from_stock( "alt-speed-off", -1 );
-        p->alt_speed_image[1]  = gtk_image_new_from_stock( "alt-speed-on", -1 );
+        p->alt_speed_image[1] = gtk_image_new_from_stock( "alt-speed-on", -1 );
         w = p->alt_speed_button = gtk_toggle_button_new( );
         gtk_button_set_relief( GTK_BUTTON( w ), GTK_RELIEF_NONE );
         g_object_ref( G_OBJECT( p->alt_speed_image[0] ) );
@@ -994,7 +997,7 @@ tr_window_new( GtkUIManager * ui_mgr, TrCore * core )
             gtk_widget_set_size_request( w, GUI_PAD, 0u );
             gtk_box_pack_start( GTK_BOX( hbox ), w, FALSE, FALSE, 0 );
             w = gtk_button_new( );
-            gtk_container_add( GTK_CONTAINER( w ), gtk_image_new_from_stock( GTK_STOCK_REFRESH, GTK_ICON_SIZE_MENU ) );
+            gtk_container_add( GTK_CONTAINER( w ), gtk_image_new_from_stock( "ratio", GTK_ICON_SIZE_SMALL_TOOLBAR ) );
             gtk_button_set_relief( GTK_BUTTON( w ), GTK_RELIEF_NONE );
             g_signal_connect( w, "clicked", G_CALLBACK( onYinYangReleased ), p );
             gtk_box_pack_start( GTK_BOX( hbox ), w, FALSE, FALSE, 0 );

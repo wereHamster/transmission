@@ -653,7 +653,12 @@
     
     //unwanted section
     if (!NSIsEmptyRect(missingRect))
-        [[ProgressGradients progressLightGrayGradient] drawInRect: missingRect angle: 90];
+    {
+        if (![torrent isMagnet])
+            [[ProgressGradients progressLightGrayGradient] drawInRect: missingRect angle: 90];
+        else
+            [[ProgressGradients progressRedGradient] drawInRect: missingRect angle: 90];
+    }
 }
 
 - (void) drawPiecesBar: (NSRect) barRect

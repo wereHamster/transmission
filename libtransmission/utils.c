@@ -44,39 +44,50 @@
 #include "platform.h"
 #include "version.h"
 
+
+int                   messageLevel = 0;
 static tr_lock *      messageLock = NULL;
-static int            messageLevel = 0;
 static tr_bool        messageQueuing = FALSE;
 static tr_msg_list *  messageQueue = NULL;
 static tr_msg_list ** messageQueueTail = &messageQueue;
 
 #ifndef WIN32
     /* make null versions of these win32 functions */
-    static int IsDebuggerPresent( void ) { return FALSE; }
-    static void OutputDebugString( const void * unused UNUSED ) { }
+    static TR_INLINE int IsDebuggerPresent( void ) { return FALSE; }
+    static TR_INLINE void OutputDebugString( const void * unused UNUSED ) { }
 #endif
 
-static void
+/***
+****
+***/
+
+time_t transmission_now = 0;
+
+void
+tr_timeUpdate( time_t now )
+{
+    transmission_now = now;
+}
+
+/***
+****
+***/
+
+void
 tr_msgInit( void )
 {
-    static tr_bool initialized = FALSE;
+    const char * env = getenv( "TR_DEBUG" );
+    messageLevel = ( env ? atoi( env ) : 0 ) + 1;
+    messageLevel = MAX( 1, messageLevel );
 
-    if( !initialized )
-    {
-        char * env = getenv( "TR_DEBUG" );
-        messageLevel = ( env ? atoi( env ) : 0 ) + 1;
-        messageLevel = MAX( 1, messageLevel );
-
+    if( messageLock == NULL )
         messageLock = tr_lockNew( );
-
-        initialized = TRUE;
-    }
 }
 
 FILE*
 tr_getLog( void )
 {
-    static int    initialized = FALSE;
+    static tr_bool initialized = FALSE;
     static FILE * file = NULL;
 
     if( !initialized )
@@ -105,7 +116,6 @@ tr_getLog( void )
 void
 tr_setMessageLevel( int level )
 {
-    tr_msgInit( );
     tr_lockLock( messageLock );
 
     messageLevel = MAX( 0, level );
@@ -117,7 +127,6 @@ int
 tr_getMessageLevel( void )
 {
     int ret;
-    tr_msgInit( );
     tr_lockLock( messageLock );
 
     ret = messageLevel;
@@ -129,7 +138,6 @@ tr_getMessageLevel( void )
 void
 tr_setMessageQueuing( tr_bool enabled )
 {
-    tr_msgInit( );
     tr_lockLock( messageLock );
 
     messageQueuing = enabled;
@@ -141,7 +149,6 @@ tr_bool
 tr_getMessageQueuing( void )
 {
     int ret;
-    tr_msgInit( );
     tr_lockLock( messageLock );
 
     ret = messageQueuing;
@@ -154,7 +161,6 @@ tr_msg_list *
 tr_getQueuedMessages( void )
 {
     tr_msg_list * ret;
-    tr_msgInit( );
     tr_lockLock( messageLock );
 
     ret = messageQueue;
@@ -201,15 +207,13 @@ char*
 tr_getLogTimeStr( char * buf, int buflen )
 {
     char           tmp[64];
-    time_t         now;
     struct tm      now_tm;
     struct timeval tv;
     int            milliseconds;
 
-    now = time( NULL );
     gettimeofday( &tv, NULL );
 
-    tr_localtime_r( &now, &now_tm );
+    tr_localtime_r( &tv.tv_sec, &now_tm );
     strftime( tmp, sizeof( tmp ), "%H:%M:%S", &now_tm );
     milliseconds = (int)( tv.tv_usec / 1000 );
     tr_snprintf( buf, buflen, "%s.%03d", tmp, milliseconds );
@@ -285,25 +289,13 @@ tr_deepLog( const char  * file,
 ****
 ***/
 
-int
-tr_msgLoggingIsActive( int level )
-{
-    tr_msgInit( );
-
-    return messageLevel >= level;
-}
-
 void
 tr_msg( const char * file, int line,
         int level, const char * name,
         const char * fmt, ... )
 {
     const int err = errno; /* message logging shouldn't affect errno */
-    FILE * fp;
-    tr_msgInit( );
     tr_lockLock( messageLock );
-
-    fp = tr_getLog( );
 
     if( messageLevel >= level )
     {
@@ -325,7 +317,7 @@ tr_msg( const char * file, int line,
                 tr_msg_list * newmsg;
                 newmsg = tr_new0( tr_msg_list, 1 );
                 newmsg->level = level;
-                newmsg->when = time( NULL );
+                newmsg->when = tr_time( );
                 newmsg->message = tr_strdup( buf );
                 newmsg->file = file;
                 newmsg->line = line;
@@ -337,7 +329,9 @@ tr_msg( const char * file, int line,
             else
             {
                 char timestr[64];
+                FILE * fp;
 
+                fp = tr_getLog( );
                 if( fp == NULL )
                     fp = stderr;
 
@@ -485,10 +479,10 @@ tr_timevalSet( struct timeval * setme, int seconds, int microseconds )
 }
 
 void
-tr_timerAdd( struct event * timer, int seconds, int milliseconds )
+tr_timerAdd( struct event * timer, int seconds, int microseconds )
 {
     struct timeval tv;
-    tr_timevalSet( &tv, seconds, milliseconds );
+    tr_timevalSet( &tv, seconds, microseconds );
     event_add( timer, &tv );
 }
 
@@ -824,10 +818,7 @@ tr_wait( uint64_t delay_milliseconds )
 ***/
 
 int
-tr_snprintf( char *       buf,
-             size_t       buflen,
-             const char * fmt,
-             ... )
+tr_snprintf( char * buf, size_t buflen, const char * fmt, ... )
 {
     int     len;
     va_list args;

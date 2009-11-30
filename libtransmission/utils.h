@@ -19,7 +19,7 @@
 #include <stdio.h> /* FILE* */
 #include <string.h> /* memcpy()* */
 #include <stdlib.h> /* malloc() */
-#include <time.h> /* time_t* */
+#include <time.h> /* time_t */
 
 #include "transmission.h"
 
@@ -123,7 +123,14 @@ void tr_assertImpl( const char * file, int line, const char * test, const char *
     do { if( ! ( test ) ) tr_assertImpl( __FILE__, __LINE__, #test, fmt, __VA_ARGS__ ); } while( 0 )
 #endif
 
-int            tr_msgLoggingIsActive( int level );
+void tr_msgInit( void );
+
+extern int messageLevel;
+
+static TR_INLINE tr_bool tr_msgLoggingIsActive( int level )
+{
+    return messageLevel >= level;
+}
 
 void           tr_msg( const char * file,
                        int          line,
@@ -254,7 +261,7 @@ void tr_timevalSet( struct timeval * setme, int seconds, int microseconds );
 
 struct event;
 
-void tr_timerAdd( struct event * timer, int seconds, int milliseconds );
+void tr_timerAdd( struct event * timer, int seconds, int microseconds );
 
 
 /** @brief return the current date in milliseconds */
@@ -424,8 +431,32 @@ struct tm * tr_localtime_r( const time_t *_clock, struct tm *_result );
 
 
 /** on success, return 0.  on failure, return -1 and set errno */
-int tr_moveFile( const char * oldpath, const char * newpath, tr_bool * renamed ) TR_GNUC_NONNULL(1,2);
+int tr_moveFile( const char * oldpath, const char * newpath,
+                 tr_bool * renamed ) TR_GNUC_NONNULL(1,2);
 
+static TR_INLINE void tr_removeElementFromArray( void * array, int index_to_remove,
+                                size_t sizeof_element, size_t nmemb )
+{
+    char * a = array;
+
+    memmove( a + sizeof_element * index_to_remove,
+             a + sizeof_element * ( index_to_remove  + 1 ),
+             sizeof_element * ( --nmemb - index_to_remove ) );
+}
+
+/***
+****
+***/
+
+extern time_t transmission_now;
+
+static TR_INLINE time_t tr_time( void ) { return transmission_now; }
+
+void tr_timeUpdate( time_t now );
+
+/***
+****
+***/
 
 #ifdef __cplusplus
 }

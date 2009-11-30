@@ -47,6 +47,7 @@ libtransmission_a_SOURCES = \
     stats.c \
     torrent.c \
     torrent-ctor.c \
+    torrent-magnet.c \
     tr-dht.c \
     tr-getopt.c \
     trevent.c \
@@ -62,6 +63,7 @@ noinst_HEADERS = \
     bandwidth.h \
     bencode.h \
     bitfield.h \
+    bitset.h \
     blocklist.h \
     clients.h \
     ConvertUTF.h \
@@ -94,6 +96,7 @@ noinst_HEADERS = \
     session.h \
     stats.h \
     torrent.h \
+    torrent-magnet.h \
     tr-getopt.h \
     transmission.h \
     tr-dht.h \

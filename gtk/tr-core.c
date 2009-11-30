@@ -38,6 +38,7 @@
 #include <libtransmission/rpcimpl.h>
 #include <libtransmission/json.h>
 #include <libtransmission/utils.h> /* tr_free */
+#include <libtransmission/web.h>
 
 #include "conf.h"
 #include "notify.h"
@@ -392,12 +393,25 @@ compareByTracker( GtkTreeModel * model,
                   GtkTreeIter  * b,
                   gpointer       user_data UNUSED )
 {
-    const tr_torrent *ta, *tb;
+    const tr_torrent * ta;
+    const tr_torrent * tb;
+    const tr_info * aInf;
+    const tr_info * bInf;
+    const char * aTracker;
+    const char * bTracker;
 
     gtk_tree_model_get( model, a, MC_TORRENT_RAW, &ta, -1 );
     gtk_tree_model_get( model, b, MC_TORRENT_RAW, &tb, -1 );
-    return strcmp( tr_torrentInfo( ta )->trackers[0].announce,
-                   tr_torrentInfo( tb )->trackers[0].announce );
+
+    aInf = tr_torrentInfo( ta );
+    bInf = tr_torrentInfo( tb );
+    aTracker = aInf->trackerCount > 0 ? aInf->trackers[0].announce : NULL;
+    bTracker = bInf->trackerCount > 0 ? bInf->trackers[0].announce : NULL;
+
+    if( !aTracker && !bTracker ) return 0;
+    if( !aTracker ) return -1;
+    if( !bTracker ) return 1;
+    return strcmp( aTracker, bTracker );
 }
 
 static void
@@ -940,7 +954,7 @@ tr_core_add_ctor( TrCore * core, tr_ctor * ctor )
 /* invoked remotely via dbus. */
 gboolean
 tr_core_add_metainfo( TrCore      * core,
-                      const char  * base64_metainfo,
+                      const char  * payload,
                       gboolean    * setme_success,
                       GError     ** gerr UNUSED )
 {
@@ -950,7 +964,12 @@ tr_core_add_metainfo( TrCore      * core,
     {
         *setme_success = FALSE;
     }
-    else
+    else if( gtr_is_supported_url( payload ) || gtr_is_magnet_link( payload ) )
+    {
+        tr_core_add_from_url( core, payload );
+        *setme_success = TRUE;
+    }
+    else /* base64-encoded metainfo */
     {
         int err;
         int file_length;
@@ -961,7 +980,7 @@ tr_core_add_metainfo( TrCore      * core,
         ctor = tr_ctorNew( session );
         tr_core_apply_defaults( ctor );
 
-        file_contents = tr_base64_decode( base64_metainfo, -1, &file_length );
+        file_contents = tr_base64_decode( payload, -1, &file_length );
         err = tr_ctorSetMetainfo( ctor, (const uint8_t*)file_contents, file_length );
 
         if( !err )
@@ -975,6 +994,103 @@ tr_core_add_metainfo( TrCore      * core,
     return TRUE;
 }
 
+/***
+****
+***/
+
+struct url_dialog_data
+{
+    TrCore * core;
+    tr_ctor * ctor;
+    GtkDialog * dialog;
+};
+
+static gboolean
+onURLDoneIdle( gpointer vdata )
+{
+    struct url_dialog_data * data = vdata;
+    tr_core_add_ctor( data->core, data->ctor );
+    g_free( data );
+    return FALSE;
+}
+
+static void
+onURLDone( tr_session       * session,
+           long               response_code UNUSED,
+           const void       * response,
+           size_t             response_byte_count,
+           void             * vdata )
+{
+    struct url_dialog_data * data = vdata;
+    tr_ctor * ctor = tr_ctorNew( session );
+
+    /* FIME: error dialog */
+
+    if( tr_ctorSetMetainfo( ctor, response, response_byte_count ) )
+    {
+        tr_ctorFree( ctor );
+        g_free( data );
+    }
+    else /* move the work back to the gtk thread */
+    {
+        data->ctor = ctor;
+        gtr_idle_add( onURLDoneIdle, data );
+    }
+}
+
+void
+tr_core_add_from_url( TrCore * core, const char * url )
+{
+    tr_session * session = tr_core_session( core );
+
+    if( gtr_is_magnet_link( url ) || gtr_is_hex_hashcode( url ) )
+    {
+        int err;
+        char * tmp = NULL;
+        tr_ctor * ctor = tr_ctorNew( session );
+
+        if( gtr_is_hex_hashcode( url ) )
+            url = tmp = g_strdup_printf( "magnet:?xt=urn:btih:%s", url );
+
+        err = tr_ctorSetMagnet( ctor, url );
+
+        if( !err ) 
+        {
+            tr_session * session = tr_core_session( core );
+            TrTorrent * gtor = tr_torrent_new_ctor( session, ctor, &err );
+            if( !err )
+                tr_core_add_torrent( core, gtor, FALSE );
+            else
+                g_message( "tr_torrent_new_ctor err %d", err );
+        }
+        else
+        {
+            GtkWidget * w = gtk_message_dialog_new( NULL, 0,
+                                                    GTK_MESSAGE_ERROR,
+                                                    GTK_BUTTONS_CLOSE,
+                                                    "%s", _( "Unrecognized URL" ) );
+            gtk_message_dialog_format_secondary_text( GTK_MESSAGE_DIALOG( w ),
+                _( "Transmission doesn't know how to use \"%s\"" ), url );
+            g_signal_connect_swapped( w, "response",
+                                      G_CALLBACK( gtk_widget_destroy ), w );
+            gtk_widget_show( w );
+            tr_ctorFree( ctor );
+        }
+
+        g_free( tmp );
+    }
+    else
+    {
+        struct url_dialog_data * data = g_new( struct url_dialog_data, 1 );
+        data->core = core;
+        tr_webRun( session, url, NULL, onURLDone, data );
+    }
+}
+
+/***
+****
+***/
+
 static void
 add_filename( TrCore      * core,
               const char  * filename,
@@ -983,17 +1099,31 @@ add_filename( TrCore      * core,
               gboolean      doNotify )
 {
     tr_session * session = tr_core_session( core );
-    if( filename && session )
+
+    if( session == NULL )
+        return;
+
+g_message( "filename [%s]", filename );
+    if( gtr_is_supported_url( filename ) || gtr_is_magnet_link( filename ) )
+    {
+        tr_core_add_from_url( core, filename );
+    }
+    else if( g_file_test( filename, G_FILE_TEST_EXISTS ) )
     {
         int err;
+
         tr_ctor * ctor = tr_ctorNew( session );
+        tr_ctorSetMetainfoFromFile( ctor, filename );
         tr_core_apply_defaults( ctor );
         tr_ctorSetPaused( ctor, TR_FORCE, !doStart );
-        tr_ctorSetMetainfoFromFile( ctor, filename );
 
         err = add_ctor( core, ctor, doPrompt, doNotify );
         if( err == TR_PARSE_ERR )
             tr_core_errsig( core, TR_PARSE_ERR, filename );
+    }
+    else if( gtr_is_hex_hashcode( filename ) )
+    {
+        tr_core_add_from_url( core, filename );
     }
 }
 

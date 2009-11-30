@@ -34,6 +34,7 @@
 - (id) initWithPath: (NSString *) path hash: (NSString *) hashString torrentStruct: (tr_torrent *) torrentStruct lib: (tr_session *) lib
         waitToStart: (NSNumber *) waitToStart
         groupValue: (NSNumber *) groupValue
+        #warning legacy download folder isn't necessarily legacy
         legacyDownloadFolder: (NSString *) downloadFolder legacyIncompleteFolder: (NSString *) incompleteFolder;
 
 - (void) createFileList;
@@ -41,8 +42,8 @@
     index: (NSInteger) index flatList: (NSMutableArray *) flatFileList;
 
 - (void) completenessChange: (NSNumber *) status;
-
 - (void) ratioLimitHit;
+- (void) metadataRetrieved;
 
 - (NSString *) etaString;
 
@@ -59,6 +60,11 @@ void completenessChangeCallback(tr_torrent * torrent, tr_completeness status, vo
 void ratioLimitHitCallback(tr_torrent * torrent, void * torrentData)
 {
     [(Torrent *)torrentData performSelectorOnMainThread: @selector(ratioLimitHit) withObject: nil waitUntilDone: NO];
+}
+
+void metadataCallback(tr_torrent * torrent, void * torrentData)
+{
+    [(Torrent *)torrentData performSelectorOnMainThread: @selector(metadataRetrieved) withObject: nil waitUntilDone: NO];
 }
 
 int trashDataFile(const char * filename)
@@ -90,6 +96,32 @@ int trashDataFile(const char * filename)
     self = [self initWithPath: nil hash: nil torrentStruct: torrentStruct lib: lib
             waitToStart: nil groupValue: nil
             legacyDownloadFolder: location legacyIncompleteFolder: nil];
+    
+    return self;
+}
+
+#warning need location (and use it)?
+- (id) initWithMagnetAddress: (NSString *) address location: (NSString *) location lib: (tr_session *) lib
+{
+    #warning move into real constructor?
+    //set libtransmission settings for initialization
+    tr_ctor * ctor = tr_ctorNew(lib);
+    tr_ctorSetPaused(ctor, TR_FORCE, YES);
+    
+    const tr_parse_result result = tr_ctorSetMagnet(ctor, [address UTF8String]);
+    
+    tr_torrent * handle = NULL;
+    if (result == TR_PARSE_OK)
+        handle = tr_torrentNew(ctor, NULL);
+    
+    tr_ctorFree(ctor);
+    
+    if (handle)
+        self = [self initWithPath: nil hash: nil torrentStruct: handle lib: lib
+                waitToStart: nil groupValue: nil
+                legacyDownloadFolder: location legacyIncompleteFolder: nil];
+    else
+        self = nil;
     
     return self;
 }
@@ -162,7 +194,6 @@ int trashDataFile(const char * filename)
     [fPreviousFinishedIndexes release];
     [fPreviousFinishedIndexesDate release];
     
-    [fNameString release];
     [fHashString release];
     
     [fIcon release];
@@ -309,6 +340,11 @@ int trashDataFile(const char * filename)
 {
     tr_torrentVerify(fHandle);
     [self update];
+}
+
+- (BOOL) isMagnet
+{
+    return !tr_torrentHasMetadata(fHandle);
 }
 
 - (CGFloat) ratio
@@ -526,6 +562,10 @@ int trashDataFile(const char * filename)
 
 - (NSImage *) icon
 {
+    if ([self isMagnet])
+        return [NSImage imageNamed: NSImageNameNetwork]; //placeholder
+    
+    #warning replace 'fldr' stuff with NSImageNameFolder on 10.6
     if (!fIcon)
         fIcon = [[[NSWorkspace sharedWorkspace] iconForFileType: [self isFolder] ? NSFileTypeForHFSTypeCode('fldr')
                                                                                 : [[self name] pathExtension]] retain];
@@ -534,7 +574,7 @@ int trashDataFile(const char * filename)
 
 - (NSString *) name
 {
-    return fNameString;
+    return [NSString stringWithUTF8String: fInfo->name];
 }
 
 - (BOOL) isFolder
@@ -557,7 +597,7 @@ int trashDataFile(const char * filename)
     int count;
     tr_tracker_stat * stats = tr_torrentTrackers(fHandle, &count);
     
-    NSMutableArray * trackers = [NSMutableArray arrayWithCapacity: count + stats[count-1].tier];
+    NSMutableArray * trackers = [NSMutableArray arrayWithCapacity: (count > 0 ? count + stats[count-1].tier : 0)];
     
     int prevTier = -1;
     for (int i=0; i < count; ++i)
@@ -630,12 +670,12 @@ int trashDataFile(const char * filename)
 
 - (NSString *) comment
 {
-    return [NSString stringWithUTF8String: fInfo->comment];
+    return fInfo->comment ? [NSString stringWithUTF8String: fInfo->comment] : @"";
 }
 
 - (NSString *) creator
 {
-    return [NSString stringWithUTF8String: fInfo->creator];
+    return fInfo->creator ? [NSString stringWithUTF8String: fInfo->creator] : @"";
 }
 
 - (NSDate *) dateCreated
@@ -666,11 +706,14 @@ int trashDataFile(const char * filename)
 
 - (NSString *) torrentLocation
 {
-    return [NSString stringWithUTF8String: fInfo->torrent];
+    return fInfo->torrent ? [NSString stringWithUTF8String: fInfo->torrent] : @"";
 }
 
 - (NSString *) dataLocation
 {
+    if ([self isMagnet])
+        return nil;
+    
     if ([self isFolder])
     {
         NSString * dataLocation = [[self currentDirectory] stringByAppendingPathComponent: [self name]];
@@ -730,6 +773,9 @@ int trashDataFile(const char * filename)
 
 - (CGFloat) progressLeft
 {
+    if ([self size] == 0) //magnet links
+        return 0.0;
+    
     return (CGFloat)[self sizeLeft] / [self size];
 }
 
@@ -770,7 +816,7 @@ int trashDataFile(const char * filename)
 
 - (BOOL) allDownloaded
 {
-    return [self sizeLeft] == 0;
+    return [self sizeLeft] == 0 && ![self isMagnet];
 }
 
 - (BOOL) isComplete
@@ -869,6 +915,17 @@ int trashDataFile(const char * filename)
 
 - (NSString *) progressString
 {
+    if ([self isMagnet])
+    {
+        NSString * progressString = fStat->metadataPercentComplete > 0.0
+                    ? [NSString localizedStringWithFormat: NSLocalizedString(@"%.2f%% of torrent metadata retrieved",
+                        "Torrent -> progress string"), 100.0 * fStat->metadataPercentComplete]
+                    : NSLocalizedString(@"torrent metadata needed", "Torrent -> progress string");
+        
+        return [NSString stringWithFormat: @"%@ - %@", NSLocalizedString(@"Magnetized transfer", "Torrent -> progress string"),
+                                            progressString];
+    }
+    
     NSString * string;
     
     if (![self allDownloaded])
@@ -1107,7 +1164,7 @@ int trashDataFile(const char * filename)
 
 - (NSInteger) totalPeersCache
 {
-    return fStat->peersFrom[TR_PEER_FROM_CACHE];
+    return fStat->peersFrom[TR_PEER_FROM_RESUME];
 }
 
 - (NSInteger) totalPeersPex
@@ -1118,6 +1175,11 @@ int trashDataFile(const char * filename)
 - (NSInteger) totalPeersDHT
 {
     return fStat->peersFrom[TR_PEER_FROM_DHT];
+}
+
+- (NSInteger) totalPeersLTEP
+{
+    return fStat->peersFrom[TR_PEER_FROM_LTEP];
 }
 
 - (NSInteger) totalPeersKnown
@@ -1486,17 +1548,14 @@ int trashDataFile(const char * filename)
     fDefaults = [NSUserDefaults standardUserDefaults];
     
     if (torrentStruct)
-    {
         fHandle = torrentStruct;
-        fInfo = tr_torrentInfo(fHandle);
-    }
     else
     {
         //set libtransmission settings for initialization
         tr_ctor * ctor = tr_ctorNew(lib);
         tr_ctorSetPaused(ctor, TR_FORCE, YES);
         
-        int result = TR_PARSE_ERR;
+        tr_parse_result result = TR_PARSE_ERR;
         if (path)
             result = tr_ctorSetMetainfoFromFile(ctor, [path UTF8String]);
         
@@ -1506,20 +1565,12 @@ int trashDataFile(const char * filename)
         
         if (result == TR_PARSE_OK)
         {
-            tr_info info;
-            result = tr_torrentParse(ctor, &info);
+            if (downloadFolder)
+                tr_ctorSetDownloadDir(ctor, TR_FORCE, [downloadFolder UTF8String]);
+            if (incompleteFolder)
+                tr_ctorSetIncompleteDir(ctor, [incompleteFolder UTF8String]);
             
-            if (result == TR_PARSE_OK)
-            {
-                if (downloadFolder)
-                    tr_ctorSetDownloadDir(ctor, TR_FORCE, [downloadFolder UTF8String]);
-                if (incompleteFolder)
-                    tr_ctorSetIncompleteDir(ctor, [incompleteFolder UTF8String]);
-                
-                fHandle = tr_torrentNew(ctor, NULL);
-            }
-            if (result != TR_PARSE_ERR)
-                tr_metainfoFree(&info);
+            fHandle = tr_torrentNew(ctor, NULL);
         }
         
         tr_ctorFree(ctor);
@@ -1529,14 +1580,14 @@ int trashDataFile(const char * filename)
             [self release];
             return nil;
         }
-        
-        fInfo = tr_torrentInfo(fHandle);
     }
+
+    fInfo = tr_torrentInfo(fHandle);
     
     tr_torrentSetCompletenessCallback(fHandle, completenessChangeCallback, self);
     tr_torrentSetRatioLimitHitCallback(fHandle, ratioLimitHitCallback, self);
+    tr_torrentSetMetadataCallback(fHandle, metadataCallback, self);
     
-    fNameString = [[NSString alloc] initWithUTF8String: fInfo->name];
     fHashString = [[NSString alloc] initWithUTF8String: fInfo->hashString];
 	
     fFinishedSeeding = NO;
@@ -1544,7 +1595,8 @@ int trashDataFile(const char * filename)
     fWaitToStart = waitToStart && [waitToStart boolValue];
     fResumeOnWake = NO;
 	
-    [self createFileList];
+    if (![self isMagnet])
+        [self createFileList];
 	
     fGroupValue = groupValue ? [groupValue intValue] : [[GroupsController groups] groupIndexForTorrent: self]; 
     
@@ -1559,6 +1611,8 @@ int trashDataFile(const char * filename)
 
 - (void) createFileList
 {
+    NSAssert(![self isMagnet], @"Cannot create a file list until the torrent is demagnetized");
+    
     if ([self isFolder])
     {
         NSInteger count = [self fileCount];
@@ -1686,6 +1740,15 @@ int trashDataFile(const char * filename)
     [[NSNotificationCenter defaultCenter] postNotificationName: @"TorrentStoppedForRatio" object: self];
     
     fFinishedSeeding = YES;
+}
+
+- (void) metadataRetrieved
+{
+    fStat = tr_torrentStat(fHandle);
+    
+    [self createFileList];
+    
+    [[NSNotificationCenter defaultCenter] postNotificationName: @"ResetInspector" object: self];
 }
 
 - (NSString *) etaString

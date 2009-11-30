@@ -76,6 +76,8 @@ typedef enum
 
 @interface InfoWindowController (Private)
 
+- (void) resetInfo;
+
 - (void) updateInfoGeneral;
 - (void) updateInfoActivity;
 - (void) updateInfoTracker;
@@ -205,6 +207,7 @@ typedef enum
     
     //allow for update notifications
     NSNotificationCenter * nc = [NSNotificationCenter defaultCenter];
+    [nc addObserver: self selector: @selector(resetInfo) name: @"ResetInspector" object: nil];
     [nc addObserver: self selector: @selector(updateInfoStats) name: @"UpdateStats" object: nil];
     [nc addObserver: self selector: @selector(updateOptions) name: @"UpdateOptions" object: nil];
 }
@@ -251,226 +254,8 @@ typedef enum
     
     [fTorrents release];
     fTorrents = [torrents retain];
-
-    NSUInteger numberSelected = [fTorrents count];
-    if (numberSelected != 1)
-    {
-        if (numberSelected > 0)
-        {
-            [fImageView setImage: [NSImage imageNamed: NSImageNameMultipleDocuments]];
-            
-            [fNameField setStringValue: [NSString stringWithFormat: NSLocalizedString(@"%d Torrents Selected",
-                                            "Inspector -> selected torrents"), numberSelected]];
-        
-            uint64_t size = 0;
-            NSInteger fileCount = 0;
-            for (Torrent * torrent in torrents)
-            {
-                size += [torrent size];
-                fileCount += [torrent fileCount];
-            }
-            
-            [fBasicInfoField setStringValue: [NSString stringWithFormat: @"%@, %@",
-                [NSString stringWithFormat: NSLocalizedString(@"%d files", "Inspector -> selected torrents"), fileCount],
-                [NSString stringWithFormat: NSLocalizedString(@"%@ total", "Inspector -> selected torrents"),
-                [NSString stringForFileSize: size]]]];
-            [fBasicInfoField setToolTip: [NSString stringWithFormat: NSLocalizedString(@"%llu bytes", "Inspector -> selected torrents"),
-                                            size]];
-        }
-        else
-        {
-            [fImageView setImage: [NSImage imageNamed: @"NSApplicationIcon"]];
-            
-            [fNameField setStringValue: NSLocalizedString(@"No Torrents Selected", "Inspector -> selected torrents")];
-            [fBasicInfoField setStringValue: @""];
-            [fBasicInfoField setToolTip: @""];
     
-            [fHaveField setStringValue: @""];
-            [fDownloadedTotalField setStringValue: @""];
-            [fUploadedTotalField setStringValue: @""];
-            [fFailedHashField setStringValue: @""];
-            [fDateActivityField setStringValue: @""];
-            [fRatioField setStringValue: @""];
-            
-            //options fields
-            [fUploadLimitCheck setEnabled: NO];
-            [fUploadLimitCheck setState: NSOffState];
-            [fUploadLimitField setEnabled: NO];
-            [fUploadLimitLabel setEnabled: NO];
-            [fUploadLimitField setStringValue: @""];
-            
-            [fDownloadLimitCheck setEnabled: NO];
-            [fDownloadLimitCheck setState: NSOffState];
-            [fDownloadLimitField setEnabled: NO];
-            [fDownloadLimitLabel setEnabled: NO];
-            [fDownloadLimitField setStringValue: @""];
-            
-            [fGlobalLimitCheck setEnabled: NO];
-            [fGlobalLimitCheck setState: NSOffState];
-            
-            [fPriorityPopUp setEnabled: NO];
-            [fPriorityPopUp selectItemAtIndex: -1];
-            
-            [fRatioPopUp setEnabled: NO];
-            [fRatioPopUp selectItemAtIndex: -1];
-            [fRatioLimitField setHidden: YES];
-            [fRatioLimitField setStringValue: @""];
-            
-            [fPeersConnectField setEnabled: NO];
-            [fPeersConnectField setStringValue: @""];
-            [fPeersConnectLabel setEnabled: NO];
-        }
-        
-        [fFileController setTorrent: nil];
-        
-        [fNameField setToolTip: nil];
-
-        [fPiecesField setStringValue: @""];
-        [fHashField setStringValue: @""];
-        [fHashField setToolTip: nil];
-        [fSecureField setStringValue: @""];
-        [fCommentView setString: @""];
-        
-        [fCreatorField setStringValue: @""];
-        [fDateCreatedField setStringValue: @""];
-        [fCommentView setSelectable: NO];
-        
-        [fDataLocationField setStringValue: @""];
-        [fDataLocationField setToolTip: nil];
-        
-        [fRevealDataButton setHidden: YES];
-        
-        //don't allow empty fields to be selected
-        [fHashField setSelectable: NO];
-        [fCreatorField setSelectable: NO];
-        [fDataLocationField setSelectable: NO];
-        
-        [fStateField setStringValue: @""];
-        [fProgressField setStringValue: @""];
-        
-        [fErrorMessageView setString: @""];
-        [fErrorMessageView setSelectable: NO];
-        
-        [fConnectedPeersField setStringValue: @""];
-        
-        [fDateAddedField setStringValue: @""];
-        [fDateCompletedField setStringValue: @""];
-        
-        [fPiecesControl setSelected: NO forSegment: PIECES_CONTROL_AVAILABLE];
-        [fPiecesControl setSelected: NO forSegment: PIECES_CONTROL_PROGRESS];
-        [fPiecesControl setEnabled: NO];
-        [fPiecesView setTorrent: nil];
-        
-        [fPeers release];
-        fPeers = nil;
-        [fPeerTable reloadData];
-        
-        [fWebSeeds release];
-        fWebSeeds = nil;
-        [fWebSeedTable reloadData];
-        [self setWebSeedTableHidden: YES animate: YES];
-        
-        [fTrackerTable setTorrent: nil];
-        
-        [fTrackers release];
-        fTrackers = nil;
-        
-        [fTrackerTable setTrackers: fTrackers];
-        [fTrackerTable reloadData];
-        
-        [fTrackerAddRemoveControl setEnabled: NO forSegment: TRACKER_ADD_TAG];
-        [fTrackerAddRemoveControl setEnabled: NO forSegment: TRACKER_REMOVE_TAG];
-        
-        [fFileFilterField setEnabled: NO];
-    }
-    else
-    {
-        Torrent * torrent = [fTorrents objectAtIndex: 0];
-        
-        [fFileController setTorrent: torrent];
-        
-        if ([NSApp isOnSnowLeopardOrBetter])
-            [fImageView setImage: [torrent icon]];
-        else
-        {
-            NSImage * icon = [[torrent icon] copy];
-            [icon setFlipped: NO];
-            [fImageView setImage: icon];
-            [icon release];
-        }
-        
-        NSString * name = [torrent name];
-        [fNameField setStringValue: name];
-        [fNameField setToolTip: name];
-        
-        NSString * basicString = [NSString stringForFileSize: [torrent size]];
-        if ([torrent isFolder])
-        {
-            NSString * fileString;
-            NSInteger fileCount = [torrent fileCount];
-            if (fileCount == 1)
-                fileString = NSLocalizedString(@"1 file", "Inspector -> selected torrents");
-            else
-                fileString= [NSString stringWithFormat: NSLocalizedString(@"%d files", "Inspector -> selected torrents"), fileCount];
-            basicString = [NSString stringWithFormat: @"%@, %@", fileString, basicString];
-        }
-        [fBasicInfoField setStringValue: basicString];
-        [fBasicInfoField setToolTip: [NSString stringWithFormat: NSLocalizedString(@"%llu bytes", "Inspector -> selected torrents"),
-                                        [torrent size]]];
-        
-        NSString * hashString = [torrent hashString];
-        [fPiecesField setStringValue: [NSString stringWithFormat: @"%d, %@", [torrent pieceCount],
-                                        [NSString stringForFileSize: [torrent pieceSize]]]];
-        [fHashField setStringValue: hashString];
-        [fHashField setToolTip: hashString];
-        [fSecureField setStringValue: [torrent privateTorrent]
-                        ? NSLocalizedString(@"Private Torrent, PEX and DHT automatically disabled", "Inspector -> private torrent")
-                        : NSLocalizedString(@"Public Torrent", "Inspector -> private torrent")];
-        
-        NSString * commentString = [torrent comment];
-        [fCommentView setString: commentString];
-        
-        NSString * creatorString = [torrent creator];
-        [fCreatorField setStringValue: creatorString];
-        [fDateCreatedField setObjectValue: [torrent dateCreated]];
-        
-        [fDateAddedField setObjectValue: [torrent dateAdded]];
-        
-        //allow these fields to be selected
-        [fHashField setSelectable: YES];
-        [fCommentView setSelectable: ![commentString isEqualToString: @""]];
-        [fCreatorField setSelectable: ![creatorString isEqualToString: @""]];
-        
-        //set pieces view
-        BOOL piecesAvailableSegment = [[NSUserDefaults standardUserDefaults] boolForKey: @"PiecesViewShowAvailability"];
-        [fPiecesControl setSelected: piecesAvailableSegment forSegment: PIECES_CONTROL_AVAILABLE];
-        [fPiecesControl setSelected: !piecesAvailableSegment forSegment: PIECES_CONTROL_PROGRESS];
-        [fPiecesControl setEnabled: YES];
-        [fPiecesView setTorrent: torrent];
-        
-        //get webseeds for table - if no webseeds for this torrent, clear the table
-        BOOL hasWebSeeds = [torrent webSeedCount] > 0;
-        [self setWebSeedTableHidden: !hasWebSeeds animate: YES];
-        if (!hasWebSeeds)
-        {
-            [fWebSeeds release];
-            fWebSeeds = nil;
-            [fWebSeedTable reloadData];
-        }
-        
-        [fTrackerTable setTorrent: torrent];
-        [fTrackerTable deselectAll: self];
-        [fTrackerAddRemoveControl setEnabled: YES forSegment: TRACKER_ADD_TAG];
-        [fTrackerAddRemoveControl setEnabled: NO forSegment: TRACKER_REMOVE_TAG];
-
-        [fFileFilterField setEnabled: [torrent isFolder]];
-    }
-    
-    [fFileFilterField setStringValue: @""];
-    
-    //update stats and settings
-    [self updateInfoStats];
-    [self updateOptions];
+    [self resetInfo];
 }
 
 - (void) updateInfoStats
@@ -748,7 +533,7 @@ typedef enum
             break;
         case TAB_TRACKER_TAG:
             identifier = TAB_TRACKER_IDENT;
-            title = NSLocalizedString(@"Tracker", "Inspector -> title");
+            title = NSLocalizedString(@"Trackers", "Inspector -> title");
             resizeSaveKey = @"InspectorContentHeightTracker";
             break;
         case TAB_PEERS_TAG:
@@ -1020,7 +805,7 @@ typedef enum
             case TR_PEER_FROM_INCOMING:
                 [components addObject: NSLocalizedString(@"From: incoming connection", "Inspector -> Peers tab -> table row tooltip")];
                 break;
-            case TR_PEER_FROM_CACHE:
+            case TR_PEER_FROM_RESUME:
                 [components addObject: NSLocalizedString(@"From: cache", "Inspector -> Peers tab -> table row tooltip")];
                 break;
             case TR_PEER_FROM_PEX:
@@ -1028,6 +813,10 @@ typedef enum
                 break;
             case TR_PEER_FROM_DHT:
                 [components addObject: NSLocalizedString(@"From: distributed hash table", "Inspector -> Peers tab -> table row tooltip")];
+                break;
+            case TR_PEER_FROM_LTEP:
+                [components addObject: NSLocalizedString(@"From: libtorrent extension protocol handshake",
+                                        "Inspector -> Peers tab -> table row tooltip")];
                 break;
             default:
                 NSAssert1(NO, @"Peer from unknown source: %d", peerFrom);
@@ -1349,6 +1138,271 @@ typedef enum
 
 @implementation InfoWindowController (Private)
 
+- (void) resetInfo
+{
+    const NSUInteger numberSelected = [fTorrents count];
+    if (numberSelected != 1)
+    {
+        if (numberSelected > 0)
+        {
+            [fImageView setImage: [NSImage imageNamed: NSImageNameMultipleDocuments]];
+            
+            [fNameField setStringValue: [NSString stringWithFormat: NSLocalizedString(@"%d Torrents Selected",
+                                            "Inspector -> selected torrents"), numberSelected]];
+        
+            uint64_t size = 0;
+            NSUInteger fileCount = 0, magnetCount = 0;
+            for (Torrent * torrent in fTorrents)
+            {
+                size += [torrent size];
+                fileCount += [torrent fileCount];
+                if ([torrent isMagnet])
+                    ++magnetCount;
+            }
+            
+            NSMutableArray * fileStrings = [NSMutableArray arrayWithCapacity: 2];
+            if (fileCount > 0)
+            {
+                NSString * fileString;
+                if (fileCount == 1)
+                    fileString = NSLocalizedString(@"1 file", "Inspector -> selected torrents");
+                else
+                    fileString = [NSString stringWithFormat: NSLocalizedString(@"%d files", "Inspector -> selected torrents"), fileCount];
+                [fileStrings addObject: fileString];
+            }
+            if (magnetCount > 0)
+            {
+                NSString * magnetString;
+                if (magnetCount == 1)
+                    magnetString = NSLocalizedString(@"1 magnetized transfer", "Inspector -> selected torrents");
+                else
+                    magnetString = [NSString stringWithFormat: NSLocalizedString(@"%d magnetized transfers",
+                                    "Inspector -> selected torrents"), magnetCount];
+                [fileStrings addObject: magnetString];
+            }
+            
+            NSString * fileString = [fileStrings componentsJoinedByString: @" + "];
+            
+            if (magnetCount < numberSelected)
+            {
+                [fBasicInfoField setStringValue: [NSString stringWithFormat: @"%@, %@", fileString,
+                    [NSString stringWithFormat: NSLocalizedString(@"%@ total", "Inspector -> selected torrents"),
+                        [NSString stringForFileSize: size]]]];
+                [fBasicInfoField setToolTip: [NSString stringWithFormat: NSLocalizedString(@"%llu bytes", "Inspector -> selected torrents"),
+                                                size]];
+            }
+            else
+            {
+                [fBasicInfoField setStringValue: fileString];
+                [fBasicInfoField setToolTip: nil];
+            }
+        }
+        else
+        {
+            [fImageView setImage: [NSImage imageNamed: @"NSApplicationIcon"]];
+            
+            [fNameField setStringValue: NSLocalizedString(@"No Torrents Selected", "Inspector -> selected torrents")];
+            [fBasicInfoField setStringValue: @""];
+            [fBasicInfoField setToolTip: @""];
+    
+            [fHaveField setStringValue: @""];
+            [fDownloadedTotalField setStringValue: @""];
+            [fUploadedTotalField setStringValue: @""];
+            [fFailedHashField setStringValue: @""];
+            [fDateActivityField setStringValue: @""];
+            [fRatioField setStringValue: @""];
+            
+            //options fields
+            [fUploadLimitCheck setEnabled: NO];
+            [fUploadLimitCheck setState: NSOffState];
+            [fUploadLimitField setEnabled: NO];
+            [fUploadLimitLabel setEnabled: NO];
+            [fUploadLimitField setStringValue: @""];
+            
+            [fDownloadLimitCheck setEnabled: NO];
+            [fDownloadLimitCheck setState: NSOffState];
+            [fDownloadLimitField setEnabled: NO];
+            [fDownloadLimitLabel setEnabled: NO];
+            [fDownloadLimitField setStringValue: @""];
+            
+            [fGlobalLimitCheck setEnabled: NO];
+            [fGlobalLimitCheck setState: NSOffState];
+            
+            [fPriorityPopUp setEnabled: NO];
+            [fPriorityPopUp selectItemAtIndex: -1];
+            
+            [fRatioPopUp setEnabled: NO];
+            [fRatioPopUp selectItemAtIndex: -1];
+            [fRatioLimitField setHidden: YES];
+            [fRatioLimitField setStringValue: @""];
+            
+            [fPeersConnectField setEnabled: NO];
+            [fPeersConnectField setStringValue: @""];
+            [fPeersConnectLabel setEnabled: NO];
+        }
+        
+        [fFileController setTorrent: nil];
+        
+        [fNameField setToolTip: nil];
+
+        [fPiecesField setStringValue: @""];
+        [fHashField setStringValue: @""];
+        [fHashField setToolTip: nil];
+        [fSecureField setStringValue: @""];
+        [fCommentView setString: @""];
+        
+        [fCreatorField setStringValue: @""];
+        [fDateCreatedField setStringValue: @""];
+        [fCommentView setSelectable: NO];
+        
+        [fDataLocationField setStringValue: @""];
+        [fDataLocationField setToolTip: nil];
+        
+        [fRevealDataButton setHidden: YES];
+        
+        //don't allow empty fields to be selected
+        [fHashField setSelectable: NO];
+        [fCreatorField setSelectable: NO];
+        [fDataLocationField setSelectable: NO];
+        
+        [fStateField setStringValue: @""];
+        [fProgressField setStringValue: @""];
+        
+        [fErrorMessageView setString: @""];
+        [fErrorMessageView setSelectable: NO];
+        
+        [fConnectedPeersField setStringValue: @""];
+        
+        [fDateAddedField setStringValue: @""];
+        [fDateCompletedField setStringValue: @""];
+        
+        [fPiecesControl setSelected: NO forSegment: PIECES_CONTROL_AVAILABLE];
+        [fPiecesControl setSelected: NO forSegment: PIECES_CONTROL_PROGRESS];
+        [fPiecesControl setEnabled: NO];
+        [fPiecesView setTorrent: nil];
+        
+        [fPeers release];
+        fPeers = nil;
+        [fPeerTable reloadData];
+        
+        [fWebSeeds release];
+        fWebSeeds = nil;
+        [fWebSeedTable reloadData];
+        [self setWebSeedTableHidden: YES animate: YES];
+        
+        [fTrackerTable setTorrent: nil];
+        
+        [fTrackers release];
+        fTrackers = nil;
+        
+        [fTrackerTable setTrackers: fTrackers];
+        [fTrackerTable reloadData];
+        
+        [fTrackerAddRemoveControl setEnabled: NO forSegment: TRACKER_ADD_TAG];
+        [fTrackerAddRemoveControl setEnabled: NO forSegment: TRACKER_REMOVE_TAG];
+        
+        [fFileFilterField setEnabled: NO];
+    }
+    else
+    {
+        Torrent * torrent = [fTorrents objectAtIndex: 0];
+        
+        [fFileController setTorrent: torrent];
+        
+        if ([NSApp isOnSnowLeopardOrBetter])
+            [fImageView setImage: [torrent icon]];
+        else
+        {
+            NSImage * icon = [[torrent icon] copy];
+            [icon setFlipped: NO];
+            [fImageView setImage: icon];
+            [icon release];
+        }
+        
+        NSString * name = [torrent name];
+        [fNameField setStringValue: name];
+        [fNameField setToolTip: name];
+        
+        if (![torrent isMagnet])
+        {
+            NSString * basicString = [NSString stringForFileSize: [torrent size]];
+            if ([torrent isFolder])
+            {
+                NSString * fileString;
+                NSInteger fileCount = [torrent fileCount];
+                if (fileCount == 1)
+                    fileString = NSLocalizedString(@"1 file", "Inspector -> selected torrents");
+                else
+                    fileString= [NSString stringWithFormat: NSLocalizedString(@"%d files", "Inspector -> selected torrents"), fileCount];
+                basicString = [NSString stringWithFormat: @"%@, %@", fileString, basicString];
+            }
+            [fBasicInfoField setStringValue: basicString];
+            [fBasicInfoField setToolTip: [NSString stringWithFormat: NSLocalizedString(@"%llu bytes", "Inspector -> selected torrents"),
+                                            [torrent size]]];
+        }
+        else
+        {
+            [fBasicInfoField setStringValue: NSLocalizedString(@"Magnetized transfer", "Inspector -> selected torrents")];
+            [fBasicInfoField setToolTip: nil];
+        }
+        
+        NSString * piecesString = ![torrent isMagnet] ? [NSString stringWithFormat: @"%d, %@", [torrent pieceCount],
+                                        [NSString stringForFileSize: [torrent pieceSize]]] : @"";
+        [fPiecesField setStringValue: piecesString];
+                                        
+        NSString * hashString = [torrent hashString];
+        [fHashField setStringValue: hashString];
+        [fHashField setToolTip: hashString];
+        [fSecureField setStringValue: [torrent privateTorrent]
+                        ? NSLocalizedString(@"Private Torrent, PEX and DHT automatically disabled", "Inspector -> private torrent")
+                        : NSLocalizedString(@"Public Torrent", "Inspector -> private torrent")];
+        
+        NSString * commentString = [torrent comment];
+        [fCommentView setString: commentString];
+        
+        NSString * creatorString = [torrent creator];
+        [fCreatorField setStringValue: creatorString];
+        [fDateCreatedField setObjectValue: [torrent dateCreated]];
+        
+        [fDateAddedField setObjectValue: [torrent dateAdded]];
+        
+        //allow these fields to be selected
+        [fHashField setSelectable: YES];
+        [fCommentView setSelectable: ![commentString isEqualToString: @""]];
+        [fCreatorField setSelectable: ![creatorString isEqualToString: @""]];
+        
+        //set pieces view
+        BOOL piecesAvailableSegment = [[NSUserDefaults standardUserDefaults] boolForKey: @"PiecesViewShowAvailability"];
+        [fPiecesControl setSelected: piecesAvailableSegment forSegment: PIECES_CONTROL_AVAILABLE];
+        [fPiecesControl setSelected: !piecesAvailableSegment forSegment: PIECES_CONTROL_PROGRESS];
+        [fPiecesControl setEnabled: YES];
+        [fPiecesView setTorrent: torrent];
+        
+        //get webseeds for table - if no webseeds for this torrent, clear the table
+        BOOL hasWebSeeds = [torrent webSeedCount] > 0;
+        [self setWebSeedTableHidden: !hasWebSeeds animate: YES];
+        if (!hasWebSeeds)
+        {
+            [fWebSeeds release];
+            fWebSeeds = nil;
+            [fWebSeedTable reloadData];
+        }
+        
+        [fTrackerTable setTorrent: torrent];
+        [fTrackerTable deselectAll: self];
+        [fTrackerAddRemoveControl setEnabled: YES forSegment: TRACKER_ADD_TAG];
+        [fTrackerAddRemoveControl setEnabled: NO forSegment: TRACKER_REMOVE_TAG];
+
+        [fFileFilterField setEnabled: [torrent isFolder]];
+    }
+    
+    [fFileFilterField setStringValue: @""];
+    
+    //update stats and settings
+    [self updateInfoStats];
+    [self updateOptions];
+}
+
 - (void) updateInfoGeneral
 {   
     if ([fTorrents count] != 1)
@@ -1503,6 +1557,9 @@ typedef enum
             if ((count = [torrent totalPeersDHT]) > 0)
                 [fromComponents addObject: [NSString stringWithFormat:
                                         NSLocalizedString(@"%d DHT", "Inspector -> Peers tab -> peers"), count]];
+            if ((count = [torrent totalPeersLTEP]) > 0)
+                [fromComponents addObject: [NSString stringWithFormat:
+                                        NSLocalizedString(@"%d LTEP", "Inspector -> Peers tab -> peers"), count]];
             
             NSMutableArray * upDownComponents = [NSMutableArray arrayWithCapacity: 3];
             if ((count = [torrent peersSendingToUs]) > 0)
@@ -1692,12 +1749,6 @@ typedef enum
         }
         else
             [addresses addObject: [(TrackerNode *)item fullAnnounceAddress]];
-    }
-    
-    if (oldCount == [addresses count])
-    {
-        NSBeep();
-        return;
     }
     
     if ([[NSUserDefaults standardUserDefaults] boolForKey: @"WarningRemoveTrackers"])

@@ -116,16 +116,18 @@ typedef enum
     BOOL                            fSoundPlaying;
 }
 
-- (void) openFiles:             (NSArray *) filenames addType: (addType) type forcePath: (NSString *) path;
-- (void) askOpenConfirmed:      (AddWindowController *) addController add: (BOOL) add;
-- (void) openCreatedFile:       (NSNotification *) notification;
-- (void) openFilesWithDict:     (NSDictionary *) dictionary;
-- (void) openShowSheet:         (id) sender;
+- (void) openFiles: (NSArray *) filenames addType: (addType) type forcePath: (NSString *) path;
+- (void) openMagnet: (NSString *) address;
+
+- (void) askOpenConfirmed: (AddWindowController *) addController add: (BOOL) add;
+- (void) openCreatedFile: (NSNotification *) notification;
+- (void) openFilesWithDict: (NSDictionary *) dictionary;
+- (void) openShowSheet: (id) sender;
 
 - (void) invalidOpenAlert: (NSString *) filename;
 - (void) duplicateOpenAlert: (NSString *) name;
 
-- (void) openURL:               (NSURL *) torrentURL;
+- (void) openURL:               (NSString *) urlString;
 - (void) openURLEndSheet:       (id) sender;
 - (void) openURLCancelEndSheet: (id) sender;
 - (void) openURLShowSheet:      (id) sender;

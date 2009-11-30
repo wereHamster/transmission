@@ -322,24 +322,63 @@ decode_uri( const char * uri )
     return ret;
 }
 
-GSList *
-checkfilenames( int    argc,
-                char **argv )
+
+gboolean
+gtr_is_supported_url( const char * str )
 {
-    int      i;
+    return !strncmp( str, "ftp://", 6 )
+        || !strncmp( str, "http://", 7 )
+        || !strncmp( str, "https://", 8 );
+}
+
+gboolean
+gtr_is_magnet_link( const char * str )
+{
+    return !strncmp( str, "magnet:?", 8 );
+}
+
+gboolean
+gtr_is_hex_hashcode( const char * str )
+{
+    int i;
+
+    if( !str || ( strlen( str ) != 40 ) )
+        return FALSE;
+
+    for( i=0; i<40; ++i )
+        if( !isxdigit( str[i] ) )
+            return FALSE;
+
+    return TRUE;
+}
+
+GSList *
+checkfilenames( int argc, char **argv )
+{
+    int i;
     GSList * ret = NULL;
-    char *   pwd = g_get_current_dir( );
+    char * pwd = g_get_current_dir( );
 
-    for( i = 0; i < argc; ++i )
+    for( i=0; i<argc; ++i )
     {
-        char * filename = g_path_is_absolute( argv[i] )
-                          ? g_strdup ( argv[i] )
-                          : g_build_filename( pwd, argv[i], NULL );
+        if( gtr_is_supported_url( argv[i] ) || gtr_is_magnet_link( argv[i] ) )
+        {
+            ret = g_slist_prepend( ret, g_strdup( argv[i] ) );
+        }
+        else /* local file */
+        {
+            char * filename = g_path_is_absolute( argv[i] )
+                            ? g_strdup ( argv[i] )
+                            : g_build_filename( pwd, argv[i], NULL );
 
-        if( g_file_test( filename, G_FILE_TEST_EXISTS ) )
-            ret = g_slist_prepend( ret, filename );
-        else
-            g_free( filename );
+            if( g_file_test( filename, G_FILE_TEST_EXISTS ) )
+                ret = g_slist_prepend( ret, filename );
+            else {
+                if( gtr_is_hex_hashcode( argv[i] ) )
+                    ret = g_slist_prepend( ret, g_strdup_printf( "magnet:?xt=urn:btih:%s", argv[i] ) );
+                g_free( filename );
+            }
+        }
     }
 
     g_free( pwd );
@@ -525,25 +564,37 @@ gtr_dbus_add_torrent( const char * filename )
 {
     /* FIXME: why is this static? */
     static gboolean success = FALSE;
-#ifdef HAVE_DBUS_GLIB
-    DBusGProxy * proxy = NULL;
-    GError * err = NULL;
-    DBusGConnection * conn;
-    char * file_contents;
-    gsize file_length;
 
+#ifdef HAVE_DBUS_GLIB
+    char * payload;
+    gsize file_length;
+    char * file_contents = NULL;
+
+    /* If it's a file, load its contents and send them over the wire...
+     * it might be a temporary file that's going to disappear. */
     if( g_file_get_contents( filename, &file_contents, &file_length, NULL ) )
+        payload = tr_base64_encode( file_contents, file_length, NULL );
+    else if( gtr_is_supported_url( filename ) || gtr_is_magnet_link( filename ) )
+        payload = tr_strdup( filename );
+    else
+        payload = NULL;
+
+    if( payload != NULL )
     {
-        char * b64 = tr_base64_encode( file_contents, file_length, NULL );
+        GError * err = NULL;
+        DBusGConnection * conn;
+        DBusGProxy * proxy = NULL;
+
         if(( conn = dbus_g_bus_get( DBUS_BUS_SESSION, &err )))
             proxy = dbus_g_proxy_new_for_name (conn, VALUE_SERVICE_NAME,
                                                      VALUE_SERVICE_OBJECT_PATH,
                                                      VALUE_SERVICE_INTERFACE );
         else if( err )
            g_message( "err: %s", err->message );
+
         if( proxy )
             dbus_g_proxy_call( proxy, "AddMetainfo", &err,
-                               G_TYPE_STRING, b64,
+                               G_TYPE_STRING, payload,
                                G_TYPE_INVALID,
                                G_TYPE_BOOLEAN, &success,
                                G_TYPE_INVALID );
@@ -555,10 +606,10 @@ gtr_dbus_add_torrent( const char * filename )
         if( conn )
             dbus_g_connection_unref( conn );
 
-        tr_free( b64 );
-        g_free( file_contents );
+        tr_free( payload );
     }
-    else g_message( "couldn't read %s", filename );
+
+    g_free( file_contents );
 
 #endif
     return success;

@@ -150,7 +150,7 @@ getTorrents( tr_session * session,
         if( !strcmp( str, "recently-active" ) )
         {
             tr_torrent * tor = NULL;
-            const time_t now = time( NULL );
+            const time_t now = tr_time( );
             const time_t window = RECENTLY_ACTIVE_SECONDS;
             const int n = tr_sessionCountTorrents( session );
             torrents = tr_new0( tr_torrent *, n );
@@ -514,7 +514,7 @@ addField( const tr_torrent * tor, tr_benc * d, const char * key )
     {
         tr_benc *   tmp = tr_bencDictAddDict( d, key, 4 );
         const int * f = st->peersFrom;
-        tr_bencDictAddInt( tmp, "fromCache",    f[TR_PEER_FROM_CACHE] );
+        tr_bencDictAddInt( tmp, "fromCache",    f[TR_PEER_FROM_RESUME] );
         tr_bencDictAddInt( tmp, "fromIncoming", f[TR_PEER_FROM_INCOMING] );
         tr_bencDictAddInt( tmp, "fromPex",      f[TR_PEER_FROM_PEX] );
         tr_bencDictAddInt( tmp, "fromTracker",  f[TR_PEER_FROM_TRACKER] );
@@ -625,7 +625,7 @@ torrentGet( tr_session               * session,
     if( tr_bencDictFindStr( args_in, "ids", &strVal ) && !strcmp( strVal, "recently-active" ) ) {
         int n = 0;
         tr_benc * d;
-        const time_t now = time( NULL );
+        const time_t now = tr_time( );
         const int interval = RECENTLY_ACTIVE_SECONDS;
         tr_benc * removed_out = tr_bencDictAddList( args_out, "removed", 0 );
         while(( d = tr_bencListChild( &session->removedTorrents, n++ ))) {
@@ -1093,14 +1093,22 @@ torrentAdd( tr_session               * session,
         }
         else
         {
-            if( filename != NULL )
-                tr_ctorSetMetainfoFromFile( ctor, filename );
-            else {
+            if( filename == NULL )
+            {
                 int len;
-                char * metainfo = tr_base64_decode( metainfo_base64, -1,  &len );
+                char * metainfo = tr_base64_decode( metainfo_base64, -1, &len );
                 tr_ctorSetMetainfo( ctor, (uint8_t*)metainfo, len );
                 tr_free( metainfo );
             }
+            else if( !strncmp( filename, "magnet:?", 8 ) )
+            {
+                tr_ctorSetMagnet( ctor, filename );
+            }
+            else
+            {
+                tr_ctorSetMetainfoFromFile( ctor, filename );
+            }
+
             addTorrentImpl( idle_data, ctor );
         }
 

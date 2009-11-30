@@ -593,6 +593,8 @@ tr_sessionInit( const char  * tag,
     tr_session * session;
     struct init_data data;
 
+    tr_msgInit( );
+
     assert( tr_bencIsDict( clientSettings ) );
 
     /* initialize the bare skeleton of the session object */
@@ -629,6 +631,28 @@ static void useAltSpeed( tr_session * session, tr_bool enabled, tr_bool byUser )
 static void useAltSpeedTime( tr_session * session, tr_bool enabled, tr_bool byUser );
 
 static void
+onNowTimer( int foo UNUSED, short bar UNUSED, void * vsession )
+{
+    int usec;
+    const int min = 100;
+    const int max = 999999;
+    struct timeval tv;
+    tr_session * session = vsession;
+
+    assert( tr_isSession( session ) );
+    assert( session->nowTimer != NULL );
+
+    /* schedule the next timer for right after the next second begins */
+    gettimeofday( &tv, NULL );
+    usec = 1000000 - tv.tv_usec;
+    if( usec > max ) usec = max;
+    if( usec < min ) usec = min;
+    tr_timerAdd( session->nowTimer, 0, usec );
+    tr_timeUpdate( tv.tv_sec );
+    /* fprintf( stderr, "time %zu sec, %zu microsec\n", (size_t)tr_time(), (size_t)tv.tv_usec );  */
+}
+
+static void
 tr_sessionInitImpl( void * vdata )
 {
     tr_benc settings;
@@ -645,6 +669,10 @@ tr_sessionInitImpl( void * vdata )
     tr_bencInitDict( &settings, 0 );
     tr_sessionGetDefaultSettings( data->configDir, &settings );
     tr_bencMergeDicts( &settings, clientSettings );
+
+    session->nowTimer = tr_new0( struct event, 1 );
+    evtimer_set( session->nowTimer, onNowTimer, session );
+    onNowTimer( 0, 0, session );
 
 #ifndef WIN32
     /* Don't exit when writing on a broken socket */
@@ -1516,6 +1544,10 @@ sessionCloseImpl( void * vsession )
     tr_free( session->saveTimer );
     session->saveTimer = NULL;
 
+    evtimer_del( session->nowTimer );
+    tr_free( session->nowTimer );
+    session->nowTimer = NULL;
+
     evtimer_del( session->altTimer );
     tr_free( session->altTimer );
     session->altTimer = NULL;
@@ -1554,7 +1586,7 @@ deadlineReached( const uint64_t deadline )
     return tr_date( ) >= deadline;
 }
 
-#define SHUTDOWN_MAX_SECONDS 30
+#define SHUTDOWN_MAX_SECONDS 20
 
 void
 tr_sessionClose( tr_session * session )
@@ -1570,8 +1602,7 @@ tr_sessionClose( tr_session * session )
     tr_runInEventThread( session, sessionCloseImpl, session );
     while( !session->isClosed && !deadlineReached( deadline ) )
     {
-        dbgmsg(
-            "waiting for the shutdown commands to run in the main thread" );
+        dbgmsg( "waiting for the libtransmission thread to finish" );
         tr_wait( 100 );
     }
 
@@ -1591,10 +1622,16 @@ tr_sessionClose( tr_session * session )
 
     /* close the libtransmission thread */
     tr_eventClose( session );
-    while( session->events && !deadlineReached( deadline ) )
+    while( session->events != NULL )
     {
-        dbgmsg( "waiting for the libevent thread to shutdown cleanly" );
+        static tr_bool forced = FALSE;
+        dbgmsg( "waiting for libtransmission thread to finish" );
         tr_wait( 100 );
+        if( deadlineReached( deadline ) && !forced )
+        {
+            event_loopbreak( );
+            forced = TRUE;
+        }
     }
 
     /* free the session memory */
@@ -1610,6 +1647,7 @@ tr_sessionClose( tr_session * session )
     tr_free( session->resumeDir );
     tr_free( session->torrentDir );
     tr_free( session->downloadDir );
+    tr_free( session->incompleteDir );
     tr_free( session->proxy );
     tr_free( session->proxyUsername );
     tr_free( session->proxyPassword );

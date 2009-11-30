@@ -123,6 +123,51 @@ static void           prefschanged( TrCore *     core,
 
 static gboolean       updatemodel( gpointer gdata );
 
+/***
+****
+***/
+
+#ifdef HAVE_LIBGCONF
+ #include <gconf/gconf.h>
+ #include <gconf/gconf-client.h>
+#endif
+
+static void
+registerMagnetLinkHandler( void )
+{
+#ifdef HAVE_LIBGCONF
+    GError * err;
+    GConfValue * value;
+    GConfClient * client = gconf_client_get_default( );
+    const char * key = "/desktop/gnome/url-handlers/magnet/command";
+
+    /* if there's already a manget handler registered, don't do anything */
+    value = gconf_client_get( client, key, NULL );
+    if( value != NULL )
+    {
+        gconf_value_free( value );
+        return;
+    }
+
+    err = NULL;
+    if( !gconf_client_set_string( client, key, "transmission '%s'", &err ) )
+    {
+        tr_inf( "Unable to register Transmission as default magnet link handler: \"%s\"", err->message );
+        g_clear_error( &err );
+    }
+    else
+    {
+        gconf_client_set_bool( client, "/desktop/gnome/url-handlers/magnet/needs_terminal", FALSE, NULL );
+        gconf_client_set_bool( client, "/desktop/gnome/url-handlers/magnet/enabled", TRUE, NULL );
+        tr_inf( "Transmission registered as default magnet link handler" );
+    }
+#endif
+}
+
+/***
+****
+***/
+
 struct counts_data
 {
     int    totalCount;
@@ -179,6 +224,7 @@ refreshActions( struct cbdata * data )
     action_sensitize( "show-torrent-properties", counts.totalCount != 0 );
     action_sensitize( "open-torrent-folder", counts.totalCount == 1 );
     action_sensitize( "relocate-torrent", counts.totalCount == 1 );
+    action_sensitize( "copy-magnet-link-to-clipboard", counts.totalCount == 1 );
 
     canUpdate = 0;
     gtk_tree_selection_selected_foreach( s, accumulateCanUpdateForeach, &canUpdate );
@@ -364,7 +410,7 @@ main( int argc, char ** argv )
         g_thread_init( NULL );
 
     gerr = NULL;
-    if( !gtk_init_with_args( &argc, &argv, (char*)_( "[torrent files]" ), entries,
+    if( !gtk_init_with_args( &argc, &argv, (char*)_( "[torrent files or urls]" ), entries,
                              (char*)domain, &gerr ) )
     {
         fprintf( stderr, "%s\n", gerr->message );
@@ -466,6 +512,9 @@ main( int argc, char ** argv )
         if( pref_flag_get( PREF_KEY_BLOCKLIST_UPDATES_ENABLED )
             && ( time( NULL ) - pref_int_get( "blocklist-date" ) > ( 60 * 60 * 24 * 7 ) ) )
                 tr_core_blocklist_update( cbdata->core );
+
+        /* if there's no magnet link handler registered, register us */
+        registerMagnetLinkHandler( );
 
         gtk_main( );
     }
@@ -652,13 +701,10 @@ winsetup( struct cbdata * cbdata,
     setupdrag( GTK_WIDGET( wind ), cbdata );
 }
 
-static gpointer
-quitThreadFunc( gpointer gdata )
+static gboolean
+onSessionClosed( gpointer gdata )
 {
     struct cbdata * cbdata = gdata;
-    gdk_threads_enter( );
-
-    tr_core_close( cbdata->core );
 
     /* shutdown the gui */
     if( cbdata->details ) {
@@ -683,8 +729,21 @@ quitThreadFunc( gpointer gdata )
     g_free( cbdata );
 
     gtk_main_quit( );
-    gdk_threads_leave( );
 
+    return FALSE;
+}
+
+static gpointer
+sessionCloseThreadFunc( gpointer gdata )
+{
+    /* since tr_sessionClose() is a blocking function,
+     * call it from another thread... when it's done,
+     * punt the GUI teardown back to the GTK+ thread */
+    struct cbdata * cbdata = gdata;
+    gdk_threads_enter( );
+    tr_core_close( cbdata->core );
+    gtr_idle_add( onSessionClosed, gdata );
+    gdk_threads_leave( );
     return NULL;
 }
 
@@ -751,7 +810,7 @@ wannaquit( gpointer vdata )
                                    pref_int_get( PREF_KEY_MAIN_WINDOW_Y ) );
 
     /* shut down libT */
-    g_thread_create( quitThreadFunc, vdata, TRUE, NULL );
+    g_thread_create( sessionCloseThreadFunc, vdata, TRUE, NULL );
 }
 
 static void
@@ -806,25 +865,18 @@ gotdrag( GtkWidget         * widget UNUSED,
                 continue;
 
             /* walk past "file://", if present */
-            if( g_str_has_prefix( filename, "file:" ) )
-            {
+            if( g_str_has_prefix( filename, "file:" ) ) {
                 filename += 5;
                 while( g_str_has_prefix( filename, "//" ) )
                     ++filename;
             }
 
-            /* if the file doesn't exist, the first part
-               might be a hostname ... walk past it. */
-            if( !g_file_test( filename, G_FILE_TEST_EXISTS ) )
-            {
-                char * pch = strchr( filename + 1, '/' );
-                if( pch != NULL )
-                    filename = pch;
-            }
+            g_debug( "got from drag: [%s]", filename );
 
-            /* finally, add it to the list of torrents to try adding */
             if( g_file_test( filename, G_FILE_TEST_EXISTS ) )
                 paths = g_slist_prepend( paths, g_strdup( filename ) );
+            else
+                tr_core_add_from_url( data->core, filename );
         }
 
         /* try to add any torrents we found */
@@ -1350,13 +1402,28 @@ detailsClosed( gpointer gdata, GObject * dead )
     data->details = g_slist_remove( data->details, dead );
 }
 
+static void
+copyMagnetLinkToClipboard( GtkWidget * w, tr_torrent * tor )
+{
+    char * magnet = tr_torrentGetMagnetLink( tor );
+    GdkDisplay * display = gtk_widget_get_display( w );
+    GdkAtom selection = GDK_SELECTION_CLIPBOARD;
+    GtkClipboard * clipboard = gtk_clipboard_get_for_display( display, selection );
+    gtk_clipboard_set_text( clipboard, magnet, -1 );
+    tr_free( magnet );
+}
+
 void
 doAction( const char * action_name, gpointer user_data )
 {
     struct cbdata * data = user_data;
     gboolean        changed = FALSE;
 
-    if(  !strcmp( action_name, "add-torrent-menu" )
+    if( !strcmp( action_name, "add-torrent-from-url" ) )
+    {
+        addURLDialog( data->wind, data->core );
+    }
+    else if(  !strcmp( action_name, "add-torrent-menu" )
       || !strcmp( action_name, "add-torrent-toolbar" ) )
     {
         addDialog( data->wind, data->core );
@@ -1384,10 +1451,18 @@ doAction( const char * action_name, gpointer user_data )
     {
         startAllTorrents( data );
     }
+    else if( !strcmp( action_name, "copy-magnet-link-to-clipboard" ) )
+    {
+        tr_torrent * tor = getFirstSelectedTorrent( data );
+        if( tor != NULL )
+        {
+            copyMagnetLinkToClipboard( GTK_WIDGET( data->wind ), tor );
+        }
+    }
     else if( !strcmp( action_name, "relocate-torrent" ) )
     {
         tr_torrent * tor = getFirstSelectedTorrent( data );
-        if( tor )
+        if( tor != NULL )
         {
             GtkWindow * parent = GTK_WINDOW( data->wind );
             GtkWidget * w = gtr_relocate_dialog_new( parent, tor );

@@ -858,6 +858,9 @@ void        tr_ctorFree( tr_ctor * ctor );
 void        tr_ctorSetDeleteSource( tr_ctor * ctor,
                                     tr_bool   doDelete );
 
+int         tr_ctorSetMagnet( tr_ctor * ctor,
+                              const char * url );
+
 int         tr_ctorSetMetainfo( tr_ctor *       ctor,
                                 const uint8_t * metainfo,
                                 size_t          len );
@@ -1164,13 +1167,20 @@ void tr_torrentSetDownloadDir( tr_torrent  * torrent, const char * path );
 const char * tr_torrentGetDownloadDir( const tr_torrent * torrent );
 
 /**
- * This returns the the root directory of where the torrent is.
+ * Returns the root directory of where the torrent is.
  *
  * This will usually be the downloadDir.  However if the torrent
  * has an incompleteDir enabled and hasn't finished downloading
  * yet, that will be returned instead.
  */
 const char * tr_torrentGetCurrentDir( const tr_torrent * tor );
+
+
+/**
+ * Returns a newly-allocated string with a magnet link of the torrent.
+ * Use tr_free() to free the string when done.
+ */
+char* tr_torrentGetMagnetLink( const tr_torrent * tor );
 
 /**
 ***
@@ -1251,6 +1261,20 @@ void tr_torrentSetCompletenessCallback(
 
 void tr_torrentClearCompletenessCallback( tr_torrent * torrent );
 
+
+
+typedef void ( tr_torrent_metadata_func )( tr_torrent  * torrent,
+                                           void        * user_data );
+/**
+ * Register to be notified whenever a torrent changes from
+ * having incomplete metadata to having complete metadata.
+ * This happens when a magnet link finishes downloading
+ * metadata from its peers.
+ */
+void tr_torrentSetMetadataCallback (
+         tr_torrent                * tor,
+         tr_torrent_metadata_func     func,
+         void                      * user_data );
 
 /**
  * Register to be notified whenever a torrent's ratio limit
@@ -1549,6 +1573,11 @@ struct tr_info
     tr_bool            isMultifile;
 };
 
+static TR_INLINE tr_bool tr_torrentHasMetadata( const tr_torrent * tor )
+{
+    return tr_torrentInfo( tor )->fileCount > 0;
+}
+
 /**
  * What the torrent is doing right now.
  *
@@ -1572,9 +1601,9 @@ enum
     TR_PEER_FROM_INCOMING  = 0,  /* connections made to the listening port */
     TR_PEER_FROM_TRACKER   = 1,  /* peers received from a tracker */
     TR_PEER_FROM_DHT       = 2,  /* peers learnt from the DHT */
-    TR_PEER_FROM_CACHE     = 3,  /* peers read from the peer cache */
+    TR_PEER_FROM_RESUME    = 3,  /* peers read from the .resume file */
     TR_PEER_FROM_PEX       = 4,  /* peers discovered via PEX */
-    TR_PEER_FROM_ALT       = 5,  /* alternate peer address */
+    TR_PEER_FROM_LTEP      = 5,  /* peer address provided in an LTEP handshake */
     TR_PEER_FROM__MAX
 };
 
@@ -1625,6 +1654,12 @@ typedef struct tr_stat
     /** How much has been downloaded of the entire torrent.
         Range is [0..1] */
     float    percentComplete;
+
+    /** How much of the metadata the torrent has.
+        For torrents added from a .torrent this will always be 1.
+        For magnet links, this number will from from 0 to 1 as the metadata is downloaded.
+        Range is [0..1] */
+    float    metadataPercentComplete;
 
     /** How much has been downloaded of the files the user wants.  This differs
         from percentComplete if the user wants only some of the torrent's files.

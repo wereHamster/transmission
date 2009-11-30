@@ -607,6 +607,15 @@ static const char * activityString( int activity )
 }
 
 static void
+gtr_label_set_text( GtkLabel * lb, const char * newstr )
+{
+    const char * oldstr = gtk_label_get_text( lb );
+
+    if( strcmp( oldstr, newstr ) )
+        gtk_label_set_text( lb, newstr );
+}
+
+static void
 refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
 {
     int i;
@@ -636,7 +645,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
         else
             str = _( "Public torrent" );
     }
-    gtk_label_set_text( GTK_LABEL( di->privacy_lb ), str );
+    gtr_label_set_text( GTK_LABEL( di->privacy_lb ), str );
 
 
     /* origin_lb */
@@ -665,7 +674,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
             str = buf;
         }
     }
-    gtk_label_set_text( GTK_LABEL( di->origin_lb ), str );
+    gtr_label_set_text( GTK_LABEL( di->origin_lb ), str );
 
 
     /* comment_buffer */
@@ -696,7 +705,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
         else
             str = mixed;
     }
-    gtk_label_set_text( GTK_LABEL( di->destination_lb ), str );
+    gtr_label_set_text( GTK_LABEL( di->destination_lb ), str );
 
     /* state_lb */
     if( n <= 0 )
@@ -711,7 +720,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
         else
             str = mixed;
     }
-    gtk_label_set_text( GTK_LABEL( di->state_lb ), str );
+    gtr_label_set_text( GTK_LABEL( di->state_lb ), str );
 
 
     /* date started */
@@ -729,7 +738,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
         else
             str = tr_strltime( buf, time(NULL)-baseline, sizeof( buf ) );
     }
-    gtk_label_set_text( GTK_LABEL( di->date_started_lb ), str );
+    gtr_label_set_text( GTK_LABEL( di->date_started_lb ), str );
 
 
     /* eta */
@@ -747,7 +756,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
         else
             str = tr_strltime( buf, baseline, sizeof( buf ) );
     }
-    gtk_label_set_text( GTK_LABEL( di->eta_lb ), str );
+    gtr_label_set_text( GTK_LABEL( di->eta_lb ), str );
      
 
 
@@ -783,7 +792,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
                         sizebuf, pieces );
             str = buf;
         }
-        gtk_label_set_text( GTK_LABEL( di->size_lb ), str );
+        gtr_label_set_text( GTK_LABEL( di->size_lb ), str );
     }
 
 
@@ -818,7 +827,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
             str = buf;
         }
     }
-    gtk_label_set_text( GTK_LABEL( di->have_lb ), str );
+    gtr_label_set_text( GTK_LABEL( di->have_lb ), str );
 
 
     /* dl_lb */
@@ -839,7 +848,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
             tr_strlcpy( buf, dbuf, sizeof( buf ) );
         str = buf;
     }
-    gtk_label_set_text( GTK_LABEL( di->dl_lb ), str );
+    gtr_label_set_text( GTK_LABEL( di->dl_lb ), str );
 
 
     /* ul_lb */
@@ -850,7 +859,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
         for( i=0; i<n; ++i ) sum += stats[i]->uploadedEver;
         str = tr_strlsize( buf, sum, sizeof( buf ) );
     }
-    gtk_label_set_text( GTK_LABEL( di->ul_lb ), str );
+    gtr_label_set_text( GTK_LABEL( di->ul_lb ), str );
 
 
     /* ratio */
@@ -865,7 +874,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
         }
         str = tr_strlratio( buf, tr_getRatio( up, down ), sizeof( buf ) );
     }
-    gtk_label_set_text( GTK_LABEL( di->ratio_lb ), str );
+    gtr_label_set_text( GTK_LABEL( di->ratio_lb ), str );
 
     /* hash_lb */
     if( n<=0 )
@@ -874,7 +883,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
         str = infos[0]->hashString;
     else
         str = mixed;
-    gtk_label_set_text( GTK_LABEL( di->hash_lb ), str );
+    gtr_label_set_text( GTK_LABEL( di->hash_lb ), str );
 
     /* error */
     if( n <= 0 )
@@ -891,7 +900,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
     }
     if( !str || !*str )
         str = none;
-    gtk_label_set_text( GTK_LABEL( di->error_lb ), str );
+    gtr_label_set_text( GTK_LABEL( di->error_lb ), str );
 
 
     /* activity date */
@@ -916,7 +925,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
             str = buf;
         }
     }
-    gtk_label_set_text( GTK_LABEL( di->last_activity_lb ), str );
+    gtr_label_set_text( GTK_LABEL( di->last_activity_lb ), str );
 
     g_free( stats );
     g_free( infos );
@@ -2139,7 +2148,7 @@ torrent_inspector_new( GtkWindow * parent, TrCore * core )
     gtk_notebook_append_page( GTK_NOTEBOOK( n ),  w, l );
 
     w = tracker_page_new( di );
-    l = gtk_label_new( _( "Tracker" ) );
+    l = gtk_label_new( _( "Trackers" ) );
     gtk_notebook_append_page( GTK_NOTEBOOK( n ), w, l );
 
     w = file_list_new( core, 0 );
@@ -2179,12 +2188,10 @@ torrent_inspector_set_torrents( GtkWidget * w, GSList * ids )
         g_snprintf( title, sizeof( title ), _( "%s Properties" ), inf->name );
 
         file_list_set_torrent( di->file_list, id );
-        //tracker_list_set_torrent( di->tracker_list, id );
     }
    else
    {
         file_list_clear( di->file_list );
-        //tracker_list_clear( di->tracker_list );
         g_snprintf( title, sizeof( title ), _( "%'d Torrent Properties" ), len );
     }
 

@@ -11,15 +11,20 @@
  */
 
 #include <string.h>
+
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
+
 #include <libtransmission/transmission.h>
+
 #include "actions.h"
 #include "conf.h"
 #include "tr-core.h"
 #include "tr-prefs.h"
 #include "lock.h"
+
 #include "logo.h"
+#include "ratio-icon.h"
 #include "options-icon.h"
 #include "turtles.h"
 
@@ -97,17 +102,20 @@ static GtkToggleActionEntry  pref_toggle_entries[] =
 
 static GtkActionEntry entries[] =
 {
+    { "file-menu", NULL, N_( "_File" ), NULL, NULL, NULL  },
     { "torrent-menu", NULL, N_( "_Torrent" ), NULL, NULL, NULL  },
     { "view-menu", NULL, N_( "_View" ), NULL, NULL, NULL  },
     { "sort-menu", NULL, N_( "_Sort Torrents By" ), NULL, NULL, NULL },
     { "edit-menu", NULL, N_( "_Edit" ), NULL, NULL, NULL },
     { "help-menu", NULL, N_( "_Help" ), NULL, NULL, NULL },
+    { "copy-magnet-link-to-clipboard",  GTK_STOCK_COPY, N_("Copy _Magnet Link to Clipboard" ), "<control>M", NULL,  G_CALLBACK( action_cb ) },
+    { "add-torrent-from-url",  GTK_STOCK_ADD, N_("Add _URL..." ), NULL, N_( "Add URL..." ),  G_CALLBACK( action_cb ) },
     { "add-torrent-toolbar",  GTK_STOCK_ADD, NULL, NULL, N_( "Add a torrent" ),  G_CALLBACK( action_cb ) },
-    { "add-torrent-menu", GTK_STOCK_ADD, N_( "_Add..." ), "<control>D", N_( "Add a torrent" ), G_CALLBACK( action_cb ) },
+    { "add-torrent-menu", GTK_STOCK_ADD, N_( "_Add File..." ), "<control>D", N_( "Add a torrent" ), G_CALLBACK( action_cb ) },
     { "start-torrent", GTK_STOCK_MEDIA_PLAY, N_( "_Start" ), "<control>S", N_( "Start torrent" ), G_CALLBACK( action_cb ) },
     { "show-stats", NULL, N_( "_Statistics" ), NULL, NULL, G_CALLBACK( action_cb ) },
     { "donate", NULL, N_( "_Donate" ), NULL, NULL, G_CALLBACK( action_cb ) },
-    { "verify-torrent", NULL, N_( "_Verify Local Data" ), NULL, NULL, G_CALLBACK( action_cb ) },
+    { "verify-torrent", NULL, N_( "_Verify Local Data" ), "<control>V", NULL, G_CALLBACK( action_cb ) },
     { "pause-torrent", GTK_STOCK_MEDIA_PAUSE, N_( "_Pause" ), "<control>P", N_( "Pause torrent" ), G_CALLBACK( action_cb ) },
     { "pause-all-torrents", GTK_STOCK_MEDIA_PAUSE, N_( "_Pause All" ), NULL, N_( "Pause all torrents" ), G_CALLBACK( action_cb ) },
     { "start-all-torrents", GTK_STOCK_MEDIA_PLAY, N_( "_Start All" ), NULL, N_( "Start all torrents" ), G_CALLBACK( action_cb ) },
@@ -140,7 +148,8 @@ static const BuiltinIconInfo my_fallback_icons[] =
     { tr_icon_lock, "transmission-lock" },
     { options_icon, "options"           },
     { blue_turtle,  "alt-speed-on"      },
-    { grey_turtle,  "alt-speed-off"     }
+    { grey_turtle,  "alt-speed-off"     },
+    { ratio_icon,   "ratio"             }
 };
 
 static void

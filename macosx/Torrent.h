@@ -39,7 +39,7 @@
 
     NSImage * fIcon;
     
-    NSString * fNameString, * fHashString;
+    NSString * fHashString;
     
     tr_file_stat * fFileStat;
     NSArray * fFileList, * fFlatFileList;
@@ -59,6 +59,7 @@
 - (id) initWithPath: (NSString *) path location: (NSString *) location deleteTorrentFile: (BOOL) torrentDelete
         lib: (tr_session *) lib;
 - (id) initWithTorrentStruct: (tr_torrent *) torrentStruct location: (NSString *) location lib: (tr_session *) lib;
+- (id) initWithMagnetAddress: (NSString *) address location: (NSString *) location lib: (tr_session *) lib;
 - (id) initWithHistory: (NSDictionary *) history lib: (tr_session *) lib forcePause: (BOOL) pause;
 
 - (NSDictionary *) history;
@@ -85,6 +86,8 @@
 - (BOOL) canManualAnnounce;
 
 - (void) resetCache;
+
+- (BOOL) isMagnet;
 
 - (CGFloat) ratio;
 - (tr_ratiolimit) ratioSetting;
@@ -178,6 +181,7 @@
 - (NSInteger) totalPeersCache;
 - (NSInteger) totalPeersPex;
 - (NSInteger) totalPeersDHT;
+- (NSInteger) totalPeersLTEP;
 - (NSInteger) totalPeersKnown;
 
 - (NSInteger) peersSendingToUs;

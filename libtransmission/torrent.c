@@ -32,6 +32,7 @@
 #include "crypto.h" /* for tr_sha1 */
 #include "resume.h"
 #include "fdlimit.h" /* tr_fdTorrentClose */
+#include "magnet.h"
 #include "metainfo.h"
 #include "peer-mgr.h"
 #include "platform.h" /* TR_PATH_DELIMITER_STR */
@@ -39,11 +40,15 @@
 #include "ratecontrol.h"
 #include "session.h"
 #include "torrent.h"
+#include "torrent-magnet.h"
 #include "trevent.h"
 #include "utils.h"
 #include "verify.h"
 
-#define MAX_BLOCK_SIZE ( 1024 * 16 )
+enum
+{
+    MAX_BLOCK_SIZE = 1024 * 16
+};
 
 /***
 ****
@@ -491,45 +496,6 @@ tr_torrentPromoteTracker( tr_torrent * tor,
     return i;
 }
 
-struct RandomTracker
-{
-    tr_tracker_info    tracker;
-    int                random_value;
-};
-
-/* the tiers will be sorted from lowest to highest,
- * and trackers are randomized within the tiers */
-static TR_INLINE int
-compareRandomTracker( const void * va,
-                      const void * vb )
-{
-    const struct RandomTracker * a = va;
-    const struct RandomTracker * b = vb;
-
-    if( a->tracker.tier != b->tracker.tier )
-        return a->tracker.tier - b->tracker.tier;
-
-    return a->random_value - b->random_value;
-}
-
-static void
-randomizeTiers( tr_info * info )
-{
-    int                    i;
-    const int              n = info->trackerCount;
-    struct RandomTracker * r = tr_new0( struct RandomTracker, n );
-
-    for( i = 0; i < n; ++i )
-    {
-        r[i].tracker = info->trackers[i];
-        r[i].random_value = tr_cryptoRandInt( INT_MAX );
-    }
-    qsort( r, n, sizeof( struct RandomTracker ), compareRandomTracker );
-    for( i = 0; i < n; ++i )
-        info->trackers[i] = r[i].tracker;
-    tr_free( r );
-}
-
 static void torrentStart( tr_torrent * tor );
 
 /**
@@ -550,63 +516,43 @@ getBlockSize( uint32_t pieceSize )
     return b;
 }
 
-static void refreshCurrentDir( tr_torrent * tor );;
+static void refreshCurrentDir( tr_torrent * tor );
 
 static void
-torrentRealInit( tr_torrent * tor, const tr_ctor * ctor )
+torrentInitFromInfo( tr_torrent * tor )
 {
-    int          doStart;
-    uint64_t     loaded;
-    uint64_t     t;
-    const char * dir;
-    static int   nextUniqueId = 1;
-    tr_info    * info = &tor->info;
-    tr_session * session = tr_ctorGetSession( ctor );
-
-    assert( session != NULL );
-
-    tr_globalLock( session );
-
-    tor->session   = session;
-    tor->uniqueId = nextUniqueId++;
-    tor->magicNumber = TORRENT_MAGIC_NUMBER;
-
-    randomizeTiers( info );
-
-    tor->bandwidth = tr_bandwidthNew( session, session->bandwidth );
+    uint64_t t;
+    tr_info * info = &tor->info;
 
     tor->blockSize = getBlockSize( info->pieceSize );
 
-    if( !tr_ctorGetDownloadDir( ctor, TR_FORCE, &dir ) ||
-        !tr_ctorGetDownloadDir( ctor, TR_FALLBACK, &dir ) )
-            tor->downloadDir = tr_strdup( dir );
-
-    if( tr_ctorGetIncompleteDir( ctor, &dir ) )
-        dir = tr_sessionGetIncompleteDir( session );
-    if( tr_sessionIsIncompleteDirEnabled( session ) )
-        tor->incompleteDir = tr_strdup( dir );
-
-    tor->lastPieceSize = info->totalSize % info->pieceSize;
+    if( info->pieceSize )
+        tor->lastPieceSize = info->totalSize % info->pieceSize;
 
     if( !tor->lastPieceSize )
         tor->lastPieceSize = info->pieceSize;
 
-    tor->lastBlockSize = info->totalSize % tor->blockSize;
+    if( tor->blockSize )
+        tor->lastBlockSize = info->totalSize % tor->blockSize;
 
     if( !tor->lastBlockSize )
         tor->lastBlockSize = tor->blockSize;
 
-    tor->blockCount =
-        ( info->totalSize + tor->blockSize - 1 ) / tor->blockSize;
+    tor->blockCount = tor->blockSize
+        ? ( info->totalSize + tor->blockSize - 1 ) / tor->blockSize
+        : 0;
 
-    tor->blockCountInPiece =
-        info->pieceSize / tor->blockSize;
+    tor->blockCountInPiece = tor->blockSize
+        ? info->pieceSize / tor->blockSize
+        : 0;
 
-    tor->blockCountInLastPiece =
-        ( tor->lastPieceSize + tor->blockSize - 1 ) / tor->blockSize;
+    tor->blockCountInLastPiece = tor->blockSize
+        ? ( tor->lastPieceSize + tor->blockSize - 1 ) / tor->blockSize
+        : 0;
 
     /* check our work */
-    assert( ( info->pieceSize % tor->blockSize ) == 0 );
+    if( tor->blockSize != 0 )
+        assert( ( info->pieceSize % tor->blockSize ) == 0 );
     t = info->pieceCount - 1;
     t *= info->pieceSize;
     t += tor->lastPieceSize;
@@ -624,9 +570,54 @@ torrentRealInit( tr_torrent * tor, const tr_ctor * ctor )
 
     tr_torrentInitFilePieces( tor );
 
+    tr_bitfieldConstruct( &tor->checkedPieces, tor->info.pieceCount );
+
+    tor->completeness = tr_cpGetStatus( &tor->completion );
+}
+
+static void tr_torrentFireMetadataCompleted( tr_torrent * tor );
+
+void
+tr_torrentGotNewInfoDict( tr_torrent * tor )
+{
+    torrentInitFromInfo( tor );
+
+    tr_torrentFireMetadataCompleted( tor );
+}
+
+static void
+torrentInit( tr_torrent * tor, const tr_ctor * ctor )
+{
+    int doStart;
+    uint64_t loaded;
+    const char * dir;
+    static int nextUniqueId = 1;
+    tr_session * session = tr_ctorGetSession( ctor );
+
+    assert( session != NULL );
+
+    tr_globalLock( session );
+
+    tor->session   = session;
+    tor->uniqueId = nextUniqueId++;
+    tor->magicNumber = TORRENT_MAGIC_NUMBER;
+
     tr_sha1( tor->obfuscatedHash, "req2", 4,
-             info->hash, SHA_DIGEST_LENGTH,
+             tor->info.hash, SHA_DIGEST_LENGTH,
              NULL );
+
+    if( !tr_ctorGetDownloadDir( ctor, TR_FORCE, &dir ) ||
+        !tr_ctorGetDownloadDir( ctor, TR_FALLBACK, &dir ) )
+            tor->downloadDir = tr_strdup( dir );
+
+    if( tr_ctorGetIncompleteDir( ctor, &dir ) )
+        dir = tr_sessionGetIncompleteDir( session );
+    if( tr_sessionIsIncompleteDirEnabled( session ) )
+        tor->incompleteDir = tr_strdup( dir );
+
+    tor->bandwidth = tr_bandwidthNew( session, session->bandwidth );
+
+    tor->error = TR_STAT_OK;
 
     tr_peerMgrAddTorrent( session->peerMgr, tor );
 
@@ -637,15 +628,14 @@ torrentRealInit( tr_torrent * tor, const tr_ctor * ctor )
 
     tr_ctorInitTorrentWanted( ctor, tor );
 
-    tor->error = TR_STAT_OK;
-
-    tr_bitfieldConstruct( &tor->checkedPieces, tor->info.pieceCount );
     tr_torrentUncheck( tor );
 
-    tr_torrentSetAddedDate( tor, time( NULL ) ); /* this is a default value to be
-                                                    overwritten by the resume file */
+    tr_torrentSetAddedDate( tor, tr_time( ) ); /* this is a default value to be
+                                                  overwritten by the resume file */
 
+    torrentInitFromInfo( tor );
     loaded = tr_torrentLoadResume( tor, ~0, ctor );
+    tor->completeness = tr_cpGetStatus( &tor->completion );
 
     refreshCurrentDir( tor );
 
@@ -667,8 +657,6 @@ torrentRealInit( tr_torrent * tor, const tr_ctor * ctor )
         tr_torrentSetRatioLimit( tor, tr_sessionGetRatioLimit( tor->session ) );
     }
 
-    tor->completeness = tr_cpGetStatus( &tor->completion );
-
     {
         tr_torrent * it = NULL;
         tr_torrent * last = NULL;
@@ -682,27 +670,25 @@ torrentRealInit( tr_torrent * tor, const tr_ctor * ctor )
         ++session->torrentCount;
     }
 
-    tr_globalUnlock( session );
-
     /* maybe save our own copy of the metainfo */
     if( tr_ctorGetSave( ctor ) )
     {
         const tr_benc * val;
         if( !tr_ctorGetMetainfo( ctor, &val ) )
         {
-            const char * filename = tor->info.torrent;
-            tr_bencToFile( val, TR_FMT_BENC, filename );
-            tr_sessionSetTorrentFile( tor->session, tor->info.hashString, filename );
+            const char * path = tor->info.torrent;
+            tr_bencToFile( val, TR_FMT_BENC, path );
+            tr_sessionSetTorrentFile( tor->session, tor->info.hashString, path );
         }
     }
 
-    tor->tiers = tr_announcerAddTorrent( session->announcer, tor );
+    tor->tiers = tr_announcerAddTorrent( tor->session->announcer, tor );
     tor->tiersSubscription = tr_announcerSubscribe( tor->tiers, onTrackerResponse, tor );
-
-    tr_metainfoMigrate( session, &tor->info );
 
     if( doStart )
         torrentStart( tor );
+
+    tr_globalUnlock( session );
 }
 
 tr_parse_result
@@ -722,7 +708,7 @@ tr_torrentParse( const tr_ctor * ctor, tr_info * setmeInfo )
     if( tr_ctorGetMetainfo( ctor, &metainfo ) )
         return TR_PARSE_ERR;
 
-    didParse = tr_metainfoParse( session, setmeInfo, metainfo );
+    didParse = tr_metainfoParse( session, setmeInfo, NULL, NULL, metainfo );
     doFree = didParse && ( setmeInfo == &tmp );
 
     if( !didParse )
@@ -744,23 +730,41 @@ tr_torrent *
 tr_torrentNew( const tr_ctor  * ctor,
                int            * setmeError )
 {
-    int          err;
-    tr_info      tmpInfo;
+    tr_info tmpInfo;
     tr_torrent * tor = NULL;
+    const tr_magnet_info * magnetInfo;
+    tr_session * session = tr_ctorGetSession( ctor );
 
     assert( ctor != NULL );
-    assert( tr_isSession( tr_ctorGetSession( ctor ) ) );
+    assert( tr_isSession( session ) );
 
-    err = tr_torrentParse( ctor, &tmpInfo );
-    if( !err )
+    if( !tr_ctorGetMagnet( ctor, &magnetInfo ) )
     {
-        tor = tr_new0( tr_torrent, 1 );
-        tor->info = tmpInfo;
-        torrentRealInit( tor, ctor );
+        if( tr_torrentFindFromHash( session, magnetInfo->hash ) != NULL )
+        {
+            if( setmeError )
+                *setmeError = TR_PARSE_DUPLICATE;
+        }
+        else
+        {
+            tor = tr_new0( tr_torrent, 1 );
+            tr_metainfoSetFromMagnet( &tor->info, magnetInfo );
+            torrentInit( tor, ctor );
+        }
     }
-    else if( setmeError )
+    else
     {
-        *setmeError = err;
+        const int err = tr_torrentParse( ctor, &tmpInfo );
+        if( !err )
+        {
+            tor = tr_new0( tr_torrent, 1 );
+            tor->info = tmpInfo;
+            torrentInit( tor, ctor );
+        }
+        else if( setmeError )
+        {
+            *setmeError = err;
+        }
     }
 
     return tor;
@@ -846,7 +850,7 @@ tr_torrentInfo( const tr_torrent * tor )
 const tr_stat *
 tr_torrentStatCached( tr_torrent * tor )
 {
-    const time_t now = time( NULL );
+    const time_t now = tr_time( );
 
     return tr_isTorrent( tor ) && ( now == tor->lastStatTime )
          ? &tor->stats
@@ -860,7 +864,7 @@ tr_torrentSetVerifyState( tr_torrent * tor, tr_verify_state state )
     assert( state==TR_VERIFY_NONE || state==TR_VERIFY_WAIT || state==TR_VERIFY_NOW );
 
     tor->verifyState = state;
-    tor->anyDate = time( NULL );
+    tor->anyDate = tr_time( );
 }
 
 tr_torrent_activity
@@ -898,7 +902,7 @@ tr_torrentStat( tr_torrent * tor )
     assert( tr_isTorrent( tor ) );
     tr_torrentLock( tor );
 
-    tor->lastStatTime = time( NULL );
+    tor->lastStatTime = tr_time( );
 
     s = &tor->stats;
     s->id = tor->uniqueId;
@@ -927,6 +931,7 @@ tr_torrentStat( tr_torrent * tor )
     usableSeeds += tor->info.webseedCount;
 
     s->percentComplete = tr_cpPercentComplete ( &tor->completion );
+    s->metadataPercentComplete = tr_torrentGetMetadataPercent( tor );
 
     s->percentDone   = tr_cpPercentDone  ( &tor->completion );
     s->leftUntilDone = tr_cpLeftUntilDone( &tor->completion );
@@ -988,7 +993,7 @@ tr_torrentStat( tr_torrent * tor )
                     : 0.8*tor->etaDLSpeed + 0.2*s->pieceDownloadSpeed; /* smooth across 5 readings */
                 tor->etaDLSpeedCalculatedAt = now;
             }
-            
+
             if( s->leftUntilDone > s->desiredAvailable )
                 s->eta = TR_ETA_NOT_AVAIL;
             else if( s->pieceDownloadSpeed < 0.1 )
@@ -1006,7 +1011,7 @@ tr_torrentStat( tr_torrent * tor )
                         : 0.8*tor->etaULSpeed + 0.2*s->pieceUploadSpeed; /* smooth across 5 readings */
                     tor->etaULSpeedCalculatedAt = now;
                 }
-                
+
                 if( s->pieceUploadSpeed < 0.1 )
                     s->eta = TR_ETA_UNKNOWN;
                 else
@@ -1020,13 +1025,13 @@ tr_torrentStat( tr_torrent * tor )
             s->eta = TR_ETA_NOT_AVAIL;
             break;
     }
-    
-    if( !checkSeedRatio || s->ratio >= seedRatio || s->ratio == TR_RATIO_INF ) 
-        s->percentRatio = 1.0; 
-    else if( s->ratio == TR_RATIO_NA ) 
-        s->percentRatio = 0.0; 
-    else 
-        s->percentRatio = s->ratio / seedRatio; 
+
+    if( !checkSeedRatio || s->ratio >= seedRatio || s->ratio == TR_RATIO_INF )
+        s->percentRatio = 1.0;
+    else if( s->ratio == TR_RATIO_NA )
+        s->percentRatio = 0.0;
+    else
+        s->percentRatio = s->ratio / seedRatio;
 
     tr_torrentUnlock( tor );
 
@@ -1308,7 +1313,7 @@ checkAndStartImpl( void * vtor )
     }
     else
     {
-        const time_t now = time( NULL );
+        const time_t now = tr_time( );
         tor->isRunning = TRUE;
         tor->needsSeedRatioCheck = TRUE;
         tor->error = TR_STAT_OK;
@@ -1319,6 +1324,7 @@ checkAndStartImpl( void * vtor )
         tr_torrentResetTransferStats( tor );
         tr_announcerTorrentStarted( tor );
         tor->dhtAnnounceAt = now + tr_cryptoWeakRandInt( 20 );
+        tor->dhtAnnounce6At = now + tr_cryptoWeakRandInt( 20 );
         tr_peerMgrStartTorrent( tor );
     }
 
@@ -1435,7 +1441,8 @@ tr_torrentSave( tr_torrent * tor )
 {
     assert( tr_isTorrent( tor ) );
 
-    if( tor->isDirty ) {
+    if( tor->isDirty && tr_torrentHasMetadata( tor ) )
+    {
         tor->isDirty = FALSE;
         tr_torrentSaveResume( tor );
     }
@@ -1485,7 +1492,7 @@ closeTorrent( void * vtor )
 
     d = tr_bencListAddDict( &tor->session->removedTorrents, 2 );
     tr_bencDictAddInt( d, "id", tor->uniqueId );
-    tr_bencDictAddInt( d, "date", time( NULL ) );
+    tr_bencDictAddInt( d, "date", tr_time( ) );
 
     stopTorrent( tor );
 
@@ -1574,6 +1581,12 @@ tr_torrentSetCompletenessCallback( tr_torrent                    * tor,
 }
 
 void
+tr_torrentClearCompletenessCallback( tr_torrent * torrent )
+{
+    tr_torrentSetCompletenessCallback( torrent, NULL, NULL );
+}
+
+void
 tr_torrentSetRatioLimitHitCallback( tr_torrent                     * tor,
                                     tr_torrent_ratio_limit_hit_func  func,
                                     void                           * user_data )
@@ -1582,12 +1595,6 @@ tr_torrentSetRatioLimitHitCallback( tr_torrent                     * tor,
 
     tor->ratio_limit_hit_func = func;
     tor->ratio_limit_hit_func_user_data = user_data;
-}
-
-void
-tr_torrentClearCompletenessCallback( tr_torrent * torrent )
-{
-    tr_torrentSetCompletenessCallback( torrent, NULL, NULL );
 }
 
 void
@@ -1634,7 +1641,7 @@ tr_torrentRecheckCompleteness( tr_torrent * tor )
         {
             tr_announcerTorrentCompleted( tor );
 
-            tor->doneDate = tor->anyDate = time( NULL );
+            tor->doneDate = tor->anyDate = tr_time( );
         }
 
         tr_torrentSetDirty( tor );
@@ -1642,6 +1649,31 @@ tr_torrentRecheckCompleteness( tr_torrent * tor )
 
     tr_torrentUnlock( tor );
 }
+
+/***
+****
+***/
+
+static void
+tr_torrentFireMetadataCompleted( tr_torrent * tor )
+{
+    assert( tr_isTorrent( tor ) );
+
+    if( tor->metadata_func )
+        tor->metadata_func( tor, tor->metadata_func_user_data );
+}
+
+void
+tr_torrentSetMetadataCallback( tr_torrent                * tor,
+                               tr_torrent_metadata_func    func,
+                               void                      * user_data )
+{
+    assert( tr_isTorrent( tor ) );
+
+    tor->metadata_func = func;
+    tor->metadata_func_user_data = user_data;
+}
+
 
 /**
 ***  File priorities
@@ -2072,10 +2104,6 @@ tr_torrentSetAnnounceList( tr_torrent *            tor,
     /* save to the .torrent file */
     if( !tr_bencLoadFile( &metainfo, TR_FMT_BENC, tor->info.torrent ) )
     {
-        int       i;
-        int       prevTier = -1;
-        tr_benc * tier = NULL;
-        tr_benc * announceList;
         tr_info   tmpInfo;
 
         /* remove the old fields */
@@ -2083,19 +2111,32 @@ tr_torrentSetAnnounceList( tr_torrent *            tor,
         tr_bencDictRemove( &metainfo, "announce-list" );
 
         /* add the new fields */
-        tr_bencDictAddStr( &metainfo, "announce", trackers[0].announce );
-        announceList = tr_bencDictAddList( &metainfo, "announce-list", 0 );
-        for( i = 0; i < trackerCount; ++i ) {
-            if( prevTier != trackers[i].tier ) {
-                prevTier = trackers[i].tier;
-                tier = tr_bencListAddList( announceList, 0 );
+        if( trackerCount > 0 )
+        {
+            tr_bencDictAddStr( &metainfo, "announce", trackers[0].announce );
+        }
+        if( trackerCount > 1 )
+        {
+            int i;
+            int prevTier = -1;
+            tr_benc * tier = NULL;
+            tr_benc * announceList = tr_bencDictAddList( &metainfo, "announce-list", 0 );
+
+            for( i=0; i<trackerCount; ++i ) {
+                if( prevTier != trackers[i].tier ) {
+                    prevTier = trackers[i].tier;
+                    tier = tr_bencListAddList( announceList, 0 );
+                }
+                tr_bencListAddStr( tier, trackers[i].announce );
             }
-            tr_bencListAddStr( tier, trackers[i].announce );
         }
 
         /* try to parse it back again, to make sure it's good */
         memset( &tmpInfo, 0, sizeof( tr_info ) );
-        if( tr_metainfoParse( tor->session, &tmpInfo, &metainfo ) )
+        if( tr_metainfoParse( tor->session, &tmpInfo,
+                              &tor->infoDictOffset,
+                              &tor->infoDictLength,
+                              &metainfo ) )
         {
             /* it's good, so keep these new trackers and free the old ones */
 
@@ -2357,7 +2398,7 @@ tr_torrentDeleteLocalData( tr_torrent * tor, tr_fileFunc fileFunc )
     {
         deleteLocalData( tor, fileFunc );
     }
-    else
+    else if( tor->info.fileCount == 1 )
     {
         char * tmp;
 
@@ -2366,7 +2407,6 @@ tr_torrentDeleteLocalData( tr_torrent * tor, tr_fileFunc fileFunc )
         fileFunc( path );
         tr_free( path );
 
-       
         tmp = tr_torrentBuildPartial( tor, 0 );
         path = tr_buildPath( tor->currentDir, tmp, NULL );
         fileFunc( path );
@@ -2655,7 +2695,6 @@ tr_torrentFindFile2( const tr_torrent * tor, tr_file_index_t fileNum,
     return b != NULL;
 }
 
-
 char*
 tr_torrentFindFile( const tr_torrent * tor, tr_file_index_t fileNum )
 {
@@ -2681,6 +2720,8 @@ refreshCurrentDir( tr_torrent * tor )
 
     if( tor->incompleteDir == NULL )
         dir = tor->downloadDir;
+    else if( !tr_torrentHasMetadata( tor ) ) /* no files to find */
+        dir = tor->incompleteDir;
     else if( !tr_torrentFindFile2( tor, 0, &dir, &sub ) )
         dir = tor->incompleteDir;
 

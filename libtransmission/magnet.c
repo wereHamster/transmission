@@ -28,16 +28,16 @@
 
 static const int base32Lookup[] =
 {
-    0xFF,0xFF,0x1A,0x1B,0x1C,0x1D,0x1E,0x1F, // '0', '1', '2', '3', '4', '5', '6', '7'
-    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF, // '8', '9', ':', ';', '<', '=', '>', '?'
-    0xFF,0x00,0x01,0x02,0x03,0x04,0x05,0x06, // '@', 'A', 'B', 'C', 'D', 'E', 'F', 'G'
-    0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E, // 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O'
-    0x0F,0x10,0x11,0x12,0x13,0x14,0x15,0x16, // 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W'
-    0x17,0x18,0x19,0xFF,0xFF,0xFF,0xFF,0xFF, // 'X', 'Y', 'Z', '[', '\', ']', '^', '_'
-    0xFF,0x00,0x01,0x02,0x03,0x04,0x05,0x06, // '`', 'a', 'b', 'c', 'd', 'e', 'f', 'g'
-    0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E, // 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o'
-    0x0F,0x10,0x11,0x12,0x13,0x14,0x15,0x16, // 'p', 'q', 'r', 's', 't', 'u', 'v', 'w'
-    0x17,0x18,0x19,0xFF,0xFF,0xFF,0xFF,0xFF  // 'x', 'y', 'z', '{', '|', '}', '~', 'DEL'
+    0xFF,0xFF,0x1A,0x1B,0x1C,0x1D,0x1E,0x1F, /* '0', '1', '2', '3', '4', '5', '6', '7' */
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF, /* '8', '9', ':', ';', '<', '=', '>', '?' */
+    0xFF,0x00,0x01,0x02,0x03,0x04,0x05,0x06, /* '@', 'A', 'B', 'C', 'D', 'E', 'F', 'G' */
+    0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E, /* 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O' */
+    0x0F,0x10,0x11,0x12,0x13,0x14,0x15,0x16, /* 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W' */
+    0x17,0x18,0x19,0xFF,0xFF,0xFF,0xFF,0xFF, /* 'X', 'Y', 'Z', '[', '\', ']', '^', '_' */
+    0xFF,0x00,0x01,0x02,0x03,0x04,0x05,0x06, /* '`', 'a', 'b', 'c', 'd', 'e', 'f', 'g' */
+    0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E, /* 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o' */
+    0x0F,0x10,0x11,0x12,0x13,0x14,0x15,0x16, /* 'p', 'q', 'r', 's', 't', 'u', 'v', 'w' */
+    0x17,0x18,0x19,0xFF,0xFF,0xFF,0xFF,0xFF  /* 'x', 'y', 'z', '{', '|', '}', '~', 'DEL' */
 };
 
 static const int base32LookupLen = sizeof( base32Lookup ) / sizeof( base32Lookup[0] );
@@ -93,13 +93,16 @@ base32_to_sha1( uint8_t * out, const char * in, const int inlen )
 ***/
 
 #define MAX_TRACKERS 64
+#define MAX_WEBSEEDS 64
 
 tr_magnet_info *
 tr_magnetParse( const char * uri )
 {
     tr_bool got_checksum = FALSE;
-    int announceCount = 0;
-    char * announceURLs[MAX_TRACKERS];
+    int trCount = 0;
+    int wsCount = 0;
+    char * tr[MAX_TRACKERS];
+    char * ws[MAX_WEBSEEDS];
     char * displayName = NULL;
     uint8_t sha1[SHA_DIGEST_LENGTH];
     tr_magnet_info * info = NULL;
@@ -149,7 +152,10 @@ tr_magnetParse( const char * uri )
                 displayName = tr_http_unescape( val, vallen );
 
             if( ( keylen==2 ) && !memcmp( key, "tr", 2 ) )
-                announceURLs[announceCount++] = tr_http_unescape( val, vallen );
+                tr[trCount++] = tr_http_unescape( val, vallen );
+
+            if( ( keylen==2 ) && !memcmp( key, "ws", 2 ) )
+                ws[wsCount++] = tr_http_unescape( val, vallen );
 
             walk = next != NULL ? next + 1 : NULL;
         }
@@ -159,8 +165,10 @@ tr_magnetParse( const char * uri )
     {
         info = tr_new0( tr_magnet_info, 1 );
         info->displayName = displayName;
-        info->announceCount = announceCount;
-        info->announceURLs = tr_memdup( announceURLs, sizeof(char*) * announceCount );
+        info->trackerCount = trCount;
+        info->trackers = tr_memdup( tr, sizeof(char*) * trCount );
+        info->webseedCount = wsCount;
+        info->webseeds = tr_memdup( ws, sizeof(char*) * wsCount );
         memcpy( info->hash, sha1, sizeof(uint8_t) * SHA_DIGEST_LENGTH );
     }
 
@@ -174,10 +182,14 @@ tr_magnetFree( tr_magnet_info * info )
     {
         int i;
 
-        for( i=0; i<info->announceCount; ++i )
-            tr_free( info->announceURLs[i] );
+        for( i=0; i<info->trackerCount; ++i )
+            tr_free( info->trackers[i] );
+        tr_free( info->trackers );
 
-        tr_free( info->announceURLs );
+        for( i=0; i<info->webseedCount; ++i )
+            tr_free( info->webseeds[i] );
+        tr_free( info->webseeds );
+
         tr_free( info->displayName );
         tr_free( info );
     }

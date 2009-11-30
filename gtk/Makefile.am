@@ -21,6 +21,8 @@ AM_CPPFLAGS = \
 
 AM_CFLAGS = \
     $(LIBEVENT_CFLAGS) \
+    $(LIBCANBERRA_CFLAGS) \
+    $(LIBGCONF_CFLAGS) \
     $(GTK_CFLAGS) \
     $(LIBCURL_CFLAGS) \
     $(GIO_CFLAGS) \
@@ -48,6 +50,7 @@ noinst_HEADERS = \
     msgwin.h \
     notify.h \
     options-icon.h \
+    ratio-icon.h \
     relocate.h \
     stats.h \
     sexy-icon-entry.h \
@@ -101,6 +104,8 @@ transmission_LDADD = \
     $(top_builddir)/libtransmission/libtransmission.a \
     $(top_builddir)/third-party/miniupnp/libminiupnp.a \
     $(top_builddir)/third-party/libnatpmp/libnatpmp.a \
+    $(LIBCANBERRA_LIBS) \
+    $(LIBGCONF_LIBS) \
     $(DHT_LIBS) \
     $(GTK_LIBS) \
     $(GIO_LIBS) \

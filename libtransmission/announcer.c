@@ -391,7 +391,7 @@ tierNew( tr_torrent * tor )
 {
     tr_tier * t;
     static int nextKey = 1;
-    const time_t now = time( NULL );
+    const time_t now = tr_time( );
 
     t = tr_new0( tr_tier, 1 );
     t->key = nextKey++;
@@ -703,7 +703,7 @@ createAnnounceURL( const tr_announcer     * announcer,
         char ipv6_readable[INET6_ADDRSTRLEN];
         inet_ntop( AF_INET6, ipv6, ipv6_readable, INET6_ADDRSTRLEN );
         evbuffer_add_printf( buf, "&ipv6=");
-        tr_http_escape( buf, ipv6_readable, strlen(ipv6_readable), 0 );
+        tr_http_escape( buf, ipv6_readable, strlen(ipv6_readable), TRUE );
     }
 
     ret = tr_strndup( EVBUFFER_DATA( buf ), EVBUFFER_LENGTH( buf ) );
@@ -817,7 +817,7 @@ static tr_bool
 tierCanManualAnnounce( const tr_tier * tier )
 {
     return tier->isRunning
-        && tier->manualAnnounceAllowedAt <= time( NULL );
+        && tier->manualAnnounceAllowedAt <= tr_time( );
 }
 
 tr_bool
@@ -900,22 +900,22 @@ torrentSetNextAnnounce( tr_torrent * tor, const char * announceEvent, time_t ann
 void
 tr_announcerManualAnnounce( tr_torrent * tor )
 {
-    torrentSetNextAnnounce( tor, "manual", time( NULL ) );
+    torrentSetNextAnnounce( tor, "manual", tr_time( ) );
 }
 void
 tr_announcerTorrentStarted( tr_torrent * tor )
 {
-    torrentSetNextAnnounce( tor, "started", time( NULL ) );
+    torrentSetNextAnnounce( tor, "started", tr_time( ) );
 }
 void
 tr_announcerTorrentStopped( tr_torrent * tor )
 {
-    torrentSetNextAnnounce( tor, "stopped", time( NULL ) );
+    torrentSetNextAnnounce( tor, "stopped", tr_time( ) );
 }
 void
 tr_announcerTorrentCompleted( tr_torrent * tor )
 {
-    torrentSetNextAnnounce( tor, "completed", time( NULL ) );
+    torrentSetNextAnnounce( tor, "completed", tr_time( ) );
 }
 void
 tr_announcerChangeMyPort( tr_torrent * tor )
@@ -980,7 +980,7 @@ compareTiers( const void * va, const void * vb )
 
     /* working domains come before non-working */
     if( !ret ) {
-        const time_t now = time( NULL );
+        const time_t now = tr_time( );
         af = tierIsNotResponding( a, now );
         bf = tierIsNotResponding( b, now );
         if( af != bf )
@@ -1356,7 +1356,7 @@ tierAnnounce( tr_announcer * announcer, tr_tier * tier )
     char * url;
     struct announce_data * data;
     const tr_torrent * tor = tier->tor;
-    const time_t now = time( NULL );
+    const time_t now = tr_time( );
 
     assert( !tier->isAnnouncing );
 
@@ -1452,7 +1452,7 @@ onScrapeDone( tr_session   * session,
     tr_announcer * announcer = session->announcer;
     struct announce_data * data = vdata;
     tr_tier * tier = getTier( announcer, data->torrentId, data->tierId );
-    const time_t now = time( NULL );
+    const time_t now = tr_time( );
     tr_bool success = FALSE;
 
     if( announcer )
@@ -1528,7 +1528,7 @@ tierScrape( tr_announcer * announcer, tr_tier * tier )
     const char * scrape;
     struct evbuffer * buf;
     struct announce_data * data;
-    const time_t now = time( NULL );
+    const time_t now = tr_time( );
 
     assert( tier );
     assert( !tier->isScraping );
@@ -1597,7 +1597,7 @@ announceMore( tr_announcer * announcer )
     const tr_bool canAnnounce = announcer->announceSlotsAvailable > 0;
     const tr_bool canScrape = announcer->scrapeSlotsAvailable > 0;
     tr_torrent * tor = NULL;
-    const time_t now = time( NULL );
+    const time_t now = tr_time( );
 
     if( announcer->announceSlotsAvailable > 0 )
     {
@@ -1650,15 +1650,29 @@ announceMore( tr_announcer * announcer )
     tor = NULL;
     while(( tor = tr_torrentNext( announcer->session, tor ))) {
         if( tor->dhtAnnounceAt <= now ) {
-            int rc = 1;
-            if( tor->isRunning && tr_torrentAllowsDHT(tor) )
-                rc = tr_dhtAnnounce(tor, 1);
-            if(rc == 0)
-                /* The DHT is not ready yet.  Try again soon. */
-                tor->dhtAnnounceAt = now + 5 + tr_cryptoWeakRandInt( 5 );
-            else
-                /* We should announce at least once every 30 minutes. */
-                tor->dhtAnnounceAt = now + 25 * 60 + tr_cryptoWeakRandInt( 3 * 60 );
+            if( tor->isRunning && tr_torrentAllowsDHT(tor) ) {
+                int rc;
+                rc = tr_dhtAnnounce(tor, AF_INET, 1);
+                if(rc == 0)
+                    /* The DHT is not ready yet.  Try again soon. */
+                    tor->dhtAnnounceAt = now + 5 + tr_cryptoWeakRandInt( 5 );
+                else
+                    /* We should announce at least once every 30 minutes. */
+                    tor->dhtAnnounceAt =
+                        now + 25 * 60 + tr_cryptoWeakRandInt( 3 * 60 );
+            }
+        }
+
+        if( tor->dhtAnnounce6At <= now ) {
+            if( tor->isRunning && tr_torrentAllowsDHT(tor) ) {
+                int rc;
+                rc = tr_dhtAnnounce(tor, AF_INET6, 1);
+                if(rc == 0)
+                    tor->dhtAnnounce6At = now + 5 + tr_cryptoWeakRandInt( 5 );
+                else
+                    tor->dhtAnnounce6At =
+                        now + 25 * 60 + tr_cryptoWeakRandInt( 3 * 60 );
+            }
         }
     }
 }
@@ -1691,7 +1705,7 @@ tr_announcerStats( const tr_torrent * torrent,
     int out = 0;
     int tierCount;
     tr_tracker_stat * ret;
-    const time_t now = time( NULL );
+    const time_t now = tr_time( );
 
     assert( tr_isTorrent( torrent ) );
 

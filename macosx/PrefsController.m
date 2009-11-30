@@ -681,10 +681,17 @@ tr_session * fHandle;
     [fDefaults removeObjectForKey: @"WarningFolderDataSameName"];
     [fDefaults removeObjectForKey: @"WarningResetStats"];
     [fDefaults removeObjectForKey: @"WarningCreatorBlankAddress"];
+    [fDefaults removeObjectForKey: @"WarningCreatorPrivateBlankAddress"];
     [fDefaults removeObjectForKey: @"WarningRemoveTrackers"];
     [fDefaults removeObjectForKey: @"WarningInvalidOpen"];
     [fDefaults removeObjectForKey: @"WarningDonate"];
     //[fDefaults removeObjectForKey: @"WarningLegal"];
+}
+
+- (void) setDefaultForMagnets: (id) sender
+{
+    NSString * bundleID = [[NSBundle mainBundle] bundleIdentifier];
+    const OSStatus result = LSSetDefaultHandlerForURLScheme((CFStringRef)@"magnet", (CFStringRef)bundleID);
 }
 
 - (void) setQueue: (id) sender
