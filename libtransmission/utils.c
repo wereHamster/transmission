@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009 Charles Kerr <charles@transmissionbt.com>
+ * This file Copyright (C) 2009 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -50,6 +50,7 @@ static tr_lock *      messageLock = NULL;
 static tr_bool        messageQueuing = FALSE;
 static tr_msg_list *  messageQueue = NULL;
 static tr_msg_list ** messageQueueTail = &messageQueue;
+static int            messageQueueCount = 0;
 
 #ifndef WIN32
     /* make null versions of these win32 functions */
@@ -166,6 +167,8 @@ tr_getQueuedMessages( void )
     ret = messageQueue;
     messageQueue = NULL;
     messageQueueTail = &messageQueue;
+    
+    messageQueueCount = 0;
 
     tr_lockUnlock( messageLock );
     return ret;
@@ -295,54 +298,64 @@ tr_msg( const char * file, int line,
         const char * fmt, ... )
 {
     const int err = errno; /* message logging shouldn't affect errno */
+    char buf[1024];
+    va_list ap;
+
     tr_lockLock( messageLock );
 
-    if( messageLevel >= level )
+    /* build the text message */
+    *buf = '\0';
+    va_start( ap, fmt );
+    evutil_vsnprintf( buf, sizeof( buf ), fmt, ap );
+    va_end( ap );
+
+    OutputDebugString( buf );
+
+    if( *buf )
     {
-        char buf[MAX_STACK_ARRAY_SIZE];
-        va_list ap;
-
-        /* build the text message */
-        *buf = '\0';
-        va_start( ap, fmt );
-        evutil_vsnprintf( buf, sizeof( buf ), fmt, ap );
-        va_end( ap );
-
-        OutputDebugString( buf );
-
-        if( *buf )
+        if( messageQueuing )
         {
-            if( messageQueuing )
-            {
-                tr_msg_list * newmsg;
-                newmsg = tr_new0( tr_msg_list, 1 );
-                newmsg->level = level;
-                newmsg->when = tr_time( );
-                newmsg->message = tr_strdup( buf );
-                newmsg->file = file;
-                newmsg->line = line;
-                newmsg->name = tr_strdup( name );
+            tr_msg_list * newmsg;
+            newmsg = tr_new0( tr_msg_list, 1 );
+            newmsg->level = level;
+            newmsg->when = tr_time( );
+            newmsg->message = tr_strdup( buf );
+            newmsg->file = file;
+            newmsg->line = line;
+            newmsg->name = tr_strdup( name );
 
-                *messageQueueTail = newmsg;
-                messageQueueTail = &newmsg->next;
+            *messageQueueTail = newmsg;
+            messageQueueTail = &newmsg->next;
+            ++messageQueueCount;
+            
+            if( messageQueueCount > TR_MAX_MSG_LOG )
+            {
+                tr_msg_list * old = messageQueue;
+                messageQueue = old->next;
+                old->next = NULL;
+                tr_freeMessageList(old);
+                
+                --messageQueueCount;
+                
+                assert( messageQueueCount == TR_MAX_MSG_LOG );
             }
+        }
+        else
+        {
+            char timestr[64];
+            FILE * fp;
+
+            fp = tr_getLog( );
+            if( fp == NULL )
+                fp = stderr;
+
+            tr_getLogTimeStr( timestr, sizeof( timestr ) );
+
+            if( name )
+                fprintf( fp, "[%s] %s: %s\n", timestr, name, buf );
             else
-            {
-                char timestr[64];
-                FILE * fp;
-
-                fp = tr_getLog( );
-                if( fp == NULL )
-                    fp = stderr;
-
-                tr_getLogTimeStr( timestr, sizeof( timestr ) );
-
-                if( name )
-                    fprintf( fp, "[%s] %s: %s\n", timestr, name, buf );
-                else
-                    fprintf( fp, "[%s] %s\n", timestr, buf );
-                fflush( fp );
-            }
+                fprintf( fp, "[%s] %s\n", timestr, buf );
+            fflush( fp );
         }
     }
 

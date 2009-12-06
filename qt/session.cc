@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009 Charles Kerr <charles@transmissionbt.com>
+ * This file Copyright (C) 2009 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -15,6 +15,7 @@
 
 #include <QApplication>
 #include <QByteArray>
+#include <QClipboard>
 #include <QCoreApplication>
 #include <QDesktopServices>
 #include <QMessageBox>
@@ -48,6 +49,7 @@ namespace
         TAG_BLOCKLIST_UPDATE,
         TAG_ADD_TORRENT,
         TAG_PORT_TEST,
+        TAG_MAGNET_LINK,
 
         FIRST_UNIQUE_TAG
     };
@@ -102,6 +104,21 @@ Session :: portTest( )
     tr_bencInitDict( &top, 2 );
     tr_bencDictAddStr( &top, "method", "port-test" );
     tr_bencDictAddInt( &top, "tag", TAG_PORT_TEST );
+    exec( &top );
+    tr_bencFree( &top );
+}
+
+void
+Session :: copyMagnetLinkToClipboard( int torrentId )
+{
+    tr_benc top;
+    tr_bencInitDict( &top, 3 );
+    tr_bencDictAddStr( &top, "method", "torrent-get" );
+    tr_bencDictAddInt( &top, "tag", TAG_MAGNET_LINK );
+    tr_benc * args = tr_bencDictAddDict( &top, "arguments", 2 );
+    tr_bencListAddInt( tr_bencDictAddList( args, "ids", 1 ), torrentId );
+    tr_bencListAddStr( tr_bencDictAddList( args, "fields", 1 ), "magnetLink" );
+
     exec( &top );
     tr_bencFree( &top );
 }
@@ -680,6 +697,19 @@ Session :: parseResponse( const char * json, size_t jsonLength )
                     emit portTested( (bool)isOpen );
                 }
 
+                case TAG_MAGNET_LINK: {
+                    tr_benc * args;
+                    tr_benc * torrents;
+                    tr_benc * child;
+                    const char * str;
+                    if( tr_bencDictFindDict( &top, "arguments", &args )
+                        && tr_bencDictFindList( args, "torrents", &torrents )
+                        && (( child = tr_bencListChild( torrents, 0 )))
+                        && tr_bencDictFindStr( child, "magnetLink", &str ) )
+                            QApplication::clipboard()->setText( str );
+                    break;
+                }
+
                 case TAG_ADD_TORRENT:
                     str = "";
                     if( tr_bencDictFindStr( &top, "result", &str ) && strcmp( str, "success" ) ) {
@@ -827,30 +857,37 @@ Session :: addTorrent( QString filename )
 }
 
 void
-Session :: addTorrent( QString filename, QString localPath )
+Session :: addTorrent( QString key, QString localPath )
 {
-    QFile file( filename );
+    tr_benc top, *args;
+    tr_bencInitDict( &top, 2 );
+    tr_bencDictAddStr( &top, "method", "torrent-add" );
+    args = tr_bencDictAddDict( &top, "arguments", 3 );
+    tr_bencDictAddStr( args, "download-dir", qPrintable(localPath) );
+    tr_bencDictAddInt( args, "paused", !myPrefs.getBool( Prefs::START ) );
+
+    // if "key" is a readable local file, add it as metadata...
+    // otherwise it's probably a URL or magnet link, so pass it along
+    // for the daemon to handle
+    QFile file( key );
     file.open( QIODevice::ReadOnly );
     const QByteArray raw( file.readAll( ) );
     file.close( );
-
     if( !raw.isEmpty( ) )
     {
         int b64len = 0;
         char * b64 = tr_base64_encode( raw.constData(), raw.size(), &b64len );
-
-        tr_benc top, *args;
-        tr_bencInitDict( &top, 2 );
-        tr_bencDictAddStr( &top, "method", "torrent-add" );
-        args = tr_bencDictAddDict( &top, "arguments", 3 );
-        tr_bencDictAddStr( args, "download-dir", qPrintable(localPath) );
         tr_bencDictAddRaw( args, "metainfo", b64, b64len  );
-        tr_bencDictAddInt( args, "paused", !myPrefs.getBool( Prefs::START ) );
-        exec( &top );
-
         tr_free( b64 );
         tr_bencFree( &top );
     }
+    else
+    {
+        tr_bencDictAddStr( args, "filename", key.toUtf8().constData() );
+    }
+
+    exec( &top );
+    tr_bencFree( &top );
 }
 
 void

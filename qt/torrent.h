@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009 Charles Kerr <charles@transmissionbt.com>
+ * This file Copyright (C) 2009 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -101,6 +101,7 @@ class Torrent: public QObject
             PEERS_SENDING_TO_US,
             WEBSEEDS_SENDING_TO_US,
             PERCENT_DONE,
+            METADATA_PERCENT_DONE,
             PERCENT_VERIFIED,
             DATE_ACTIVITY,
             DATE_ADDED,
@@ -222,9 +223,11 @@ class Torrent: public QObject
         uint64_t sizeWhenDone( ) const { return getSize( SIZE_WHEN_DONE ); }
         uint64_t leftUntilDone( ) const { return getSize( LEFT_UNTIL_DONE ); }
         uint64_t pieceSize( ) const { return getSize( PIECE_SIZE ); }
+        bool hasMetadata( ) const { return getDouble( METADATA_PERCENT_DONE ) >= 1.0; }
         int  pieceCount( ) const { return getInt( PIECE_COUNT ); }
         double ratio( ) const { return getDouble( RATIO ); }
         double percentDone( ) const { return getDouble( PERCENT_DONE ); }
+        double metadataPercentDone( ) const { return getDouble( METADATA_PERCENT_DONE ); }
         uint64_t downloadedEver( ) const { return getSize( DOWNLOADED_EVER ); }
         uint64_t uploadedEver( ) const { return getSize( UPLOADED_EVER ); }
         uint64_t failedEver( ) const { return getSize( FAILED_EVER ); }

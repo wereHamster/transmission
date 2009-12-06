@@ -26,6 +26,7 @@
 #import "NSApplicationAdditions.h"
 #import "NSStringAdditions.h"
 #import <transmission.h>
+#import <utils.h>
 
 #define LEVEL_ERROR 0
 #define LEVEL_INFO  1
@@ -186,6 +187,16 @@
             [fDisplayedMessages addObject: message];
             changed = YES;
         }
+    }
+    
+    if ([fMessages count] > TR_MAX_MSG_LOG)
+    {
+        NSIndexSet * removeIndexes = [NSIndexSet indexSetWithIndexesInRange: NSMakeRange(0, [fMessages count]-TR_MAX_MSG_LOG)];
+        NSArray * itemsToRemove = [fMessages objectsAtIndexes: removeIndexes];
+        
+        [fMessages removeObjectsAtIndexes: removeIndexes];
+        [fDisplayedMessages removeObjectsInArray: itemsToRemove];
+        changed = YES;
     }
     
     if (changed)

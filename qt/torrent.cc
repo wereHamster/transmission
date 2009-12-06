@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009 Charles Kerr <charles@transmissionbt.com>
+ * This file Copyright (C) 2009 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -71,6 +71,7 @@ Torrent :: myProperties[] =
     { PEERS_SENDING_TO_US, "peersSendingToUs", QVariant::Int, STAT },
     { WEBSEEDS_SENDING_TO_US, "webseedsSendingToUs", QVariant::Int, STAT_EXTRA },
     { PERCENT_DONE, "percentDone", QVariant::Double, STAT },
+    { METADATA_PERCENT_DONE, "metadataPercentComplete", QVariant::Double, STAT },
     { PERCENT_VERIFIED, "recheckProgress", QVariant::Double, STAT },
     { DATE_ACTIVITY, "activityDate", QVariant::DateTime, STAT_EXTRA },
     { DATE_ADDED, "addedDate", QVariant::DateTime, INFO },
@@ -413,8 +414,10 @@ Torrent :: updateMimeIcon( )
 
     if( files.size( ) > 1 )
         icon = QFileIconProvider().icon( QFileIconProvider::Folder );
-    else
+    else if( files.size( ) == 1 )
         icon = Utils :: guessMimeIcon( files.at(0).filename );
+    else
+        icon = QIcon( );
 
     setIcon( MIME_ICON, icon );
 }

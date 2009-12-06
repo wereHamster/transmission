@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009 Charles Kerr <charles@transmissionbt.com>
+ * This file Copyright (C) 2009 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -124,6 +124,8 @@ void tr_assertImpl( const char * file, int line, const char * test, const char *
 #endif
 
 void tr_msgInit( void );
+
+#define TR_MAX_MSG_LOG 10000
 
 extern int messageLevel;
 
@@ -434,10 +436,12 @@ struct tm * tr_localtime_r( const time_t *_clock, struct tm *_result );
 int tr_moveFile( const char * oldpath, const char * newpath,
                  tr_bool * renamed ) TR_GNUC_NONNULL(1,2);
 
-static TR_INLINE void tr_removeElementFromArray( void * array, int index_to_remove,
-                                size_t sizeof_element, size_t nmemb )
+static TR_INLINE void tr_removeElementFromArray( void   * array,
+                                                 int      index_to_remove,
+                                                 size_t   sizeof_element,
+                                                 size_t   nmemb )
 {
-    char * a = array;
+    char * a = (char*) array;
 
     memmove( a + sizeof_element * index_to_remove,
              a + sizeof_element * ( index_to_remove  + 1 ),

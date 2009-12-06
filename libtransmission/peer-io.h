@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2009 Charles Kerr <charles@transmissionbt.com>
+ * This file Copyright (C) 2007-2009 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -82,6 +82,7 @@ typedef struct tr_peerIo
     int                   magicNumber;
 
     uint8_t               encryptionMode;
+    tr_bool               isSeed;
 
     tr_port               port;
     int                   socket;
@@ -120,7 +121,8 @@ tr_peerIo*  tr_peerIoNewOutgoing( tr_session              * session,
                                   struct tr_bandwidth     * parent,
                                   const struct tr_address * addr,
                                   tr_port                   port,
-                                  const  uint8_t          * torrentHash );
+                                  const  uint8_t          * torrentHash,
+                                  tr_bool                   isSeed );
 
 tr_peerIo*  tr_peerIoNewIncoming( tr_session              * session,
                                   struct tr_bandwidth     * parent,

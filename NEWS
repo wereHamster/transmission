@@ -5,11 +5,12 @@
   * If a torrent has multiple tracker tiers, announce to them in parallel
   * Add optional "incomplete directory" where partial downloads are stored
   * Trackerless torrent support
-  * Improved IPv6 support
   * Append .part to incomplete files
-  * Faster management of very long peer lists
+  * Improved IPv6 support
+  * Faster management of very large peer lists
   * When seeding, prefetch the data we upload
-  * Improved DHT support (libdht 0.11)
+  * IPv6 support for the DHT (dht 0.11) 
+  * Improved DHT bootstrapping
   * Improved PEX support
   * Brand-new torrents with no downloaded data don't have to wait in the "Verify Local Data" queue
   * Fix potential crash on shutdown when port forwarding is disabled
@@ -19,7 +20,7 @@
   * Redesigned trackers inspector tab with favicons and copy-paste functionality (paste lists of multiple trackers)
   * Message log stores all messages and does real filtering
   * Quick Look restored on Snow Leopard
-  * Moving data and incomplete folders are now handled by libtransmission
+  * Moving data and incomplete folder are now handled by libtransmission
   * Improved reveal in Finder functionality on Snow Leopard
   * Various smaller behavior and interface tweaks
 ==== GTK+ ====
@@ -33,7 +34,7 @@
   * When running as a daemon, send log messages to syslog
   * transmission-remote now allows per-torrent speed limits to be set
 ==== Web Client ====
-  * Add "turtle mode" support to the web client
+  * Add speed limit "turtle mode" support to the web client
   * Double-clicking a torrent opens/closes the torrent inspector
 
 === Transmission 1.76 (2009/10/24) ===

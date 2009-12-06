@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009 Charles Kerr <charles@transmissionbt.com>
+ * This file Copyright (C) 2009 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -57,10 +57,10 @@ enum
     KEYLEN = 8,
 
     /* how many scrapes we allow at one time */
-    MAX_CONCURRENT_SCRAPES = 16,
+    MAX_CONCURRENT_SCRAPES = 96,
 
     /* how many announces we allow at one time */
-    MAX_CONCURRENT_ANNOUNCES = 48,
+    MAX_CONCURRENT_ANNOUNCES = 96,
 
     /* if a tracker takes more than this long to respond,
      * we treat it as nonresponsive */
@@ -130,6 +130,7 @@ compareHostToName( const void * va, const void * vb )
     return strcmp( a->name, vb );
 }
 
+/* format: hostname + ':' + port */
 static char *
 getHostName( const char * url )
 {
@@ -208,6 +209,13 @@ typedef struct tr_announcer
     int scrapeSlotsAvailable;
 }
 tr_announcer;
+
+tr_bool
+tr_announcerHasBacklog( const struct tr_announcer * announcer )
+{
+    return ( announcer->scrapeSlotsAvailable < 1 )
+        || ( announcer->announceSlotsAvailable < 1 );
+}
 
 static tr_host *
 getHost( tr_announcer * announcer, const char * url )
@@ -418,6 +426,7 @@ tierFree( void * vtier )
 static void
 tierIncrementTracker( tr_tier * tier )
 {
+    /* move our index to the next tracker in the tier */
     const int i = ( tier->currentTrackerIndex + 1 )
                         % tr_ptrArraySize( &tier->trackers );
     tier->currentTracker = tr_ptrArrayNth( &tier->trackers, i );
@@ -1449,11 +1458,11 @@ onScrapeDone( tr_session   * session,
               size_t         responseLen,
               void         * vdata )
 {
+    tr_bool success = FALSE;
     tr_announcer * announcer = session->announcer;
     struct announce_data * data = vdata;
     tr_tier * tier = getTier( announcer, data->torrentId, data->tierId );
     const time_t now = tr_time( );
-    tr_bool success = FALSE;
 
     if( announcer )
         ++announcer->scrapeSlotsAvailable;
@@ -1525,8 +1534,8 @@ onScrapeDone( tr_session   * session,
 static void
 tierScrape( tr_announcer * announcer, tr_tier * tier )
 {
+    char * url;
     const char * scrape;
-    struct evbuffer * buf;
     struct announce_data * data;
     const time_t now = tr_time( );
 
@@ -1541,19 +1550,18 @@ tierScrape( tr_announcer * announcer, tr_tier * tier )
 
     scrape = tier->currentTracker->scrape;
 
-    buf = evbuffer_new( );
-    evbuffer_add_printf( buf, "%s%cinfo_hash=%s",
-                         scrape,
-                         strchr( scrape, '?' ) ? '&' : '?',
-                         tier->tor->info.hashEscaped );
+    url = tr_strdup_printf( "%s%cinfo_hash=%s",
+                            scrape,
+                            strchr( scrape, '?' ) ? '&' : '?',
+                            tier->tor->info.hashEscaped );
 
     tier->isScraping = TRUE;
     tier->lastScrapeStartTime = now;
     --announcer->scrapeSlotsAvailable;
-    dbgmsg( tier, "scraping \"%s\"", (const char*)EVBUFFER_DATA(buf) );
-    tr_webRun( announcer->session, (const char*)EVBUFFER_DATA(buf), NULL, onScrapeDone, data );
+    dbgmsg( tier, "scraping \"%s\"", url );
+    tr_webRun( announcer->session, url, NULL, onScrapeDone, data );
 
-    evbuffer_free( buf );
+    tr_free( url );
 }
 
 static void
@@ -1641,6 +1649,12 @@ announceMore( tr_announcer * announcer )
             dbgmsg( tier, "scraping tier %d of %d", (i+1), n );
             tierScrape( announcer, tier );
         }
+
+#if 0
+char timebuf[64];
+tr_getLogTimeStr( timebuf, 64 );
+fprintf( stderr, "[%s] announce.c has %d requests ready to send (announce: %d, scrape: %d)\n", timebuf, (int)(tr_ptrArraySize(&announceMe)+tr_ptrArraySize(&scrapeMe)), (int)tr_ptrArraySize(&announceMe), (int)tr_ptrArraySize(&scrapeMe) );
+#endif
 
         /* cleanup */
         tr_ptrArrayDestruct( &scrapeMe, NULL );

@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2009 Charles Kerr <charles@transmissionbt.com>
+ * This file Copyright (C) 2007-2009 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -19,6 +19,7 @@
 #include <event.h>
 
 #include "transmission.h"
+#include "announcer.h"
 #include "bandwidth.h"
 #include "bencode.h"
 #include "blocklist.h"
@@ -954,9 +955,10 @@ tr_peerMgrGetNextRequests( tr_torrent           * tor,
         }
     }
 
-    /* We almost always change only a handful of pieces in the array.
-     * In these cases, it's cheaper to sort those changed pieces and merge,
-     * than qsort()ing the whole array again */
+    /* In most cases we've just changed the weights of a small number of pieces.
+     * So rather than qsort()ing the entire array, it's faster to sort just the
+     * changed ones, then do a standard merge-two-sorted-arrays pass on the
+     * changed and unchanged pieces. */
     if( got > 0 )
     {
         struct weighted_piece * p;
@@ -966,7 +968,7 @@ tr_peerMgrGetNextRequests( tr_torrent           * tor,
         struct weighted_piece * b = a_end;
         struct weighted_piece * b_end = t->pieces + t->pieceCount;
 
-        /* rescore the pieces that we changed */
+        /* resort the pieces that we changed */
         weightTorrent = t->tor;
         qsort( a, a_end-a, sizeof( struct weighted_piece ), comparePieceByWeight );
 
@@ -2608,6 +2610,8 @@ reconnectTorrent( Torrent * t )
 
         /* decide how many peers can we try to add in this pass */
         maxCandidates = MAX_RECONNECTIONS_PER_PULSE;
+        if( tr_announcerHasBacklog( t->manager->session->announcer ) )
+            maxCandidates /= 2;
         maxCandidates = MIN( maxCandidates, getMaxPeerCount( t->tor ) - getPeerCount( t ) );
         maxCandidates = MIN( maxCandidates, MAX_CONNECTIONS_PER_SECOND - newConnectionsThisSecond );
 
@@ -2674,7 +2678,8 @@ reconnectTorrent( Torrent * t )
                                            mgr->session->bandwidth,
                                            &atom->addr,
                                            atom->port,
-                                           t->tor->info.hash );
+                                           t->tor->info.hash,
+                                           t->tor->completeness == TR_SEED );
 
                 if( io == NULL )
                 {

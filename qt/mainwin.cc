@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009 Charles Kerr <charles@transmissionbt.com>
+ * This file Copyright (C) 2009 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -18,6 +18,7 @@
 #include <QDesktopServices>
 #include <QFileDialog>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QLabel>
 #include <QSignalMapper>
 #include <QSize>
@@ -110,7 +111,7 @@ TrMainWindow :: TrMainWindow( Session& session, Prefs& prefs, TorrentModel& mode
     const QSize smallIconSize( i, i );
 
     // icons
-    ui.action_Add->setIcon( getStockIcon( "list-add", QStyle::SP_DialogOpenButton ) );
+    ui.action_AddFile->setIcon( getStockIcon( "list-add", QStyle::SP_DialogOpenButton ) );
     ui.action_New->setIcon( getStockIcon( "document-new", QStyle::SP_DesktopIcon ) );
     ui.action_Properties->setIcon( getStockIcon( "document-properties", QStyle::SP_DesktopIcon ) );
     ui.action_OpenFolder->setIcon( getStockIcon( "folder-open", QStyle::SP_DirOpenIcon ) );
@@ -152,13 +153,15 @@ TrMainWindow :: TrMainWindow( Session& session, Prefs& prefs, TorrentModel& mode
     connect( ui.action_Announce, SIGNAL(triggered()), this, SLOT(reannounceSelected()) );
     connect( ui.action_StartAll, SIGNAL(triggered()), this, SLOT(startAll()));
     connect( ui.action_PauseAll, SIGNAL(triggered()), this, SLOT(pauseAll()));
-    connect( ui.action_Add, SIGNAL(triggered()), this, SLOT(openTorrent()));
+    connect( ui.action_AddFile, SIGNAL(triggered()), this, SLOT(openTorrent()));
+    connect( ui.action_AddURL, SIGNAL(triggered()), this, SLOT(openURL()));
     connect( ui.action_New, SIGNAL(triggered()), this, SLOT(newTorrent()));
     connect( ui.action_Preferences, SIGNAL(triggered()), myPrefsDialog, SLOT(show()));
     connect( ui.action_Statistics, SIGNAL(triggered()), myStatsDialog, SLOT(show()));
     connect( ui.action_About, SIGNAL(triggered()), myAboutDialog, SLOT(show()));
     connect( ui.action_Contents, SIGNAL(triggered()), this, SLOT(openHelp()));
     connect( ui.action_OpenFolder, SIGNAL(triggered()), this, SLOT(openFolder()));
+    connect( ui.action_CopyMagnetToClipboard, SIGNAL(triggered()), this, SLOT(copyMagnetLinkToClipboard()));
     connect( ui.action_SetLocation, SIGNAL(triggered()), this, SLOT(setLocation()));
     connect( ui.action_Properties, SIGNAL(triggered()), this, SLOT(openProperties()));
     connect( ui.action_SessionDialog, SIGNAL(triggered()), mySessionDialog, SLOT(show()));
@@ -166,17 +169,21 @@ TrMainWindow :: TrMainWindow( Session& session, Prefs& prefs, TorrentModel& mode
 
     QAction * sep2 = new QAction( this );
     sep2->setSeparator( true );
+    QAction * sep3 = new QAction( this );
+    sep3->setSeparator( true );
 
     // context menu
     QList<QAction*> actions;
     actions << ui.action_Properties
             << ui.action_OpenFolder
-            << ui.action_SetLocation
             << sep2
             << ui.action_Start
-            << ui.action_Pause
-            << ui.action_Verify
             << ui.action_Announce
+            << ui.action_Pause
+            << ui.action_CopyMagnetToClipboard
+            << sep3
+            << ui.action_Verify
+            << ui.action_SetLocation
             << sep
             << ui.action_Remove
             << ui.action_Delete;
@@ -214,7 +221,8 @@ TrMainWindow :: TrMainWindow( Session& session, Prefs& prefs, TorrentModel& mode
     actionGroup->addAction( ui.action_SortByTracker );
 
     QMenu * menu = new QMenu( );
-    menu->addAction( ui.action_Add );
+    menu->addAction( ui.action_AddFile );
+    menu->addAction( ui.action_AddURL );
     menu->addSeparator( );
     menu->addAction( ui.action_ShowMainWindow );
     menu->addAction( ui.action_ShowMessageLog );
@@ -478,7 +486,7 @@ TrMainWindow :: createStatusBar( )
         connect( ui.action_SessionRatio, SIGNAL(triggered()), this, SLOT(showSessionRatio()));
         connect( ui.action_SessionTransfer, SIGNAL(triggered()), this, SLOT(showSessionTransfer()));
         p = myStatsModeButton = new TrIconPushButton( this );
-        p->setIcon( getStockIcon( "view-refresh", QStyle::SP_BrowserReload ) );
+        p->setIcon( QIcon( ":/icons/ratio.png" ) );
         p->setFlat( true );
         p->setMenu( m );
         h->addWidget( p );  
@@ -653,6 +661,13 @@ TrMainWindow :: openFolder( )
 }
 
 void
+TrMainWindow :: copyMagnetLinkToClipboard( )
+{
+    const int id( *getSelectedTorrents().begin() );
+    mySession.copyMagnetLinkToClipboard( id );
+}
+
+void
 TrMainWindow :: openHelp( )
 {
     const char * fmt = "http://www.transmissionbt.com/help/gtk/%d.%dx";
@@ -766,6 +781,7 @@ TrMainWindow :: refreshActionSensitivity( )
 
     const bool oneSelection( selected == 1 );
     ui.action_OpenFolder->setEnabled( oneSelection && mySession.isLocal( ) );
+    ui.action_CopyMagnetToClipboard->setEnabled( oneSelection );
 
     ui.action_SelectAll->setEnabled( selected < rowCount );
     ui.action_StartAll->setEnabled( paused > 0 );
@@ -1086,10 +1102,25 @@ TrMainWindow :: openTorrent( )
         layout->addWidget( button, layout->rowCount( ), 0, 1, -1, Qt::AlignLeft );
         myFileDialogOptionsCheck = button;
 
-        connect( myFileDialog, SIGNAL(filesSelected(const QStringList&)), this, SLOT(addTorrents(const QStringList&)));
+        connect( myFileDialog, SIGNAL(filesSelected(const QStringList&)),
+                 this, SLOT(addTorrents(const QStringList&)));
     }
 
     myFileDialog->show( );
+}
+
+void
+TrMainWindow :: openURL( )
+{
+    bool ok;
+    const QString key = QInputDialog::getText( this,
+                                               tr( "Add URL or Magnet Link" ),
+                                               tr( "Add URL or Magnet Link" ),
+                                               QLineEdit::Normal,
+                                               QString( ),
+                                               &ok );
+    if( ok && !key.isEmpty( ) )
+        mySession.addTorrent( key );
 }
 
 void

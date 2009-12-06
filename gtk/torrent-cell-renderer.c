@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2009 Charles Kerr <charles@transmissionbt.com>
+ * This file Copyright (C) 2007-2009 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -260,8 +260,8 @@ getStatusString( const tr_torrent  * tor,
             else
             {
                 g_string_append_printf( gstr,
-                    ngettext( "Downloading .torrent data from %1$'d peer (%2$d%% done)",
-                              "Downloading .torrent data from %1$'d peers (%2$d%% done)",
+                    ngettext( "Downloading metadata from %1$'d peer (%2$d%% done)",
+                              "Downloading metadata from %1$'d peers (%2$d%% done)",
                               torStat->peersConnected ),
                     torStat->peersConnected + torStat->webseedsSendingToUs,
                     (int)(100.0*torStat->metadataPercentComplete) );

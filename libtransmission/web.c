@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2008-2009 Charles Kerr <charles@transmissionbt.com>
+ * This file Copyright (C) 2008-2009 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -182,6 +182,28 @@ getCurlProxyType( tr_proxy_type t )
 }
 
 static void
+sockoptfunction( void * vtask, curl_socket_t fd, curlsocktype purpose UNUSED )
+{
+    struct tr_web_task * task = vtask;
+    const tr_bool isScrape = strstr( task->url, "scrape" ) != NULL;
+    const tr_bool isAnnounce = strstr( task->url, "announce" ) != NULL;
+
+    /* announce and scrape requests have tiny payloads... 
+     * which have very small payloads */
+    if( isScrape || isAnnounce )
+    {
+        int sndbuf = 1024;
+        int rcvbuf = isScrape ? 2048 : 3072;
+
+        if( setsockopt( fd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf) ) )
+            tr_inf( "Unable to set SO_SNDBUF on socket %d: %s", fd, tr_strerror( sockerrno ) );
+
+        if( setsockopt( fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf) ) )
+            tr_inf( "Unable to set SO_RCVBUF on socket %d: %s", fd, tr_strerror( sockerrno ) );
+    }
+}
+
+static void
 addTask( void * vtask )
 {
     struct tr_web_task * task = vtask;
@@ -224,7 +246,9 @@ addTask( void * vtask )
         curl_easy_setopt( easy, CURLOPT_CONNECTTIMEOUT, timeout-5 );
         dbgmsg( "new task's timeout is %ld\n", timeout );
 
-        curl_easy_setopt( easy, CURLOPT_DNS_CACHE_TIMEOUT, 600L );
+        curl_easy_setopt( easy, CURLOPT_SOCKOPTFUNCTION, sockoptfunction );
+        curl_easy_setopt( easy, CURLOPT_SOCKOPTDATA, task );
+        curl_easy_setopt( easy, CURLOPT_DNS_CACHE_TIMEOUT, 1800L );
         curl_easy_setopt( easy, CURLOPT_FOLLOWLOCATION, 1L );
         curl_easy_setopt( easy, CURLOPT_AUTOREFERER, 1L );
         curl_easy_setopt( easy, CURLOPT_FORBID_REUSE, 1L );
