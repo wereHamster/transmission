@@ -49,6 +49,8 @@ Transmission.prototype =
 		$('.inspector_tab').bind('click', function(e){ tr.inspectorTabClicked(e, this); });
 		$('.file_wanted_control').live('click', function(e){ tr.fileWantedClicked(e, this); });
 		$('.file_priority_control').live('click', function(e){ tr.filePriorityClicked(e, this); });
+		$('#files_select_all').live('click', function(e){ tr.filesSelectAllClicked(e, this); });
+		$('#files_deselect_all').live('click', function(e){ tr.filesDeselectAllClicked(e, this); });
 		$('#open_link').bind('click', function(e){ tr.openTorrentClicked(e); });
 		$('#upload_confirm_button').bind('click', function(e){ tr.confirmUploadClicked(e); return false;});
 		$('#upload_cancel_button').bind('click', function(e){ tr.cancelUploadClicked(e); return false; });
@@ -687,12 +689,48 @@ Transmission.prototype =
 		this.extractFileFromElement(element).filePriorityControlClicked(event, element);
 	},
 
+	filesSelectAllClicked: function(event) {
+		var tr = this;
+		var ids = jQuery.map(this.getSelectedTorrents( ), function(t) { return t.id(); } );
+		var files_list = this.toggleFilesWantedDisplay(ids, true);
+		for (i = 0; i < ids.length; ++i) {
+			if (files_list[i].length)
+				this.remote.filesSelectAll( [ ids[i] ], files_list[i], function() { tr.refreshTorrents( ids ); } );
+		}
+	},
+
+	filesDeselectAllClicked: function(event) {
+		var tr = this;
+		var ids = jQuery.map(this.getSelectedTorrents( ), function(t) { return t.id(); } );
+		var files_list = this.toggleFilesWantedDisplay(ids, false);
+		for (i = 0; i < ids.length; ++i) {
+			if (files_list[i].length)
+				this.remote.filesDeselectAll( [ ids[i] ], files_list[i], function() { tr.refreshTorrents( ids ); } );
+		}
+	},
+
 	extractFileFromElement: function(element) {
 		var match = $(element).closest('.inspector_torrent_file_list_entry').attr('id').match(/^t(\d+)f(\d+)$/);
 		var torrent_id = match[1];
 		var file_id = match[2];
 		var torrent = this._torrents[torrent_id];
 		return torrent._file_view[file_id];
+	},
+
+	toggleFilesWantedDisplay: function(ids, wanted) {
+		var i, j, k, torrent, files_list = [ ];
+		for (i = 0; i < ids.length; ++i) {
+			torrent = this._torrents[ids[i]];
+			files_list[i] = [ ];
+			for (j = k = 0; j < torrent._file_view.length; ++j) {
+				if (torrent._file_view[j].isEditable() && torrent._file_view[j]._wanted != wanted) {
+					torrent._file_view[j].setWanted(wanted, false);
+					files_list[i][k++] = j;
+				}
+			}
+			torrent.refreshFileView;
+		}
+		return files_list;
 	},
 
 	toggleFilterClicked: function(event) {
@@ -1126,8 +1164,17 @@ Transmission.prototype =
 	
 	updateVisibleFileLists: function() {
 		if( this.fileListIsVisible( ) === true ) {
-			jQuery.each( this.getSelectedTorrents(), function() { this.showFileList(); } );
+			var selected = this.getSelectedTorrents();
+			jQuery.each( selected, function() { this.showFileList(); } );
 			jQuery.each( this.getDeselectedTorrents(), function() { this.hideFileList(); } );
+			// Check if we need to display the select all buttions
+			if ( !selected.length ) {
+				if ( $("#select_all_button_container").is(':visible') )
+					$("#select_all_button_container").hide();
+			} else {
+				if ( !$("#select_all_button_container").is(':visible') )
+					$("#select_all_button_container").show();
+			}
 		}
 	},
 
@@ -1363,6 +1410,7 @@ Transmission.prototype =
 		if (! confirmed) {
 				$('input#torrent_upload_file').attr('value', '');
 				$('input#torrent_upload_url').attr('value', '');
+				$('input#torrent_auto_start').attr('checked', this[Prefs._AutoStart]);
 				$('#upload_container').show();
 			if (!iPhone && Safari3) {
 				setTimeout("$('div#upload_container div.dialog_window').css('top', '0px');",10);
@@ -1372,10 +1420,11 @@ Transmission.prototype =
 		} else {
 			var tr = this;
 			var args = { };
+			var paused = !$('#torrent_auto_start').is(':checked');
 			if ('' != $('#torrent_upload_url').val()) {
-				tr.remote.addTorrentByUrl($('#torrent_upload_url').val(), { paused: !this[Prefs._AutoStart] });
+				tr.remote.addTorrentByUrl($('#torrent_upload_url').val(), { paused: paused });
 			} else {
-				args.url = '/transmission/upload?paused=' + (this[Prefs._AutoStart] ? 'false' : 'true');
+				args.url = '/transmission/upload?paused=' + paused;
 				args.type = 'POST';
 				args.data = { 'X-Transmission-Session-Id' : tr.remote._token };
 				args.dataType = 'xml';
