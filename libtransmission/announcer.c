@@ -731,6 +731,7 @@ static tr_bool
 announceURLIsSupported( const char * announce )
 {
     return ( announce != NULL )
+        && ( strstr( announce, "tracker.thepiratebay.org" ) == NULL ) /* dead */
         && ( ( strstr( announce, "http://" ) == announce ) ||
              ( strstr( announce, "https://" ) == announce ) );
 }
@@ -755,7 +756,7 @@ addTorrentToTier( tr_announcer * announcer, tr_torrent_tiers * tiers, tr_torrent
         int tierIndex = -1;
         tr_tier * tier = NULL;
 
-        for( i=0; i<trackerCount; ++i )
+        for( i=0; i<n; ++i )
         {
             const tr_tracker_info * info = infos[i];
 

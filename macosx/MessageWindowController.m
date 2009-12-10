@@ -110,6 +110,9 @@
     clearButtonFrame.origin.x -= clearButtonFrame.size.width - oldClearButtonWidth;
     [fClearButton setFrame: clearButtonFrame];
     
+    fAttributes = [[[[[fMessageTable tableColumnWithIdentifier: @"Message"] dataCell] attributedStringValue]
+                    attributesAtIndex: 0 effectiveRange: NULL] retain];
+    
     //select proper level in popup button
     switch ([[NSUserDefaults standardUserDefaults] integerForKey: @"MessageLevel"])
     {
@@ -153,9 +156,9 @@
     if ((messages = tr_getQueuedMessages()) == NULL)
         return;
     
-    static NSUInteger currentIndex = 0;
-    
     [fLock lock];
+    
+    static NSUInteger currentIndex = 0;
     
     NSScroller * scroller = [[fMessageTable enclosingScrollView] verticalScroller];
     const BOOL shouldScroll = currentIndex == 0 || [scroller floatValue] == 1.0 || [scroller isHidden]
@@ -250,12 +253,9 @@
 #warning don't cut off end
 - (CGFloat) tableView: (NSTableView *) tableView heightOfRow: (NSInteger) row
 {
-    NSTableColumn * column = [tableView tableColumnWithIdentifier: @"Message"];
-    
-    if (!fAttributes)
-        fAttributes = [[[[column dataCell] attributedStringValue] attributesAtIndex: 0 effectiveRange: NULL] retain];
-    
     NSString * message = [[fDisplayedMessages objectAtIndex: row] objectForKey: @"Message"];
+    
+    NSTableColumn * column = [tableView tableColumnWithIdentifier: @"Message"];
     const CGFloat count = floorf([message sizeWithAttributes: fAttributes].width / [column width]);
     return [tableView rowHeight] * (count + 1.0);
 }

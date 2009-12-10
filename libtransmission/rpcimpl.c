@@ -535,7 +535,7 @@ addField( const tr_torrent * tor, tr_benc * d, const char * key )
     else if( tr_streq( key, keylen, "pieces" ) ) {
         const tr_bitfield * pieces = tr_cpPieceBitfield( &tor->completion );
         char * str = tr_base64_encode( pieces->bits, pieces->byteCount, NULL );
-        tr_bencDictAddStr( d, key, str );
+        tr_bencDictAddStr( d, key, str!=NULL ? str : "" );
         tr_free( str );
     }
     else if( tr_streq( key, keylen, "pieceCount" ) )
@@ -756,10 +756,10 @@ torrentSet( tr_session               * session,
         if( tr_bencDictFindInt( args_in, "bandwidthPriority", &tmp ) )
             if( tr_isPriority( tmp ) )
                 tr_torrentSetPriority( tor, tmp );
-        if( tr_bencDictFindList( args_in, "files-unwanted", &files ) )
-            setFileDLs( tor, FALSE, files );
-        if( tr_bencDictFindList( args_in, "files-wanted", &files ) )
-            setFileDLs( tor, TRUE, files );
+        if( !errmsg && tr_bencDictFindList( args_in, "files-unwanted", &files ) )
+            errmsg = setFileDLs( tor, FALSE, files );
+        if( !errmsg && tr_bencDictFindList( args_in, "files-wanted", &files ) )
+            errmsg = setFileDLs( tor, TRUE, files );
         if( tr_bencDictFindInt( args_in, "peer-limit", &tmp ) )
             tr_torrentSetPeerLimit( tor, tmp );
         if( !errmsg &&  tr_bencDictFindList( args_in, "priority-high", &files ) )

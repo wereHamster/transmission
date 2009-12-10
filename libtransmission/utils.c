@@ -499,6 +499,14 @@ tr_timerAdd( struct event * timer, int seconds, int microseconds )
     event_add( timer, &tv );
 }
 
+void
+tr_timerAddMsec( struct event * timer, int msec )
+{
+    const int seconds =  msec / 1000;
+    const int usec = (msec%1000) * 1000;
+    tr_timerAdd( timer, seconds, usec );
+}
+
 /**
 ***
 **/
@@ -984,8 +992,7 @@ tr_httpParseURL( const char * url_in,
         *pch = '\0';
         protocol = tmp;
         pch += 3;
-/*fprintf( stderr, "protocol is [%s]... what's left is [%s]\n", protocol, pch
-  );*/
+/*fprintf( stderr, "protocol is [%s]... what's left is [%s]\n", protocol, pch);*/
         if( ( n = strcspn( pch, ":/" ) ) )
         {
             const int havePort = pch[n] == ':';
@@ -1017,9 +1024,9 @@ tr_httpParseURL( const char * url_in,
     if( !err )
     {
         if( setme_host ){ ( (char*)host )[-3] = ':'; *setme_host =
-                              tr_strdup( protocol ); }
-        if( setme_path ){ ( (char*)path )[-1] = '/'; *setme_path =
-                              tr_strdup( path - 1 ); }
+                              tr_strdup( host ); }
+        if( setme_path ){ if( path[0] == '/' ) *setme_path = tr_strdup( path );
+                          else { ( (char*)path )[-1] = '/'; *setme_path = tr_strdup( path - 1 ); } }
         if( setme_port ) *setme_port = port;
     }
 
@@ -1036,29 +1043,34 @@ tr_httpParseURL( const char * url_in,
 #include <openssl/buffer.h>
 
 char *
-tr_base64_encode( const void * input,
-                  int          length,
-                  int *        setme_len )
+tr_base64_encode( const void * input, int length, int * setme_len )
 {
-    char *    ret;
-    BIO *     b64;
-    BIO *     bmem;
-    BUF_MEM * bptr;
+    int retlen = 0;
+    char * ret = NULL;
 
-    if( length < 1 )
-        length = strlen( input );
+    if( input != NULL )
+    {
+        BIO * b64;
+        BIO * bmem;
+        BUF_MEM * bptr;
 
-    bmem = BIO_new( BIO_s_mem( ) );
-    b64 = BIO_new( BIO_f_base64( ) );
-    b64 = BIO_push( b64, bmem );
-    BIO_write( b64, input, length );
-    (void) BIO_flush( b64 );
-    BIO_get_mem_ptr( b64, &bptr );
-    ret = tr_strndup( bptr->data, bptr->length );
+        if( length < 1 )
+            length = strlen( input );
+
+        bmem = BIO_new( BIO_s_mem( ) );
+        b64 = BIO_new( BIO_f_base64( ) );
+        b64 = BIO_push( b64, bmem );
+        BIO_write( b64, input, length );
+        (void) BIO_flush( b64 );
+        BIO_get_mem_ptr( b64, &bptr );
+        ret = tr_strndup( bptr->data, bptr->length );
+        retlen = bptr->length;
+        BIO_free_all( b64 );
+    }
+
     if( setme_len )
-        *setme_len = bptr->length;
+        *setme_len = retlen;
 
-    BIO_free_all( b64 );
     return ret;
 }
 
