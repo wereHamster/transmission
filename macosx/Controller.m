@@ -564,7 +564,11 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     
     [self applyFilter: nil];
     
-    [fWindow makeKeyAndOrderFront: nil]; 
+    [fWindow makeKeyAndOrderFront: nil];
+    
+    //can't be done earlier
+    if (![fFilterBar isHidden])
+        [self resizeFilterBar];
     
     if ([fDefaults boolForKey: @"InfoVisible"])
         [self showInfo: nil];
@@ -630,8 +634,10 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
 
 - (BOOL) applicationShouldHandleReopen: (NSApplication *) app hasVisibleWindows: (BOOL) visibleWindows
 {
-    if (!visibleWindows)
+    NSWindow * mainWindow = [NSApp mainWindow];
+    if (!mainWindow || ![mainWindow isVisible])
         [fWindow makeKeyAndOrderFront: nil];
+    
     return NO;
 }
 
@@ -1132,8 +1138,9 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
                 urlString = [@"http://" stringByAppendingString: urlString];
         }
         
-        NSURL * url = [NSURL URLWithString: urlString];
-        [[NSURLDownload alloc] initWithRequest: [NSURLRequest requestWithURL: url] delegate: self];
+        NSURLRequest * request = [NSURLRequest requestWithURL: [NSURL URLWithString: urlString]
+                                    cachePolicy: NSURLRequestReloadIgnoringLocalAndRemoteCacheData timeoutInterval: 60];
+        [[NSURLDownload alloc] initWithRequest: request delegate: self];
     }
 }
 
@@ -1348,6 +1355,18 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         [torrent setWaitToStart: NO];
     
     [fTorrents removeObjectsInArray: torrents];
+    
+    //if not removed from displayed torrents, updateTorrentsInQueue might cause a crash
+    if ([fDisplayedTorrents count] > 0)
+    {
+        if ([[fDisplayedTorrents objectAtIndex: 0] isKindOfClass: [TorrentGroup class]])
+        {
+            for (TorrentGroup * group in fDisplayedTorrents)
+                [[group torrents] removeObjectsInArray: torrents];
+        }
+        else
+            [fDisplayedTorrents removeObjectsInArray: torrents];
+    }
     
     for (Torrent * torrent in torrents)
     {
@@ -4088,39 +4107,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     return [self windowFrameByAddingHeight: heightChange checkLimits: YES];
 }
 
-- (void) updateForExpandCollape
+- (void) resizeFilterBar
 {
-    [self setWindowSizeToFit];
-    [self setBottomCountText: YES];
-}
-
-- (void) showMainWindow: (id) sender
-{
-    [fWindow makeKeyAndOrderFront: nil];
-}
-
-- (void) windowDidBecomeMain: (NSNotification *) notification
-{
-    [fBadger clearCompleted];
-    [self updateUI];
-}
-
-- (NSSize) windowWillResize: (NSWindow *) sender toSize: (NSSize) proposedFrameSize
-{
-    //only resize horizontally if autosize is enabled
-    if ([fDefaults boolForKey: @"AutoSize"])
-        proposedFrameSize.height = [fWindow frame].size.height;
-    return proposedFrameSize;
-}
-
-- (void) windowDidResize: (NSNotification *) notification
-{
-    if (![fStatusBar isHidden])
-        [self resizeStatusButton];
-    
-    if ([fFilterBar isHidden])
-        return;
-    
     //replace all buttons
     [fNoFilterButton sizeToFit];
     [fActiveFilterButton sizeToFit];
@@ -4177,6 +4165,42 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     [fPauseFilterButton setFrame: pauseRect];
     
     [fSearchFilterField setFrame: searchFrame];
+}
+
+- (void) updateForExpandCollape
+{
+    [self setWindowSizeToFit];
+    [self setBottomCountText: YES];
+}
+
+- (void) showMainWindow: (id) sender
+{
+    [fWindow makeKeyAndOrderFront: nil];
+}
+
+- (void) windowDidBecomeMain: (NSNotification *) notification
+{
+    [fBadger clearCompleted];
+    [self updateUI];
+}
+
+- (NSSize) windowWillResize: (NSWindow *) sender toSize: (NSSize) proposedFrameSize
+{
+    //only resize horizontally if autosize is enabled
+    if ([fDefaults boolForKey: @"AutoSize"])
+        proposedFrameSize.height = [fWindow frame].size.height;
+    return proposedFrameSize;
+}
+
+- (void) windowDidResize: (NSNotification *) notification
+{
+    if (![fStatusBar isHidden])
+        [self resizeStatusButton];
+    
+    if ([fFilterBar isHidden])
+        return;
+
+    [self resizeFilterBar];
 }
 
 - (void) applicationWillUnhide: (NSNotification *) notification

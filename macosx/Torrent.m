@@ -31,11 +31,11 @@
 
 @interface Torrent (Private)
 
-- (id) initWithPath: (NSString *) path hash: (NSString *) hashString torrentStruct: (tr_torrent *) torrentStruct lib: (tr_session *) lib
+- (id) initWithPath: (NSString *) path hash: (NSString *) hashString torrentStruct: (tr_torrent *) torrentStruct
+        magnetAddress: (NSString *) magnetAddress lib: (tr_session *) lib
         waitToStart: (NSNumber *) waitToStart
         groupValue: (NSNumber *) groupValue
-        #warning legacy download folder isn't necessarily legacy
-        legacyDownloadFolder: (NSString *) downloadFolder legacyIncompleteFolder: (NSString *) incompleteFolder;
+        downloadFolder: (NSString *) downloadFolder legacyIncompleteFolder: (NSString *) incompleteFolder;
 
 - (void) createFileList;
 - (void) insertPath: (NSMutableArray *) components forParent: (FileListNode *) parent fileSize: (uint64_t) size
@@ -79,9 +79,9 @@ int trashDataFile(const char * filename)
 - (id) initWithPath: (NSString *) path location: (NSString *) location deleteTorrentFile: (BOOL) torrentDelete
         lib: (tr_session *) lib
 {
-    self = [self initWithPath: path hash: nil torrentStruct: NULL lib: lib
+    self = [self initWithPath: path hash: nil torrentStruct: NULL magnetAddress: nil lib: lib
             waitToStart: nil groupValue: nil
-            legacyDownloadFolder: location legacyIncompleteFolder: nil];
+            downloadFolder: location legacyIncompleteFolder: nil];
     
     if (self)
     {
@@ -93,9 +93,9 @@ int trashDataFile(const char * filename)
 
 - (id) initWithTorrentStruct: (tr_torrent *) torrentStruct location: (NSString *) location lib: (tr_session *) lib
 {
-    self = [self initWithPath: nil hash: nil torrentStruct: torrentStruct lib: lib
+    self = [self initWithPath: nil hash: nil torrentStruct: torrentStruct magnetAddress: nil lib: lib
             waitToStart: nil groupValue: nil
-            legacyDownloadFolder: location legacyIncompleteFolder: nil];
+            downloadFolder: location legacyIncompleteFolder: nil];
     
     return self;
 }
@@ -103,25 +103,9 @@ int trashDataFile(const char * filename)
 #warning need location (and use it)?
 - (id) initWithMagnetAddress: (NSString *) address location: (NSString *) location lib: (tr_session *) lib
 {
-    #warning move into real constructor?
-    //set libtransmission settings for initialization
-    tr_ctor * ctor = tr_ctorNew(lib);
-    tr_ctorSetPaused(ctor, TR_FORCE, YES);
-    
-    const tr_parse_result result = tr_ctorSetMagnet(ctor, [address UTF8String]);
-    
-    tr_torrent * handle = NULL;
-    if (result == TR_PARSE_OK)
-        handle = tr_torrentNew(ctor, NULL);
-    
-    tr_ctorFree(ctor);
-    
-    if (handle)
-        self = [self initWithPath: nil hash: nil torrentStruct: handle lib: lib
-                waitToStart: nil groupValue: nil
-                legacyDownloadFolder: location legacyIncompleteFolder: nil];
-    else
-        self = nil;
+    self = [self initWithPath: nil hash: nil torrentStruct: nil magnetAddress: address
+            lib: lib waitToStart: nil groupValue: nil
+            downloadFolder: location legacyIncompleteFolder: nil];
     
     return self;
 }
@@ -130,10 +114,12 @@ int trashDataFile(const char * filename)
 {
     self = [self initWithPath: [history objectForKey: @"InternalTorrentPath"]
                 hash: [history objectForKey: @"TorrentHash"]
-                torrentStruct: NULL lib: lib
+                torrentStruct: NULL
+                magnetAddress: nil
+                lib: lib
                 waitToStart: [history objectForKey: @"WaitToStart"]
                 groupValue: [history objectForKey: @"GroupValue"]
-                legacyDownloadFolder: [history objectForKey: @"DownloadFolder"] //upgrading from versions < 1.80
+                downloadFolder: [history objectForKey: @"DownloadFolder"] //upgrading from versions < 1.80
                 legacyIncompleteFolder: [[history objectForKey: @"UseIncompleteFolder"] boolValue] //upgrading from versions < 1.80
                                         ? [history objectForKey: @"IncompleteFolder"] : nil];
     
@@ -568,7 +554,7 @@ int trashDataFile(const char * filename)
 - (NSImage *) icon
 {
     if ([self isMagnet])
-        return [NSImage imageNamed: NSImageNameNetwork]; //placeholder
+        return [NSImage imageNamed: @"Magnet.png"];
     
     #warning replace 'fldr' stuff with NSImageNameFolder on 10.6
     if (!fIcon)
@@ -654,18 +640,19 @@ int trashDataFile(const char * filename)
     return result == TR_ANNOUNCE_LIST_OK;
 }
 
-- (void) removeTrackersWithAnnounceAddresses: (NSSet *) trackers
+- (void) removeTrackersAtIndexes: (NSIndexSet *) removeIndexes
 {
-    //recreate the tracker structure
-    const int oldTrackerCount = fInfo->trackerCount;
-    tr_tracker_info * trackerStructs = tr_new(tr_tracker_info, oldTrackerCount-1);
+    NSAssert([removeIndexes lastIndex] < fInfo->trackerCount, @"Trying to remove trackers outside the tracker count.");
     
-    NSInteger newCount = 0;
-    for (NSInteger oldIndex = 0; oldIndex < oldTrackerCount; ++oldIndex)
-    {
-        if (![trackers member: [NSString stringWithUTF8String: fInfo->trackers[oldIndex].announce]])
-            trackerStructs[newCount++] = fInfo->trackers[oldIndex];
-    }
+    NSMutableIndexSet * indexes = [NSMutableIndexSet indexSetWithIndexesInRange: NSMakeRange(0, fInfo->trackerCount)];
+    [indexes removeIndexes: removeIndexes];
+    
+    //recreate the tracker structure
+    tr_tracker_info * trackerStructs = tr_new(tr_tracker_info, [indexes count]);
+    
+    int newCount = 0;
+    for (NSUInteger oldIndex = [indexes firstIndex]; oldIndex != NSNotFound; oldIndex = [indexes indexGreaterThanIndex: oldIndex])
+        trackerStructs[newCount++] = fInfo->trackers[oldIndex];
     
     const tr_announce_list_err result = tr_torrentSetAnnounceList(fHandle, trackerStructs, newCount);
     NSAssert1(result == TR_ANNOUNCE_LIST_OK, @"Removing tracker addresses resulted in error: %d", result);
@@ -1542,10 +1529,11 @@ int trashDataFile(const char * filename)
 
 @implementation Torrent (Private)
 
-- (id) initWithPath: (NSString *) path hash: (NSString *) hashString torrentStruct: (tr_torrent *) torrentStruct lib: (tr_session *) lib
+- (id) initWithPath: (NSString *) path hash: (NSString *) hashString torrentStruct: (tr_torrent *) torrentStruct
+        magnetAddress: (NSString *) magnetAddress lib: (tr_session *) lib
         waitToStart: (NSNumber *) waitToStart
         groupValue: (NSNumber *) groupValue
-        legacyDownloadFolder: (NSString *) downloadFolder legacyIncompleteFolder: (NSString *) incompleteFolder
+        downloadFolder: (NSString *) downloadFolder legacyIncompleteFolder: (NSString *) incompleteFolder
 {
     if (!(self = [super init]))
         return nil;
@@ -1558,25 +1546,26 @@ int trashDataFile(const char * filename)
     {
         //set libtransmission settings for initialization
         tr_ctor * ctor = tr_ctorNew(lib);
+        
         tr_ctorSetPaused(ctor, TR_FORCE, YES);
+        if (downloadFolder)
+            tr_ctorSetDownloadDir(ctor, TR_FORCE, [downloadFolder UTF8String]);
+        if (incompleteFolder)
+            tr_ctorSetIncompleteDir(ctor, [incompleteFolder UTF8String]);
         
         tr_parse_result result = TR_PARSE_ERR;
         if (path)
             result = tr_ctorSetMetainfoFromFile(ctor, [path UTF8String]);
+        
+        if (result != TR_PARSE_OK && magnetAddress)
+            result = tr_ctorSetMagnet(ctor, [magnetAddress UTF8String]);
         
         //backup - shouldn't be needed after upgrade to 1.70
         if (result != TR_PARSE_OK && hashString)
             result = tr_ctorSetMetainfoFromHash(ctor, [hashString UTF8String]);
         
         if (result == TR_PARSE_OK)
-        {
-            if (downloadFolder)
-                tr_ctorSetDownloadDir(ctor, TR_FORCE, [downloadFolder UTF8String]);
-            if (incompleteFolder)
-                tr_ctorSetIncompleteDir(ctor, [incompleteFolder UTF8String]);
-            
             fHandle = tr_torrentNew(ctor, NULL);
-        }
         
         tr_ctorFree(ctor);
         

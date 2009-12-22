@@ -84,8 +84,8 @@ static void
 nap( int roughly )
 {
     struct timeval tv;
-    tr_timevalSet( &tv, roughly / 2 + tr_cryptoWeakRandInt( roughly ),
-                   tr_cryptoWeakRandInt( 1000000 ) );
+    tv.tv_sec = roughly / 2 + tr_cryptoWeakRandInt( roughly );
+    tv.tv_usec = tr_cryptoWeakRandInt( 1000000 );
     select( 0, NULL, NULL, NULL, &tv );
 }
 
@@ -111,7 +111,7 @@ bootstrap_from_name( const char *name, short int port, int af )
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_family = af;
     /* No, just passing p + 1 to gai won't work. */
-    snprintf(pp, 10, "%d", port);
+    tr_snprintf(pp, sizeof(pp), "%d", port);
 
     rc = getaddrinfo(name, pp, &hints, &info);
     if(rc != 0) {
@@ -187,7 +187,7 @@ dht_bootstrap(void *closure)
 
     if(!bootstrap_done(cl->session, 0)) {
         char *bootstrap_file;
-        FILE *f = NULL;
+        FILE *f;
 
         bootstrap_file =
             tr_buildPath(cl->session->configDir, "dht.bootstrap", NULL);
@@ -221,6 +221,8 @@ dht_bootstrap(void *closure)
                     break;
             }
         }
+
+        tr_free( bootstrap_file );
     }
 
     /* We really don't want to abuse our bootstrap nodes.
@@ -317,9 +319,17 @@ tr_dhtInit(tr_session *ss, const tr_address * tr_addr)
         goto fail;
 
     if(tr_globalIPv6()) {
+        int one = 1;
         dht6_socket = socket(PF_INET6, SOCK_DGRAM, 0);
         if(dht6_socket < 0)
             goto fail;
+
+#ifdef IPV6_V6ONLY
+        /* Since we always open an IPv4 socket on the same port, this
+           shouldn't matter.  But I'm superstitious. */
+        setsockopt(dht6_socket, IPPROTO_IPV6, IPV6_V6ONLY,
+                   &one, sizeof(one));
+#endif
 
         rebind_ipv6(1);
 

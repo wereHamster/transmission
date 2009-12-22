@@ -51,7 +51,7 @@ enum
 typedef struct tr_pex
 {
     tr_address addr;
-    tr_port    port;
+    tr_port    port; /* this field is in network byte order */
     uint8_t    flags;
 }
 tr_pex;
@@ -90,6 +90,13 @@ typedef struct tr_peer
 
     uint8_t                  encryption_preference;
     tr_port                  dht_port;
+
+    /* how many requests the peer has made that we haven't responded to yet */
+    int                      pendingReqsToClient;
+
+    /* how many requests we've made and are currently awaiting a response for */
+    int                      pendingReqsToPeer;
+
     struct tr_peerIo       * io;
     struct peer_atom       * atom;
 

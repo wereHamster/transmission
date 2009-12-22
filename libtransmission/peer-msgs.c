@@ -179,7 +179,6 @@ struct tr_peermsgs
 
     /*tr_bool         haveFastSet;*/
 
-    int             activeRequestCount;
     int             desiredRequestCount;
 
     int             prefetchCount;
@@ -209,7 +208,6 @@ struct tr_peermsgs
     struct evbuffer *      outMessages; /* all the non-piece messages */
 
     struct peer_request    peerAskedFor[REQQ];
-    int                    peerAskedForCount;
 
     int                    peerAskedForMetadata[METADATA_REQQ];
     int                    peerAskedForMetadataCount;
@@ -756,13 +754,13 @@ popNextMetadataRequest( tr_peermsgs * msgs, int * piece )
 static tr_bool
 popNextRequest( tr_peermsgs * msgs, struct peer_request * setme )
 {
-    if( msgs->peerAskedForCount == 0 )
+    if( msgs->peer->pendingReqsToClient == 0 )
         return FALSE;
 
     *setme = msgs->peerAskedFor[0];
 
     tr_removeElementFromArray( msgs->peerAskedFor, 0, sizeof( struct peer_request ),
-                               msgs->peerAskedForCount-- );
+                               msgs->peer->pendingReqsToClient-- );
 
     return TRUE;
 }
@@ -835,7 +833,6 @@ requestIsValid( const tr_peermsgs * msgs, const struct peer_request * req )
 {
     return reqIsValid( msgs, req->index, req->offset, req->length );
 }
-
 
 void
 tr_peerMsgsCancel( tr_peermsgs * msgs, tr_block_index_t block )
@@ -975,18 +972,24 @@ parseLtepHandshake( tr_peermsgs *     msgs,
 
     /* get peer's listening port */
     if( tr_bencDictFindInt( &val, "p", &i ) ) {
-        fireClientGotPort( msgs, (tr_port)i );
         pex.port = htons( (uint16_t)i );
+        fireClientGotPort( msgs, pex.port );
         dbgmsg( msgs, "peer's port is now %d", (int)i );
     }
 
-    if( tr_bencDictFindRaw( &val, "ipv4", &addr, &addr_len) && addr_len == 4 ) {
+    if( tr_peerIoIsIncoming( msgs->peer->io )
+        && tr_bencDictFindRaw( &val, "ipv4", &addr, &addr_len )
+        && ( addr_len == 4 ) )
+    {
         pex.addr.type = TR_AF_INET;
         memcpy( &pex.addr.addr.addr4, addr, 4 );
         tr_peerMgrAddPex( msgs->torrent, TR_PEER_FROM_LTEP, &pex );
     }
 
-    if( tr_bencDictFindRaw( &val, "ipv6", &addr, &addr_len) && addr_len == 16 ) {
+    if( tr_peerIoIsIncoming( msgs->peer->io )
+        && tr_bencDictFindRaw( &val, "ipv6", &addr, &addr_len )
+        && ( addr_len == 16 ) )
+    {
         pex.addr.type = TR_AF_INET6;
         memcpy( &pex.addr.addr.addr6, addr, 16 );
         tr_peerMgrAddPex( msgs->torrent, TR_PEER_FROM_LTEP, &pex );
@@ -1251,13 +1254,13 @@ peerMadeRequest( tr_peermsgs *               msgs,
         dbgmsg( msgs, "rejecting request for a piece we don't have." );
     else if( peerIsChoked )
         dbgmsg( msgs, "rejecting request from choked peer" );
-    else if( msgs->peerAskedForCount + 1 >= REQQ )
+    else if( msgs->peer->pendingReqsToClient + 1 >= REQQ )
         dbgmsg( msgs, "rejecting request ... reqq is full" );
     else
         allow = TRUE;
 
     if( allow )
-        msgs->peerAskedFor[msgs->peerAskedForCount++] = *req;
+        msgs->peerAskedFor[msgs->peer->pendingReqsToClient++] = *req;
     else if( fext )
         protocolSendReject( msgs, req );
 }
@@ -1368,13 +1371,6 @@ readBtPiece( tr_peermsgs      * msgs,
 
 static void updateDesiredRequestCount( tr_peermsgs * msgs, uint64_t now );
 
-static void
-decrementActiveRequestCount( tr_peermsgs * msgs )
-{
-    if( msgs->activeRequestCount > 0 )
-        msgs->activeRequestCount--;
-}
-
 static int
 readBtMessage( tr_peermsgs * msgs, struct evbuffer * inbuf, size_t inlen )
 {
@@ -1465,15 +1461,15 @@ readBtMessage( tr_peermsgs * msgs, struct evbuffer * inbuf, size_t inlen )
             tr_peerIoReadUint32( msgs->peer->io, inbuf, &r.length );
             dbgmsg( msgs, "got a Cancel %u:%u->%u", r.index, r.offset, r.length );
 
-            for( i=0; i<msgs->peerAskedForCount; ++i ) {
+            for( i=0; i<msgs->peer->pendingReqsToClient; ++i ) {
                 const struct peer_request * req = msgs->peerAskedFor + i;
                 if( ( req->index == r.index ) && ( req->offset == r.offset ) && ( req->length == r.length ) )
                     break;
             }
 
-            if( i < msgs->peerAskedForCount )
+            if( i < msgs->peer->pendingReqsToClient )
                 tr_removeElementFromArray( msgs->peerAskedFor, i, sizeof( struct peer_request ),
-                                           msgs->peerAskedForCount-- );
+                                           msgs->peer->pendingReqsToClient-- );
             break;
         }
 
@@ -1541,10 +1537,9 @@ readBtMessage( tr_peermsgs * msgs, struct evbuffer * inbuf, size_t inlen )
             tr_peerIoReadUint32( msgs->peer->io, inbuf, &r.index );
             tr_peerIoReadUint32( msgs->peer->io, inbuf, &r.offset );
             tr_peerIoReadUint32( msgs->peer->io, inbuf, &r.length );
-            if( fext ) {
-                decrementActiveRequestCount( msgs );
+            if( fext )
                 fireGotRej( msgs, &r );
-            } else {
+            else {
                 fireError( msgs, EMSGSIZE );
                 return READ_ERR;
             }
@@ -1626,7 +1621,6 @@ clientGotBlock( tr_peermsgs *               msgs,
         return err;
 
     addPeerToBlamefield( msgs, req->index );
-    decrementActiveRequestCount( msgs );
     fireGotBlock( msgs, req );
     return 0;
 }
@@ -1708,7 +1702,7 @@ updateDesiredRequestCount( tr_peermsgs * msgs, uint64_t now )
         int irate;
         int estimatedBlocksInPeriod;
         double rate;
-        const int floor = 16;
+        const int floor = 2;
         const int seconds = REQUEST_BUF_SECS;
 
         /* Get the rate limit we should use.
@@ -1772,14 +1766,12 @@ updateMetadataRequests( tr_peermsgs * msgs, time_t now )
 static void
 updateBlockRequests( tr_peermsgs * msgs )
 {
-    const int MIN_BATCH_SIZE = 4;
-    const int numwant = msgs->desiredRequestCount - msgs->activeRequestCount;
-
-    /* make sure we have enough block requests queued up */
-    if( numwant >= MIN_BATCH_SIZE )
+    if( ( msgs->desiredRequestCount > 0 ) && 
+        ( msgs->peer->pendingReqsToPeer <= ( msgs->desiredRequestCount * 0.66 ) ) )
     {
         int i;
         int n;
+        const int numwant = msgs->desiredRequestCount - msgs->peer->pendingReqsToPeer;
         tr_block_index_t * blocks = tr_new( tr_block_index_t, numwant );
 
         tr_peerMgrGetNextRequests( msgs->torrent, msgs->peer, numwant, blocks, &n );
@@ -1791,8 +1783,6 @@ updateBlockRequests( tr_peermsgs * msgs )
             protocolSendRequest( msgs, &req );
         }
 
-        msgs->activeRequestCount += n;
-
         tr_free( blocks );
     }
 }
@@ -1803,7 +1793,7 @@ prefetchPieces( tr_peermsgs *msgs )
     int i;
 
     /* Maintain 12 prefetched blocks per unchoked peer */
-    for( i=msgs->prefetchCount; i<msgs->peerAskedForCount && i<12; ++i )
+    for( i=msgs->prefetchCount; i<msgs->peer->pendingReqsToClient && i<12; ++i )
     {
         const struct peer_request * req = msgs->peerAskedFor + i;
         tr_ioPrefetch( msgs->torrent, req->index, req->offset, req->length );
@@ -1993,7 +1983,7 @@ peerPulse( void * vmsgs )
     const time_t  now = tr_time( );
 
     if ( tr_isPeerIo( msgs->peer->io ) ) {
-        updateDesiredRequestCount( msgs, now );
+        updateDesiredRequestCount( msgs, tr_date( ) );
         updateBlockRequests( msgs );
         updateMetadataRequests( msgs, now );
     }
@@ -2362,7 +2352,6 @@ tr_peerMsgsNew( struct tr_torrent * torrent,
     m->outMessagesBatchedAt = 0;
     m->outMessagesBatchPeriod = LOW_PRIORITY_INTERVAL_SECS;
     m->incoming.block = evbuffer_new( );
-    m->peerAskedForCount = 0;
     evtimer_set( &m->pexTimer, pexPulse, m );
     tr_timerAdd( &m->pexTimer, PEX_INTERVAL_SECS, 0 );
     peer->msgs = m;

@@ -26,6 +26,8 @@
 #include <QSystemTrayIcon>
 #include <QUrl>
 
+#include <libtransmission/transmission.h>
+#include <libtransmission/utils.h>
 #include <libtransmission/version.h>
 
 #include "about.h"
@@ -674,7 +676,7 @@ TrMainWindow :: openHelp( )
     int major, minor;
     sscanf( SHORT_VERSION_STRING, "%d.%d", &major, &minor );
     char url[128];
-    snprintf( url, sizeof( url ), fmt, major, minor/10 );
+    tr_snprintf( url, sizeof( url ), fmt, major, minor/10 );
     QDesktopServices :: openUrl( QUrl( QString( url ) ) );
 }
 

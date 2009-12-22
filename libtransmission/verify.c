@@ -15,7 +15,9 @@
 
 #ifdef HAVE_POSIX_FADVISE
  #define _XOPEN_SOURCE 600
- #include <fcntl.h> /* posix_fadvise() */
+#endif
+#if defined(HAVE_POSIX_FADVISE) || defined(SYS_DARWIN)
+ #include <fcntl.h> /* posix_fadvise() / fcntl() */
 #endif
 
 #include <openssl/sha.h>
@@ -99,6 +101,12 @@ verifyTorrent( tr_torrent * tor, tr_bool * stopFlag )
                 pieceBytesRead += numRead;
             if( numRead == bytesThisPass )
                 SHA1_Update( &sha, buffer, numRead );
+#ifdef HAVE_POSIX_FADVISE
+            posix_fadvise( fd, filePos, bytesThisPass, POSIX_FADV_DONTNEED );
+#endif
+#ifdef SYS_DARWIN
+            fcntl( fd, F_NOCACHE, 1 );
+#endif
         }
 
         /* move our offsets */

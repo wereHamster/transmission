@@ -1,5 +1,51 @@
 === Transmission 1.80 (In Development) ===
 [http://trac.transmissionbt.com/query?milestone=1.80&group=component&groupdesc=1&order=severity All tickets closed by this release]
+
+=== Transmission 1.80 beta 3 (2009/12/15) ===
+==== All Platforms ====
+  * Tracker announcement improvements
+  * Encrypted handshakes to peers now use less CPU
+  * Filter out spurious IP addresses obtained through LTEP
+  * Fix 1.80 beta 1 crash in magnet links when serving metadata to peers
+  * Fix 1.80 beta 1 bug that caused peer lists to be lost over time
+  * Fix 1.80 beta 1 bug that caused duplicate block downloads from peers
+  * Fix 1.80 beta 1 bug that incorrectly displayed some scrapes as failed
+  * Updated DHT library
+  * Fix minor memory leaks
+==== Mac ====
+  * Fix favicons in the tracker inspector tab
+  * Fix 1.80 beta 1 potential crash when removing trackers
+  * Fix 1.80 beta 1 crash when removing data files
+  * Fix 1.80 beta 1 issue with revealing the window when clicking on the dock icon
+  * German localization
+  * Various interface tweaks
+==== GTK+ ====
+  * Fix 1.80 beta 1 crash in the torrent properties dialog
+==== Web Client ====
+  * Ensure the context menu goes away when clicking on torrents
+  * Fix bug where the context menu could extend past the window's right or bottom edge
+
+=== Transmission 1.80 beta 2 (2009/12/10) ===
+==== All Platforms ====
+  * Fix 1.80 beta 1 tracker connection / announce bug
+  * Fix 1.80 beta 1 crash "Assertion failed: (a->byteCount == b->byteCount)" 
+  * Fix 1.80 beta 1 crash when being controlled by transmission-remote-dotnet
+  * Fix 1.80 beta 1 crash when a malformed magnet link is given to Transmission
+  * Better prefetching of local data that's being uploaded to peers
+==== Mac ====
+  * Fix 1.80 beta 1 IPv6 port check issue on Snow Leopard
+  * Fix 1.80 beta 1 bug when pasting a URL into the torrent window
+  * Updated Spanish, Italian, and Brazilian Portuguese localizations
+==== GTK+ ====
+  * Fix 1.80 beta 1 bug in "Copy Magnet Link to Clipboard" on non-GNOME desktops
+  * Support org.gnome.SessionManager interface for inhibiting hibernation
+  * Minor GNOME HIG improvements
+==== Web Client ====
+  * Fix the turtle drop-down in IE
+  * Add "Start When Added" checkbox when adding torrents
+  * Add Select All / Deselect All buttons
+
+=== Transmission 1.80 beta 1 (2009/12/03) ===
 ==== All Platforms ====
   * Magnet link support
   * If a torrent has multiple tracker tiers, announce to them in parallel
@@ -9,7 +55,7 @@
   * Improved IPv6 support
   * Faster management of very large peer lists
   * When seeding, prefetch the data we upload
-  * IPv6 support for the DHT (dht 0.11) 
+  * IPv6 support for the DHT (dht 0.12) 
   * Improved DHT bootstrapping
   * Improved PEX support
   * Brand-new torrents with no downloaded data don't have to wait in the "Verify Local Data" queue

@@ -134,12 +134,12 @@ getSelectedTorrentIds( struct cbdata * data )
     GtkTreeSelection * s;
     GtkTreeModel * model;
     GSList * ids = NULL;
-    GList * selrows = NULL;
+    GList * paths = NULL;
     GList * l;
 
     /* build a list of the selected torrents' ids */
     s = tr_window_get_selection( data->wind );
-    for( selrows=l=gtk_tree_selection_get_selected_rows(s,&model); l; l=l->next ) {
+    for( paths=l=gtk_tree_selection_get_selected_rows(s,&model); l; l=l->next ) {
         GtkTreeIter iter;
         if( gtk_tree_model_get_iter( model, &iter, l->data ) ) {
             tr_torrent * tor;
@@ -148,6 +148,9 @@ getSelectedTorrentIds( struct cbdata * data )
         }
     }
 
+    /* cleanup */
+    g_list_foreach( paths, (GFunc)gtk_tree_path_free, NULL );
+    g_list_free( paths );
     return ids;
 }
 
@@ -437,6 +440,39 @@ onRPCChanged( tr_session            * session UNUSED,
 
     gdk_threads_leave( );
     return TR_RPC_OK;
+}
+
+static GSList *
+checkfilenames( int argc, char **argv )
+{
+    int i;
+    GSList * ret = NULL;
+    char * pwd = g_get_current_dir( );
+
+    for( i=0; i<argc; ++i )
+    {
+        if( gtr_is_supported_url( argv[i] ) || gtr_is_magnet_link( argv[i] ) )
+        {
+            ret = g_slist_prepend( ret, g_strdup( argv[i] ) );
+        }
+        else /* local file */
+        {
+            char * filename = g_path_is_absolute( argv[i] )
+                            ? g_strdup ( argv[i] )
+                            : g_build_filename( pwd, argv[i], NULL );
+
+            if( g_file_test( filename, G_FILE_TEST_EXISTS ) )
+                ret = g_slist_prepend( ret, filename );
+            else {
+                if( gtr_is_hex_hashcode( argv[i] ) )
+                    ret = g_slist_prepend( ret, g_strdup_printf( "magnet:?xt=urn:btih:%s", argv[i] ) );
+                g_free( filename );
+            }
+        }
+    }
+
+    g_free( pwd );
+    return g_slist_reverse( ret );
 }
 
 int
@@ -778,18 +814,9 @@ onSessionClosed( gpointer gdata )
     struct cbdata * cbdata = gdata;
 
     /* shutdown the gui */
-    if( cbdata->details != NULL )
-    {
-        GSList * l;
-        for( l=cbdata->details; l!=NULL; l=l->next )
-        {
-            struct DetailsDialogHandle * h = l->data;
-            gtk_widget_destroy( h->dialog );
-            g_free( h->key );
-            g_free( h );
-        }
-        g_slist_free( cbdata->details );
-        cbdata->details = NULL;
+    while( cbdata->details != NULL ) {
+        struct DetailsDialogHandle * h = cbdata->details->data;
+        gtk_widget_destroy( h->dialog );
     }
 
     if( cbdata->prefs )
@@ -1601,6 +1628,7 @@ doAction( const char * action_name, gpointer user_data )
             g_object_weak_ref( G_OBJECT( w ), detailsClosed, data );
         }
         gtk_window_present( GTK_WINDOW( w ) );
+        g_slist_free( ids );
     }
     else if( !strcmp( action_name, "update-tracker" ) )
     {

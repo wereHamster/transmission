@@ -1260,14 +1260,13 @@ typedef enum
         
         [fCreatorField setStringValue: @""];
         [fDateCreatedField setStringValue: @""];
-        [fCommentView setSelectable: NO];
         
         [fDataLocationField setStringValue: @""];
         [fDataLocationField setToolTip: nil];
         
         [fRevealDataButton setHidden: YES];
         
-        //don't allow empty fields to be selected
+        #warning remove after 1.8
         [fHashField setSelectable: NO];
         [fCreatorField setSelectable: NO];
         [fDataLocationField setSelectable: NO];
@@ -1276,7 +1275,6 @@ typedef enum
         [fProgressField setStringValue: @""];
         
         [fErrorMessageView setString: @""];
-        [fErrorMessageView setSelectable: NO];
         
         [fConnectedPeersField setStringValue: @""];
         
@@ -1373,10 +1371,10 @@ typedef enum
         
         [fDateAddedField setObjectValue: [torrent dateAdded]];
         
-        //allow these fields to be selected
+        #warning remove after 1.8
         [fHashField setSelectable: YES];
         [fCommentView setSelectable: ![commentString isEqualToString: @""]];
-        [fCreatorField setSelectable: ![creatorString isEqualToString: @""]];
+        [fDataLocationField setSelectable: YES];
         
         //set pieces view
         BOOL piecesAvailableSegment = [[NSUserDefaults standardUserDefaults] boolForKey: @"PiecesViewShowAvailability"];
@@ -1426,7 +1424,6 @@ typedef enum
     NSString * location = [torrent dataLocation];
     [fDataLocationField setStringValue: location ? [location stringByAbbreviatingWithTildeInPath] : @""];
     [fDataLocationField setToolTip: location ? location : @""];
-    [fDataLocationField setSelectable: location != nil];
     
     [fRevealDataButton setHidden: !location];
 }
@@ -1486,10 +1483,7 @@ typedef enum
         
         NSString * errorMessage = [torrent errorMessage];
         if (![errorMessage isEqualToString: [fErrorMessageView string]])
-        {
             [fErrorMessageView setString: errorMessage];
-            [fErrorMessageView setSelectable: ![errorMessage isEqualToString: @""]];
-        }
         
         [fDateCompletedField setObjectValue: [torrent dateCompleted]];
         
@@ -1747,31 +1741,40 @@ typedef enum
 
 - (void) removeTrackers
 {
-    const NSInteger oldCount = [fTrackers count] - [(TrackerNode *)[fTrackers lastObject] tier];
-    NSMutableSet * addresses = [NSMutableSet setWithCapacity: oldCount];
+    NSMutableIndexSet * removeIndexes = [NSMutableIndexSet indexSet];
     
-    NSIndexSet * indexes = [fTrackerTable selectedRowIndexes];
-    for (NSUInteger i = [indexes firstIndex]; i != NSNotFound; i = [indexes indexGreaterThanIndex: i])
+    NSIndexSet * selectedIndexes = [fTrackerTable selectedRowIndexes];
+    for (NSUInteger i=0, trackerIndex = 0; i <= [selectedIndexes lastIndex]; ++i)
     {
-        id item = [fTrackers objectAtIndex: i];
-        if ([item isKindOfClass: [NSNumber class]])
+        const BOOL isSelected = [selectedIndexes containsIndex: i];
+        
+        if ([[fTrackers objectAtIndex: i] isKindOfClass: [NSNumber class]])
         {
-            for (++i; i < [fTrackers count] && ![[fTrackers objectAtIndex: i] isKindOfClass: [NSNumber class]]; ++i)
-                [addresses addObject: [[fTrackers objectAtIndex: i] fullAnnounceAddress]];
-            --i;
+            if (isSelected)
+            {
+                for (++i; i < [fTrackers count] && ![[fTrackers objectAtIndex: i] isKindOfClass: [NSNumber class]]; ++i)
+                    [removeIndexes addIndex: trackerIndex++];
+                --i;
+            }
         }
         else
-            [addresses addObject: [(TrackerNode *)item fullAnnounceAddress]];
+        {
+            if (isSelected)
+                [removeIndexes addIndex: trackerIndex];
+            ++trackerIndex;
+        }
     }
+    
+    NSAssert([removeIndexes count] > 0, @"Trying to remove no trackers.");
     
     if ([[NSUserDefaults standardUserDefaults] boolForKey: @"WarningRemoveTrackers"])
     {
         NSAlert * alert = [[NSAlert alloc] init];
         
-        if ([addresses count] > 1)
+        if ([removeIndexes count] > 1)
         {
             [alert setMessageText: [NSString stringWithFormat: NSLocalizedString(@"Are you sure you want to remove %d trackers?",
-                                                                "Remove trackers alert -> title"), [addresses count]]];
+                                                                "Remove trackers alert -> title"), [removeIndexes count]]];
             [alert setInformativeText: NSLocalizedString(@"Once removed, Transmission will no longer attempt to contact them."
                                         " This cannot be undone.", "Remove trackers alert -> message")];
         }
@@ -1797,7 +1800,7 @@ typedef enum
     }
     
     Torrent * torrent = [fTorrents objectAtIndex: 0];
-    [torrent removeTrackersWithAnnounceAddresses: addresses];
+    [torrent removeTrackersAtIndexes: removeIndexes];
     
     //reset table with either new or old value
     [fTrackers release];
