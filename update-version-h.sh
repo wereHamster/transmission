@@ -21,18 +21,30 @@ peer_id_prefix=`grep m4_define configure.ac | sed "s/[][)(]/,/g" | grep peer_id_
 # grab the version.
 if [ -d ".svn" ] && type svnversion >/dev/null 2>&1; then
     svn_revision=`svnversion -n . | cut -d: -f1 | cut -dM -f1 | cut -dS -f1`
+    source_version="svn:${svn_revision}"
+elif head=`git rev-parse --verify --short HEAD 2>/dev/null`; then
+    if ! git update-index --refresh > /dev/null; then
+	source_version="git:${head}-dirty"
+    elif git diff-index --cached --name-status -r HEAD -- | read dummy; then
+	source_version="git:${head}-dirty"
+    else
+	source_version="git:${head}"
+    fi
+
+    svn_revision=0
 else
     # Give up and check the source files
     svn_revision=`awk '/\\$Id: /{ if ($4>i) i=$4 } END {print i}' */*.cc */*.[chm] */*.po`
+    source_version="svn:${svn_revision} (guessed)"
 fi
 
 cat > libtransmission/version.h.new << EOF
 #define PEERID_PREFIX             "${peer_id_prefix}"
 #define USERAGENT_PREFIX          "${user_agent_prefix}"
-#define SVN_REVISION              "${svn_revision}"
+#define SVN_REVISION              "${source_version}"
 #define SVN_REVISION_NUM          ${svn_revision}
 #define SHORT_VERSION_STRING      "${user_agent_prefix}"
-#define LONG_VERSION_STRING       "${user_agent_prefix} (${svn_revision})"
+#define LONG_VERSION_STRING       "${user_agent_prefix} (${source_version})"
 #define VERSION_STRING_INFOPLIST  ${user_agent_prefix}
 EOF
 
