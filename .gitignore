@@ -46,6 +46,7 @@ libtransmission/bencode-test
 libtransmission/blocklist-test
 libtransmission/clients-test
 libtransmission/json-test
+libtransmission/magnet-test
 libtransmission/peer-msgs-test
 libtransmission/request-list-test
 libtransmission/rpc-test
