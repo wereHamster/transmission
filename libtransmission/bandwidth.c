@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2008-2009 Mnemosyne LLC
+ * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -71,7 +71,7 @@ bytesUsed( const uint64_t now, struct bratecontrol * r, size_t size )
 *******
 ******/
 
-static TR_INLINE int
+static inline int
 comparePointers( const void * a, const void * b )
 {
     if( a != b )

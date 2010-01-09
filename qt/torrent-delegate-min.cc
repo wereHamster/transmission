@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009 Mnemosyne LLC
+ * This file Copyright (C) 2009-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -136,8 +136,8 @@ TorrentDelegateMin :: drawTorrent( QPainter * painter, const QStyleOptionViewIte
     const QRect barArea( nameArea.left( ),
                          nameArea.bottom( ),
                          statusArea.right( ) - nameArea.left( ),
-                         BAR_HEIGHT );               
-                           
+                         BAR_HEIGHT );
+
     // render
     if( tor.hasError( ) )
         painter->setPen( QColor( "red" ) );

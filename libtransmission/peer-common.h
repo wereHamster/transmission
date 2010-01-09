@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2008-2009 Mnemosyne LLC
+ * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -30,7 +30,7 @@
 
 enum
 {
-    /** when we're making requests from another peer, 
+    /** when we're making requests from another peer,
         batch them together to send enough requests to
         meet our bandwidth goals for the next N seconds */
     REQUEST_BUF_SECS = 10

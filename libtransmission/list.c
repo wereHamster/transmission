@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2009 Mnemosyne LLC
+ * This file Copyright (C) 2007-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -177,7 +177,7 @@ __tr_list_insert( struct __tr_list * list,
     prev->next = list;
 }
 
-void
+static void
 __tr_list_splice( struct __tr_list * prev,
 		  struct __tr_list * next)
 {

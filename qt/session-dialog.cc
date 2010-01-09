@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009 Mnemosyne LLC
+ * This file Copyright (C) 2009-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -114,4 +114,4 @@ SessionDialog :: SessionDialog( Session& session, Prefs& prefs, QWidget * parent
     connect( buttons, SIGNAL(rejected()), this, SLOT(hide()));
     connect( buttons, SIGNAL(accepted()), this, SLOT(onAccepted()));
     top->addWidget( buttons, 0 );
-} 
+}

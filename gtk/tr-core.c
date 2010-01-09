@@ -526,7 +526,7 @@ watchdir_file_free( struct watchdir_file * f )
     g_free( f->filename );
     g_free( f );
 }
-    
+
 static gboolean
 watchFolderIdle( gpointer gcore )
 {
@@ -606,18 +606,21 @@ scanWatchDir( TrCore * core )
 
     if( isEnabled )
     {
-        const char * basename;
         const char * dirname = pref_string_get( PREF_KEY_DIR_WATCH );
         GDir * dir = g_dir_open( dirname, 0, NULL );
 
-        while(( basename = g_dir_read_name( dir )))
+        if( dir != NULL )
         {
-            char * filename = g_build_filename( dirname, basename, NULL );
-            maybeAddTorrent( core, filename );
-            g_free( filename );
-        }
+            const char * basename;
+            while(( basename = g_dir_read_name( dir )))
+            {
+                char * filename = g_build_filename( dirname, basename, NULL );
+                maybeAddTorrent( core, filename );
+                g_free( filename );
+            }
 
-        g_dir_close( dir );
+            g_dir_close( dir );
+        }
     }
 }
 
@@ -1051,7 +1054,7 @@ tr_core_add_from_url( TrCore * core, const char * url )
 
         err = tr_ctorSetMagnet( ctor, url );
 
-        if( !err ) 
+        if( !err )
         {
             tr_session * session = tr_core_session( core );
             TrTorrent * gtor = tr_torrent_new_ctor( session, ctor, &err );

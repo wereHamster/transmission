@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009 Mnemosyne LLC
+ * This file Copyright (C) 2009-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -595,7 +595,7 @@ torrentInit( tr_torrent * tor, const tr_ctor * ctor )
 
     assert( session != NULL );
 
-    tr_globalLock( session );
+    tr_sessionLock( session );
 
     tor->session   = session;
     tor->uniqueId = nextUniqueId++;
@@ -687,11 +687,12 @@ torrentInit( tr_torrent * tor, const tr_ctor * ctor )
     if( doStart )
         torrentStart( tor );
 
-    tr_globalUnlock( session );
+    tr_sessionUnlock( session );
 }
 
-tr_parse_result
-tr_torrentParse( const tr_ctor * ctor, tr_info * setmeInfo )
+static tr_parse_result
+torrentParseImpl( const tr_ctor * ctor, tr_info * setmeInfo,
+                  int * dictOffset, int * dictLength )
 {
     int             doFree;
     tr_bool         didParse;
@@ -707,7 +708,7 @@ tr_torrentParse( const tr_ctor * ctor, tr_info * setmeInfo )
     if( tr_ctorGetMetainfo( ctor, &metainfo ) )
         return TR_PARSE_ERR;
 
-    didParse = tr_metainfoParse( session, setmeInfo, NULL, NULL, metainfo );
+    didParse = tr_metainfoParse( session, setmeInfo, dictOffset, dictLength, metainfo );
     doFree = didParse && ( setmeInfo == &tmp );
 
     if( !didParse )
@@ -725,9 +726,14 @@ tr_torrentParse( const tr_ctor * ctor, tr_info * setmeInfo )
     return result;
 }
 
+tr_parse_result
+tr_torrentParse( const tr_ctor * ctor, tr_info * setmeInfo )
+{
+    return torrentParseImpl( ctor, setmeInfo, NULL, NULL );
+}
+
 tr_torrent *
-tr_torrentNew( const tr_ctor  * ctor,
-               int            * setmeError )
+tr_torrentNew( const tr_ctor * ctor, int * setmeError )
 {
     tr_info tmpInfo;
     tr_torrent * tor = NULL;
@@ -753,16 +759,19 @@ tr_torrentNew( const tr_ctor  * ctor,
     }
     else
     {
-        const int err = tr_torrentParse( ctor, &tmpInfo );
-        if( !err )
+        int off, len;
+        tr_parse_result r = torrentParseImpl( ctor, &tmpInfo, &off, &len );
+        if( r == TR_PARSE_OK )
         {
             tor = tr_new0( tr_torrent, 1 );
             tor->info = tmpInfo;
+            tor->infoDictOffset = off;
+            tor->infoDictLength = len;
             torrentInit( tor, ctor );
         }
         else if( setmeError )
         {
-            *setmeError = err;
+            *setmeError = r;
         }
     }
 
@@ -813,7 +822,7 @@ tr_torrentChangeMyPort( tr_torrent * tor )
     tr_announcerChangeMyPort( tor );
 }
 
-static TR_INLINE void
+static inline void
 tr_torrentManualUpdateImpl( void * vtor )
 {
     tr_torrent * tor = vtor;
@@ -1125,7 +1134,7 @@ tr_torrentFiles( const tr_torrent * tor,
     for( i=0; i<n; ++i, ++walk ) {
         const uint64_t b = isSeed ? tor->info.files[i].length : fileBytesCompleted( tor, i );
         walk->bytesCompleted = b;
-        walk->progress = tor->info.files[i].length > 0.0 ? ( b / tor->info.files[i].length ) : 1.0;
+        walk->progress = tor->info.files[i].length > 0 ? ( (float)b / tor->info.files[i].length ) : 1.0;
     }
 
     if( fileCount )
@@ -1255,7 +1264,7 @@ freeTorrent( tr_torrent * tor )
     assert( tr_isTorrent( tor ) );
     assert( !tor->isRunning );
 
-    tr_globalLock( session );
+    tr_sessionLock( session );
 
     tr_peerMgrRemoveTorrent( tor );
 
@@ -1287,7 +1296,7 @@ freeTorrent( tr_torrent * tor )
     tr_metainfoFree( inf );
     tr_free( tor );
 
-    tr_globalUnlock( session );
+    tr_sessionUnlock( session );
 }
 
 /**
@@ -1301,7 +1310,7 @@ checkAndStartImpl( void * vtor )
 
     assert( tr_isTorrent( tor ) );
 
-    tr_globalLock( tor->session );
+    tr_sessionLock( tor->session );
 
     /** If we had local data before, but it's disappeared,
         stop the torrent and log an error. */
@@ -1327,7 +1336,7 @@ checkAndStartImpl( void * vtor )
         tr_peerMgrStartTorrent( tor );
     }
 
-    tr_globalUnlock( tor->session );
+    tr_sessionUnlock( tor->session );
 }
 
 static void
@@ -1344,7 +1353,7 @@ torrentStart( tr_torrent * tor )
 {
     assert( tr_isTorrent( tor ) );
 
-    tr_globalLock( tor->session );
+    tr_sessionLock( tor->session );
 
     if( !tor->isRunning )
     {
@@ -1364,7 +1373,7 @@ torrentStart( tr_torrent * tor )
         tr_verifyAdd( tor, checkAndStartCB );
     }
 
-    tr_globalUnlock( tor->session );
+    tr_sessionUnlock( tor->session );
 }
 
 void
@@ -1409,7 +1418,7 @@ verifyTorrent( void * vtor )
     tr_torrent * tor = vtor;
 
     assert( tr_isTorrent( tor ) );
-    tr_globalLock( tor->session );
+    tr_sessionLock( tor->session );
 
     /* if the torrent's already being verified, stop it */
     tr_verifyRemove( tor );
@@ -1425,7 +1434,7 @@ verifyTorrent( void * vtor )
     tr_torrentUncheck( tor );
     tr_verifyAdd( tor, torrentRecheckDoneCB );
 
-    tr_globalUnlock( tor->session );
+    tr_sessionUnlock( tor->session );
 }
 
 void
@@ -1471,13 +1480,13 @@ tr_torrentStop( tr_torrent * tor )
 
     if( tr_isTorrent( tor ) )
     {
-        tr_globalLock( tor->session );
+        tr_sessionLock( tor->session );
 
         tor->isRunning = 0;
         tr_torrentSetDirty( tor );
         tr_runInEventThread( tor->session, stopTorrent, tor );
 
-        tr_globalUnlock( tor->session );
+        tr_sessionUnlock( tor->session );
     }
 }
 
@@ -1512,12 +1521,12 @@ tr_torrentFree( tr_torrent * tor )
     {
         tr_session * session = tor->session;
         assert( tr_isSession( session ) );
-        tr_globalLock( session );
+        tr_sessionLock( session );
 
         tr_torrentClearCompletenessCallback( tor );
         tr_runInEventThread( session, closeTorrent, tor );
 
-        tr_globalUnlock( session );
+        tr_sessionUnlock( session );
     }
 }
 
@@ -1707,7 +1716,8 @@ tr_torrentSetFilePriorities( tr_torrent *      tor,
     tr_torrentLock( tor );
 
     for( i = 0; i < fileCount; ++i )
-        tr_torrentInitFilePriority( tor, files[i], priority );
+        if( files[i] < tor->info.fileCount )
+            tr_torrentInitFilePriority( tor, files[i], priority );
     tr_torrentSetDirty( tor );
     tr_peerMgrRebuildRequests( tor );
 
@@ -1837,7 +1847,9 @@ tr_torrentInitFileDLs( tr_torrent      * tor,
     tr_torrentLock( tor );
 
     for( i=0; i<fileCount; ++i )
-        setFileDND( tor, files[i], doDownload );
+        if( files[i] < tor->info.fileCount )
+            setFileDND( tor, files[i], doDownload );
+
     tr_cpInvalidateDND( &tor->completion );
     tor->needsSeedRatioCheck = TRUE;
 
@@ -2079,23 +2091,25 @@ tr_torrentGetMTimes( const tr_torrent * tor, size_t * setme_n )
 ****
 ***/
 
-tr_announce_list_err
-tr_torrentSetAnnounceList( tr_torrent *            tor,
-                           const tr_tracker_info * trackers,
-                           int                     trackerCount )
+tr_bool
+tr_torrentSetAnnounceList( tr_torrent             * tor,
+                           const tr_tracker_info  * trackers,
+                           int                      trackerCount )
 {
     int i;
     tr_benc metainfo;
+    tr_bool ok = TRUE;
+    tr_torrentLock( tor );
 
     assert( tr_isTorrent( tor ) );
 
     /* look for bad URLs */
-    for( i=0; i<trackerCount; ++i )
+    for( i=0; ok && i<trackerCount; ++i )
         if( !tr_httpIsValidURL( trackers[i].announce ) )
-            return TR_ANNOUNCE_LIST_HAS_BAD;
+            ok = FALSE;
 
     /* save to the .torrent file */
-    if( !tr_bencLoadFile( &metainfo, TR_FMT_BENC, tor->info.torrent ) )
+    if( ok && !tr_bencLoadFile( &metainfo, TR_FMT_BENC, tor->info.torrent ) )
     {
         tr_info   tmpInfo;
 
@@ -2152,7 +2166,8 @@ tr_torrentSetAnnounceList( tr_torrent *            tor,
         tr_announcerResetTorrent( tor->session->announcer, tor );
     }
 
-    return TR_ANNOUNCE_LIST_OK;
+    tr_torrentUnlock( tor );
+    return ok;
 }
 
 /**

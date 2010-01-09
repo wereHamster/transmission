@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2009 Mnemosyne LLC
+ * This file Copyright (C) 2007-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -130,7 +130,7 @@ canReadWrapper( tr_peerIo * io )
     /* try to consume the input buffer */
     if( io->canRead )
     {
-        tr_globalLock( session );
+        tr_sessionLock( session );
 
         while( !done && !err )
         {
@@ -168,7 +168,7 @@ canReadWrapper( tr_peerIo * io )
             assert( tr_isPeerIo( io ) );
         }
 
-        tr_globalUnlock( session );
+        tr_sessionUnlock( session );
     }
 
     /* keep the iobuf's excess capacity from growing too large */
@@ -384,6 +384,7 @@ tr_peerIoNew( tr_session       * session,
     io->crypto = tr_cryptoNew( torrentHash, isIncoming );
     io->session = session;
     io->addr = *addr;
+    io->isSeed = isSeed;
     io->port = port;
     io->socket = socket;
     io->isIncoming = isIncoming != 0;

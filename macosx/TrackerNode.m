@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2009 Transmission authors and contributors
+ * Copyright (c) 2009-2010 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -36,6 +36,11 @@
     }
     
     return self;
+}
+
+- (NSString *) description
+{
+    return [@"Tracker: " stringByAppendingString: [self fullAnnounceAddress]];
 }
 
 - (id) copyWithZone: (NSZone *) zone
@@ -108,7 +113,12 @@
         baseString = [NSLocalizedString(@"Last Announce", "Tracker last announce") stringByAppendingFormat: @": %@", dateString];
         if (fStat.hasAnnounced && fStat.lastAnnounceSucceeded)
         {
-            NSString * peerString = [NSString stringWithFormat: NSLocalizedString(@"got %d peers", "Tracker last announce"),
+            #warning after 1.8 fix ugly hack
+            NSString * peerString;
+            if (fStat.lastAnnouncePeerCount == 1 && [[[NSLocale currentLocale] localeIdentifier] hasPrefix: @"en_"])
+                peerString = NSLocalizedString(@"got 1 peer", "Tracker last announce");
+            else
+                peerString = [NSString stringWithFormat: NSLocalizedString(@"got %d peers", "Tracker last announce"),
                                         fStat.lastAnnouncePeerCount];
             baseString = [baseString stringByAppendingFormat: @" (%@)", peerString];
         }

@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2007-2009 Transmission authors and contributors
+ * Copyright (c) 2007-2010 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -47,7 +47,7 @@ AboutWindowController * fAboutBoxInstance = nil;
             [[NSBundle mainBundle] pathForResource: @"Credits" ofType: @"rtf"] documentAttributes: nil] autorelease]];
     
     //size license button
-    const CGFloat oldButtonWidth = [fLicenseButton frame].size.width;
+    const CGFloat oldButtonWidth = NSWidth([fLicenseButton frame]);
     
     [fLicenseButton setTitle: NSLocalizedString(@"License", "About window -> license button")];
     [fLicenseButton sizeToFit];

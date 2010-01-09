@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2009 Mnemosyne LLC
+ * This file Copyright (C) 2007-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -142,7 +142,7 @@ verifyTorrent( tr_torrent * tor, tr_bool * stopFlag )
              * way towards reducing IO load... */
             if( lastSleptAt != now ) {
                 lastSleptAt = now;
-                tr_wait( MSEC_TO_SLEEP_PER_SECOND_DURING_VERIFY );
+                tr_wait_msec( MSEC_TO_SLEEP_PER_SECOND_DURING_VERIFY );
             }
 
             SHA1_Init( &sha );
@@ -357,7 +357,7 @@ tr_verifyRemove( tr_torrent * tor )
         while( stopCurrent )
         {
             tr_lockUnlock( lock );
-            tr_wait( 100 );
+            tr_wait_msec( 100 );
             tr_lockLock( lock );
         }
     }

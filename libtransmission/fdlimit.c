@@ -56,6 +56,7 @@
 #include <fcntl.h> /* O_LARGEFILE posix_fadvise */
 #include <unistd.h>
 
+#include <stdarg.h> /* some 1.4.x versions of evutil.h need this */
 #include <evutil.h>
 
 #include "transmission.h"
@@ -403,7 +404,7 @@ TrOpenFile( tr_session             * session,
     return 0;
 }
 
-static TR_INLINE tr_bool
+static inline tr_bool
 fileIsOpen( const struct tr_openfile * o )
 {
     return o->fd >= 0;
@@ -815,7 +816,6 @@ tr_fdGetFileLimit( const tr_session * session )
 {
     return session && session->fdInfo ? session->fdInfo->openFileLimit : -1;
 }
-    
 
 void
 tr_fdSetPeerLimit( tr_session * session, int socketLimit )

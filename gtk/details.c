@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2009 Mnemosyne LLC
+ * This file Copyright (C) 2007-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -760,7 +760,6 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
             str = tr_strltime( buf, baseline, sizeof( buf ) );
     }
     gtr_label_set_text( GTK_LABEL( di->eta_lb ), str );
-     
 
 
     /* size_lb */
@@ -1993,7 +1992,6 @@ onEditTrackersResponse( GtkDialog * dialog, int response, gpointer data )
         int i, n;
         int tier;
         GtkTextIter start, end;
-        tr_announce_list_err err;
         char * tracker_text;
         char ** tracker_strings;
         tr_tracker_info * trackers;
@@ -2018,19 +2016,14 @@ onEditTrackersResponse( GtkDialog * dialog, int response, gpointer data )
         }
 
         /* update the torrent */
-        err = tr_torrentSetAnnounceList( tor, trackers, n );
-        if( err )
+        if( !tr_torrentSetAnnounceList( tor, trackers, n ) )
         {
             GtkWidget * w;
-            const char * str = NULL;
-            if( err == TR_ANNOUNCE_LIST_HAS_BAD )
-                str = _( "List contains invalid URLs" );
-            else
-                assert( 0 && "unhandled condition" );
+            const char * text = _( "List contains invalid URLs" );
             w = gtk_message_dialog_new( GTK_WINDOW( dialog ),
                                         GTK_DIALOG_MODAL,
                                         GTK_MESSAGE_ERROR,
-                                        GTK_BUTTONS_CLOSE, "%s", str );
+                                        GTK_BUTTONS_CLOSE, "%s", text );
             gtk_dialog_run( GTK_DIALOG( w ) );
             gtk_widget_destroy( w );
             do_destroy = FALSE;
@@ -2121,7 +2114,7 @@ tracker_page_new( struct DetailsImpl * di )
     g_object_set( G_OBJECT( r ), "ypad", (GUI_PAD+GUI_PAD_BIG)/2,
                                  "xpad", (GUI_PAD+GUI_PAD_BIG)/2,
                                  NULL );
-   
+
     sw = gtk_scrolled_window_new( NULL, NULL );
     gtk_scrolled_window_set_policy( GTK_SCROLLED_WINDOW( sw ),
                                     GTK_POLICY_AUTOMATIC,
@@ -2155,7 +2148,7 @@ tracker_page_new( struct DetailsImpl * di )
     gtk_toggle_button_set_active( GTK_TOGGLE_BUTTON( w ), b );
     g_signal_connect( w, "toggled", G_CALLBACK( onBackupToggled ), di );
     gtk_box_pack_start( GTK_BOX( vbox ), w, FALSE, FALSE, 0 );
-    
+
     return vbox;
 }
 

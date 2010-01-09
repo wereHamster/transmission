@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2009 Mnemosyne LLC
+ * This file Copyright (C) 2007-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -168,7 +168,7 @@ void tr_peerMgrSetBlame( tr_torrent        * tor,
                          tr_piece_index_t    pieceIndex,
                          int                 success );
 
-enum 
+enum
 {
     TR_PEERS_CONNECTED,
     TR_PEERS_ALL

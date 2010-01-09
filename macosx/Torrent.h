@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2006-2009 Transmission authors and contributors
+ * Copyright (c) 2006-2010 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -204,9 +204,9 @@
 - (void) checkGroupValueForRemoval: (NSNotification *) notification;
 
 - (NSArray *) fileList;
+- (NSArray *) flatFileList;
 - (NSInteger) fileCount;
 - (void) updateFileStat;
-- (NSArray *) flatFileList;
 
 //methods require fileStats to have been updated recently to be accurate
 - (CGFloat) fileProgress: (FileListNode *) node;

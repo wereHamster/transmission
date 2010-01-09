@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2009 Mnemosyne LLC
+ * This file Copyright (C) 2007-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -250,7 +250,7 @@ tr_eventInit( tr_session * session )
 
     /* wait until the libevent thread is running */
     while( session->events == NULL )
-        tr_wait( 100 );
+        tr_wait_msec( 100 );
 }
 
 void

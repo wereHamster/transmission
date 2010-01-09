@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009 Mnemosyne LLC
+ * This file Copyright (C) 2009-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -216,7 +216,7 @@ Torrent :: setDateTime( int i, const QDateTime& value )
 
     return changed;
 }
-  
+
 bool
 Torrent :: setSize( int i, qulonglong value )
 {
@@ -498,7 +498,6 @@ Torrent :: update( tr_benc * d )
             default:
                 assert( 0 && "unhandled type" );
         }
-        
     }
 
     tr_benc * files;

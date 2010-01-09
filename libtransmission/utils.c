@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009 Mnemosyne LLC
+ * This file Copyright (C) 2009-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -54,8 +54,8 @@ static int            messageQueueCount = 0;
 
 #ifndef WIN32
     /* make null versions of these win32 functions */
-    static TR_INLINE int IsDebuggerPresent( void ) { return FALSE; }
-    static TR_INLINE void OutputDebugString( const void * unused UNUSED ) { }
+    static inline int IsDebuggerPresent( void ) { return FALSE; }
+    static inline void OutputDebugString( const void * unused UNUSED ) { }
 #endif
 
 /***
@@ -167,7 +167,7 @@ tr_getQueuedMessages( void )
     ret = messageQueue;
     messageQueue = NULL;
     messageQueueTail = &messageQueue;
-    
+
     messageQueueCount = 0;
 
     tr_lockUnlock( messageLock );
@@ -223,26 +223,6 @@ tr_getLogTimeStr( char * buf, int buflen )
 
     return buf;
 }
-
-void
-tr_assertImpl( const char * file, int line, const char * test, const char * fmt, ... )
-{
-    char buf[64];
-    fprintf( stderr, "[%s] Transmission %s Assertion \"%s\" failed at %s:%d.  ",
-                     tr_getLogTimeStr( buf, sizeof( buf ) ),
-                      LONG_VERSION_STRING, test, file, line );
-    if( fmt && *fmt ) {
-        va_list args;
-        fputc( '(', stderr );
-        va_start( args, fmt );
-        vfprintf( stderr, fmt, args );
-        va_end( args );
-        fputs( ")  ", stderr );
-    }
-    fputs( "Please report this bug at <http://trac.transmissionbt.com/newticket>; Thank you.\n", stderr );
-    abort( );
-}
-
 
 tr_bool
 tr_deepLoggingIsActive( void )
@@ -327,16 +307,16 @@ tr_msg( const char * file, int line,
             *messageQueueTail = newmsg;
             messageQueueTail = &newmsg->next;
             ++messageQueueCount;
-            
+
             if( messageQueueCount > TR_MAX_MSG_LOG )
             {
                 tr_msg_list * old = messageQueue;
                 messageQueue = old->next;
                 old->next = NULL;
                 tr_freeMessageList(old);
-                
+
                 --messageQueueCount;
-                
+
                 assert( messageQueueCount == TR_MAX_MSG_LOG );
             }
         }
@@ -805,7 +785,7 @@ tr_date( void )
 }
 
 void
-tr_wait( uint64_t delay_milliseconds )
+tr_wait_msec( uint64_t delay_milliseconds )
 {
 #ifdef WIN32
     Sleep( (DWORD)delay_milliseconds );

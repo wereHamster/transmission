@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  * 
- * Copyright (c) 2008-2009 Transmission authors and contributors
+ * Copyright (c) 2008-2010 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -135,7 +135,7 @@
     
     const CGFloat totalRowHeight = [self rowHeight] + [self intercellSpacing].height;
     
-    NSRect gridRects[(NSInteger)(ceil(visibleRect.size.height / totalRowHeight / 2.0)) + 1]; //add one if partial rows at top and bottom
+    NSRect gridRects[(NSInteger)(ceil(NSHeight(visibleRect) / totalRowHeight / 2.0)) + 1]; //add one if partial rows at top and bottom
     NSInteger rectNum = 0;
     
     if (rows.length > 0)

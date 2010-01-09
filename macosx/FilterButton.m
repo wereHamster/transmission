@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  * 
- * Copyright (c) 2007-2009 Transmission authors and contributors
+ * Copyright (c) 2007-2010 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -30,7 +30,7 @@
 {
     if ((self = [super initWithCoder: coder]))
     {
-        fCount = NSUIntegerMax;
+        fCount = NSNotFound;
     }
     return self;
 }

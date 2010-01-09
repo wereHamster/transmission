@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2007-2009 Transmission authors and contributors
+ * Copyright (c) 2007-2010 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -32,7 +32,7 @@
     
     NSNotificationCenter * nc = [NSNotificationCenter defaultCenter];
     [nc addObserver: self selector: @selector(updateControlTint:)
-        name: NSControlTintDidChangeNotification object: nil];
+        name: NSControlTintDidChangeNotification object: NSApp];
     
     fSelected = NO;
 }

@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2009 Mnemosyne LLC
+ * This file Copyright (C) 2007-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -246,7 +246,7 @@ getStatusString( const tr_torrent  * tor,
 
         case TR_STATUS_DOWNLOAD:
         {
-            if( tr_torrentHasMetadata( tor ) ) 
+            if( tr_torrentHasMetadata( tor ) )
             {
                 g_string_append_printf( gstr,
                     ngettext( "Downloading from %1$'d of %2$'d connected peer",

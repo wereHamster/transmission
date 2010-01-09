@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2009 Mnemosyne LLC
+ * This file Copyright (C) 2007-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -128,6 +128,9 @@ struct peer_atom
     time_t      shelf_date;
 };
 
+#ifdef NDEBUG
+#define tr_isAtom(a) (TRUE)
+#else
 static tr_bool
 tr_isAtom( const struct peer_atom * atom )
 {
@@ -135,6 +138,7 @@ tr_isAtom( const struct peer_atom * atom )
         && ( atom->from < TR_PEER_FROM__MAX )
         && ( tr_isAddress( &atom->addr ) );
 }
+#endif
 
 static const char*
 tr_atomAddrStr( const struct peer_atom * atom )
@@ -210,34 +214,34 @@ struct tr_peerMgr
 ***
 **/
 
-static TR_INLINE void
+static inline void
 managerLock( const struct tr_peerMgr * manager )
 {
-    tr_globalLock( manager->session );
+    tr_sessionLock( manager->session );
 }
 
-static TR_INLINE void
+static inline void
 managerUnlock( const struct tr_peerMgr * manager )
 {
-    tr_globalUnlock( manager->session );
+    tr_sessionUnlock( manager->session );
 }
 
-static TR_INLINE void
+static inline void
 torrentLock( Torrent * torrent )
 {
     managerLock( torrent->manager );
 }
 
-static TR_INLINE void
+static inline void
 torrentUnlock( Torrent * torrent )
 {
     managerUnlock( torrent->manager );
 }
 
-static TR_INLINE int
+static inline int
 torrentIsLocked( const Torrent * t )
 {
-    return tr_globalIsLocked( t->manager->session );
+    return tr_sessionIsLocked( t->manager->session );
 }
 
 /**
@@ -2970,7 +2974,7 @@ compareReconnectTorrents( const void * va, const void * vb )
 
     return 0;
 }
-    
+
 static void
 reconnectPulse( int foo UNUSED, short bar UNUSED, void * vmgr )
 {

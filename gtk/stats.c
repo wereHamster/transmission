@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2009 Mnemosyne LLC
+ * This file Copyright (C) 2007-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -18,7 +18,7 @@
 
 enum
 {
-    TR_RESPONSE_CLEAR = 1
+    TR_RESPONSE_RESET = 1
 };
 
 struct stat_ui
@@ -101,10 +101,29 @@ dialogResponse( GtkDialog * dialog,
 {
     struct stat_ui * ui = gdata;
 
-    if( response == TR_RESPONSE_CLEAR )
+    if( response == TR_RESPONSE_RESET )
     {
-        tr_sessionClearStats( tr_core_session( ui->core ) );
-        updateStats( ui );
+        const char * primary = _( "Reset your statistics?" );
+        const char * secondary = _( "These statistics are for your information only.  "
+                                    "Resetting them doesn't affect the statistics logged by your BitTorrent trackers." );
+        const int flags = GTK_DIALOG_DESTROY_WITH_PARENT
+                        | GTK_DIALOG_MODAL;
+        GtkWidget * w = gtk_message_dialog_new( GTK_WINDOW( dialog ),
+                                                flags,
+                                                GTK_MESSAGE_QUESTION,
+                                                GTK_BUTTONS_NONE,
+                                                "%s", primary );
+        gtk_dialog_add_buttons( GTK_DIALOG( w ),
+                                GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
+                                _( "_Reset" ), TR_RESPONSE_RESET,
+                                NULL );
+        gtk_message_dialog_format_secondary_text( GTK_MESSAGE_DIALOG( w ), "%s", secondary );
+        if( gtk_dialog_run( GTK_DIALOG( w ) ) == TR_RESPONSE_RESET )
+        {
+            tr_sessionClearStats( tr_core_session( ui->core ) );
+            updateStats( ui );
+        }
+        gtk_widget_destroy( w );
     }
 
     if( response == GTK_RESPONSE_CLOSE )
@@ -124,19 +143,18 @@ stats_dialog_create( GtkWindow * parent,
     GtkWidget *      l;
     struct stat_ui * ui = g_new0( struct stat_ui, 1 );
 
-    d = gtk_dialog_new_with_buttons( _(
-                                         "Statistics" ),
+    d = gtk_dialog_new_with_buttons( _( "Statistics" ),
                                      parent,
                                      GTK_DIALOG_DESTROY_WITH_PARENT |
                                      GTK_DIALOG_NO_SEPARATOR,
-                                     GTK_STOCK_DELETE, TR_RESPONSE_CLEAR,
+                                     _( "_Reset" ), TR_RESPONSE_RESET,
                                      GTK_STOCK_CLOSE, GTK_RESPONSE_CLOSE,
                                      NULL );
     gtk_dialog_set_default_response( GTK_DIALOG( d ),
                                      GTK_RESPONSE_CLOSE );
     gtk_dialog_set_alternative_button_order( GTK_DIALOG( d ),
                                              GTK_RESPONSE_CLOSE,
-                                             TR_RESPONSE_CLEAR,
+                                             TR_RESPONSE_RESET,
                                              -1 );
     t = hig_workarea_create( );
     gtk_box_pack_start( GTK_BOX( GTK_DIALOG( d )->vbox ), t, TRUE, TRUE, 0 );

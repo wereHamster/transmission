@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2005-2009 Transmission authors and contributors
+ * Copyright (c) 2005-2010 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -122,10 +122,12 @@
 
 + (NSString *) timeString: (uint64_t) seconds showSeconds: (BOOL) showSeconds maxFields: (NSUInteger) max
 {
+    NSAssert(max > 0, @"Cannot generate a time string with no fields");
+    
     NSMutableArray * timeArray = [NSMutableArray arrayWithCapacity: MIN(max, 4)];
     NSUInteger remaining = seconds; //causes problems for some users when it's a uint64_t
     
-    if (max > 0 && seconds >= (24 * 60 * 60))
+    if (seconds >= (24 * 60 * 60))
     {
         const NSUInteger days = remaining / (24 * 60 * 60);
         if (days == 1)

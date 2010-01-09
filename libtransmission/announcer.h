@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009 Mnemosyne LLC
+ * This file Copyright (C) 2009-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -70,7 +70,7 @@ tr_bool tr_announcerHasBacklog( const struct tr_announcer * );
 
 void tr_announcerResetTorrent( struct tr_announcer*, tr_torrent* );
 
-tr_publisher_tag tr_announcerSubscribe( struct tr_torrent_tiers  * tiers, 
+tr_publisher_tag tr_announcerSubscribe( struct tr_torrent_tiers  * tiers,
                                         tr_delivery_func           func,
                                         void                     * userData );
 

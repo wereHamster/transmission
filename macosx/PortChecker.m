@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2006-2009 Transmission authors and contributors
+ * Copyright (c) 2006-2010 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -25,7 +25,7 @@
 #import "PortChecker.h"
 
 #define CHECKER_URL(port) [NSString stringWithFormat: @"http://portcheck.transmissionbt.com/%d", port]
-#define CHECK_FIRE  3.0
+#define CHECK_FIRE 3.0
 
 @interface PortChecker (Private)
 

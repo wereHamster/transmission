@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2008-2009 Mnemosyne LLC
+ * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -66,14 +66,6 @@ tr_ptrArrayNth( tr_ptrArray* t,
     assert( i < t->n_items );
 
     return t->items[i];
-}
-
-void*
-tr_ptrArrayBack( tr_ptrArray* t )
-{
-    assert( t->n_items > 0 );
-
-    return tr_ptrArrayNth( t, t->n_items - 1 );
 }
 
 int
@@ -170,17 +162,19 @@ tr_ptrArrayLowerBound( const tr_ptrArray *                t,
     return first;
 }
 
+#ifdef NDEBUG
+#define assertSortedAndUnique(a,b)
+#else
 static void
 assertSortedAndUnique( const tr_ptrArray * t,
                         int compare(const void*, const void*) )
 {
-#ifndef NDEBUG
     int i;
 
     for( i = 0; i < t->n_items - 2; ++i )
         assert( compare( t->items[i], t->items[i + 1] ) <= 0 );
-#endif
 }
+#endif
 
 int
 tr_ptrArrayInsertSorted( tr_ptrArray * t,

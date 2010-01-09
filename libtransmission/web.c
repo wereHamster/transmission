@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2008-2009 Mnemosyne LLC
+ * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -10,11 +10,12 @@
  * $Id$
  */
 
+#include <assert.h>
+
 #include <curl/curl.h>
 #include <event.h>
 
 #include "transmission.h"
-#include "list.h"
 #include "net.h"
 #include "session.h"
 #include "trevent.h"
@@ -43,6 +44,10 @@ enum
     } while( 0 )
 #endif
 
+/***
+****
+***/
+
 struct tr_web
 {
     tr_bool closing;
@@ -53,14 +58,12 @@ struct tr_web
     tr_session * session;
     tr_address addr;
     struct event timer_event;
-    tr_list * freeme;
 };
 
 static void
 web_free( tr_web * g )
 {
     curl_multi_cleanup( g->multi );
-    tr_list_free( &g->freeme, tr_free );
     evtimer_del( &g->timer_event );
     memset( g, TR_MEMORY_TRASH, sizeof( struct tr_web ) );
     tr_free( g );
@@ -79,11 +82,15 @@ struct tr_web_task
     tr_session * session;
     tr_web_done_func * done_func;
     void * done_func_user_data;
+    struct event timer_event;
+    CURL * easy;
+    CURLM * multi;
 };
 
 static void
 task_free( struct tr_web_task * task )
 {
+    evtimer_del( &task->timer_event );
     evbuffer_free( task->response );
     tr_free( task->range );
     tr_free( task->url );
@@ -105,15 +112,14 @@ writeFunc( void * ptr, size_t size, size_t nmemb, void * vtask )
     return byteCount;
 }
 
-static void
+static int
 sockoptfunction( void * vtask, curl_socket_t fd, curlsocktype purpose UNUSED )
 {
     struct tr_web_task * task = vtask;
     const tr_bool isScrape = strstr( task->url, "scrape" ) != NULL;
     const tr_bool isAnnounce = strstr( task->url, "announce" ) != NULL;
 
-    /* announce and scrape requests have tiny payloads... 
-     * which have very small payloads */
+    /* announce and scrape requests have tiny payloads. */
     if( isScrape || isAnnounce )
     {
         const int sndbuf = 1024;
@@ -121,8 +127,12 @@ sockoptfunction( void * vtask, curl_socket_t fd, curlsocktype purpose UNUSED )
         setsockopt( fd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf) );
         setsockopt( fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf) );
     }
+
+    /* return nonzero if this function encountered an error */
+    return 0;
 }
 
+#if 0
 static int
 getCurlProxyType( tr_proxy_type t )
 {
@@ -130,6 +140,7 @@ getCurlProxyType( tr_proxy_type t )
     if( t == TR_PROXY_SOCKS5 ) return CURLPROXY_SOCKS5;
     return CURLPROXY_HTTP;
 }
+#endif
 
 static int
 getTimeoutFromURL( const char * url )
@@ -138,6 +149,8 @@ getTimeoutFromURL( const char * url )
     if( strstr( url, "announce" ) != NULL ) return 30;
     return 240;
 }
+
+static void task_timeout_cb( int fd UNUSED, short what UNUSED, void * task );
 
 static void
 addTask( void * vtask )
@@ -149,12 +162,14 @@ addTask( void * vtask )
     {
         CURL * e = curl_easy_init( );
         struct tr_web * web = session->web;
-        const long timeout = getTimeoutFromURL( task->url );
+        const int timeout = getTimeoutFromURL( task->url );
         const long verbose = getenv( "TR_CURL_VERBOSE" ) != NULL;
         const char * user_agent = TR_NAME "/" LONG_VERSION_STRING;
 
         dbgmsg( "adding task #%lu [%s]", task->tag, task->url );
 
+/* experimentally disable proxies to see if that has any effect on the libevent crashes */
+#if 0
         if( !task->range && session->isProxyEnabled ) {
             curl_easy_setopt( e, CURLOPT_PROXY, session->proxy );
             curl_easy_setopt( e, CURLOPT_PROXYAUTH, CURLAUTH_ANY );
@@ -168,10 +183,17 @@ addTask( void * vtask )
             curl_easy_setopt( e, CURLOPT_PROXYUSERPWD, str );
             tr_free( str );
         }
+#endif
+
+        task->easy = e;
+        task->multi = web->multi;
+
+        /* use our own timeout instead of CURLOPT_TIMEOUT because the latter
+         * doesn't play nicely with curl_multi.  See curl bug #2501457 */
+        evtimer_set( &task->timer_event, task_timeout_cb, task );
+        tr_timerAdd( &task->timer_event, timeout, 0 );
 
         curl_easy_setopt( e, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4 );
-        curl_easy_setopt( e, CURLOPT_TIMEOUT, timeout );
-        curl_easy_setopt( e, CURLOPT_CONNECTTIMEOUT, timeout-5 );
         curl_easy_setopt( e, CURLOPT_SOCKOPTFUNCTION, sockoptfunction );
         curl_easy_setopt( e, CURLOPT_SOCKOPTDATA, task );
         curl_easy_setopt( e, CURLOPT_WRITEDATA, task );
@@ -217,6 +239,23 @@ task_finish( struct tr_web_task * task, long response_code )
 }
 
 static void
+remove_task( struct tr_web_task * task )
+{
+    long code;
+
+    curl_easy_getinfo( task->easy, CURLINFO_RESPONSE_CODE, &code );
+    curl_multi_remove_handle( task->multi, task->easy );
+    curl_easy_cleanup( task->easy );
+    task_finish( task, code );
+}
+
+static void
+task_timeout_cb( int fd UNUSED, short what UNUSED, void * task )
+{
+    remove_task( task );
+}
+
+static void
 remove_finished_tasks( tr_web * g )
 {
     CURLMsg * msg;
@@ -224,14 +263,11 @@ remove_finished_tasks( tr_web * g )
 
     while(( msg = curl_multi_info_read( g->multi, &msgs_left ))) {
         if(( msg->msg == CURLMSG_DONE ) && ( msg->easy_handle != NULL )) {
-            long code;
             struct tr_web_task * task;
             CURL * e = msg->easy_handle;
             curl_easy_getinfo( e, CURLINFO_PRIVATE, (void*)&task );
-            curl_easy_getinfo( e, CURLINFO_RESPONSE_CODE, &code );
-            curl_multi_remove_handle( g->multi, e );
-            curl_easy_cleanup( e );
-            task_finish( task, code );
+            assert( e == task->easy );
+            remove_task( task );
         }
     }
 }
@@ -247,14 +283,14 @@ restart_timer( tr_web * g )
 static void
 tr_multi_perform( tr_web * g, int fd, int curl_what )
 {
-    CURLMcode mcode;
+    CURLMcode m;
 
     dbgmsg( "check_run_count: %d taskCount", g->taskCount );
 
     /* invoke libcurl's processing */
     do
-        mcode = curl_multi_socket_action( g->multi, fd, curl_what, &g->taskCount );
-    while( mcode == CURLM_CALL_MULTI_SOCKET );
+        m = curl_multi_socket_action( g->multi, fd, curl_what, &g->taskCount );
+    while( m == CURLM_CALL_MULTI_SOCKET );
 
     remove_finished_tasks( g );
 
@@ -276,54 +312,54 @@ event_cb( int fd, short ev_what, void * g )
 
 /* CURLMOPT_SOCKETFUNCTION */
 static int
-sock_cb( CURL * e UNUSED, curl_socket_t fd, int action,
+sock_cb( CURL * e UNUSED, curl_socket_t fd, int curl_what,
          void * vweb, void * vevent )
 {
     /*static int num_events = 0;*/
     struct tr_web * web = vweb;
     struct event * io_event = vevent;
-    dbgmsg( "sock_cb: action %d, fd %d, io_event %p", action, (int)fd, io_event );
+    dbgmsg( "sock_cb: curl_what %d, fd %d, io_event %p",
+            curl_what, (int)fd, io_event );
 
-    if( ( action == CURL_POLL_NONE ) || ( action & CURL_POLL_REMOVE ) )
-    {
-        if( io_event != NULL )
-        {
-            event_del( io_event );
-            tr_list_append( &web->freeme, io_event );
-            curl_multi_assign( web->multi, fd, NULL );
-            /*fprintf( stderr, "-1 io_events to %d\n", --num_events );*/
-        }
-    }
-    else if( action & ( CURL_POLL_IN | CURL_POLL_OUT ) )
-    {
-        const short events = EV_PERSIST
-                           | (( action & CURL_POLL_IN ) ? EV_READ : 0 )
-                           | (( action & CURL_POLL_OUT ) ? EV_WRITE : 0 );
+    if( io_event != NULL )
+        event_del( io_event );
 
-        if( io_event != NULL )
-            event_del( io_event );
-        else {
+    if( curl_what & ( CURL_POLL_IN | CURL_POLL_OUT ) )
+    {
+        const short ev_what = EV_PERSIST
+                           | (( curl_what & CURL_POLL_IN ) ? EV_READ : 0 )
+                           | (( curl_what & CURL_POLL_OUT ) ? EV_WRITE : 0 );
+
+        if( io_event == NULL ) {
             io_event = tr_new0( struct event, 1 );
             curl_multi_assign( web->multi, fd, io_event );
             /*fprintf( stderr, "+1 io_events to %d\n", ++num_events );*/
         }
 
-        dbgmsg( "enabling (libevent %hd, libcurl %d) polling on io_event %p, fd %d",
-                events, action, io_event, fd );
-        event_set( io_event, fd, events, event_cb, web );
+        dbgmsg( "enabling (libevent %hd, libcurl %d) on io_event %p, fd %d",
+                ev_what, curl_what, io_event, fd );
+        event_set( io_event, fd, ev_what, event_cb, web );
+        assert( io_event->ev_base != NULL );
         event_add( io_event, NULL );
     }
-    else tr_assert( 0, "unhandled action: %d", action );
+
+    if( ( io_event != NULL ) && ( curl_what & CURL_POLL_REMOVE ) )
+    {
+        CURLMcode m;
+        memset( io_event, TR_MEMORY_TRASH, sizeof( struct event ) );
+        tr_free( io_event );
+        m = curl_multi_assign( web->multi, fd, NULL );
+        assert( m == CURLM_OK );
+        /*fprintf( stderr, "-1 io_events to %d\n", --num_events );*/
+    }
 
     return 0; /* libcurl documentation: "The callback MUST return 0." */
 }
 
 /* libevent says that timer_msec have passed, so wake up libcurl */
 static void
-libevent_timer_cb( int fd UNUSED, short what UNUSED, void * vg )
+libevent_timer_cb( int fd UNUSED, short what UNUSED, void * g )
 {
-    tr_web * g = vg;
-    tr_list_free( &g->freeme, tr_free );
     dbgmsg( "libevent timer is done" );
     tr_multi_perform( g, CURL_SOCKET_TIMEOUT, 0 );
 }
@@ -341,6 +377,8 @@ multi_timer_cb( CURLM * multi UNUSED, long timer_msec, void * vg )
 
     if( timer_msec < 1 )
         tr_multi_perform( g, CURL_SOCKET_TIMEOUT, 0 );
+    else
+        restart_timer( g );
 }
 
 /****

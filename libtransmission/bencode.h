@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2008-2009 Mnemosyne LLC
+ * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -203,13 +203,13 @@ tr_bool   tr_bencGetStr( const tr_benc * val, const char ** setme );
 tr_bool   tr_bencGetBool( const tr_benc * val, tr_bool * setme );
 tr_bool   tr_bencGetReal( const tr_benc * val, double * setme );
 
-static TR_INLINE tr_bool tr_bencIsType  ( const tr_benc * b, int type ) { return ( b != NULL ) && ( b->type == type ); }
-static TR_INLINE tr_bool tr_bencIsInt   ( const tr_benc * b ) { return tr_bencIsType( b, TR_TYPE_INT ); }
-static TR_INLINE tr_bool tr_bencIsDict  ( const tr_benc * b ) { return tr_bencIsType( b, TR_TYPE_DICT ); }
-static TR_INLINE tr_bool tr_bencIsList  ( const tr_benc * b ) { return tr_bencIsType( b, TR_TYPE_LIST ); }
-static TR_INLINE tr_bool tr_bencIsString( const tr_benc * b ) { return tr_bencIsType( b, TR_TYPE_STR ); }
-static TR_INLINE tr_bool tr_bencIsBool  ( const tr_benc * b ) { return tr_bencIsType( b, TR_TYPE_BOOL ); }
-static TR_INLINE tr_bool tr_bencIsReal  ( const tr_benc * b ) { return tr_bencIsType( b, TR_TYPE_REAL ); }
+static inline tr_bool tr_bencIsType  ( const tr_benc * b, int type ) { return ( b != NULL ) && ( b->type == type ); }
+static inline tr_bool tr_bencIsInt   ( const tr_benc * b ) { return tr_bencIsType( b, TR_TYPE_INT ); }
+static inline tr_bool tr_bencIsDict  ( const tr_benc * b ) { return tr_bencIsType( b, TR_TYPE_DICT ); }
+static inline tr_bool tr_bencIsList  ( const tr_benc * b ) { return tr_bencIsType( b, TR_TYPE_LIST ); }
+static inline tr_bool tr_bencIsString( const tr_benc * b ) { return tr_bencIsType( b, TR_TYPE_STR ); }
+static inline tr_bool tr_bencIsBool  ( const tr_benc * b ) { return tr_bencIsType( b, TR_TYPE_BOOL ); }
+static inline tr_bool tr_bencIsReal  ( const tr_benc * b ) { return tr_bencIsType( b, TR_TYPE_REAL ); }
 
 /**
 ***  Treat these as private -- they're only made public here

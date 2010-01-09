@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009 Mnemosyne LLC
+ * This file Copyright (C) 2009-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -472,7 +472,7 @@ TrMainWindow :: createStatusBar( )
         h->addWidget( l );
 
     h->addStretch( 1 );
-  
+
         a = new QActionGroup( this );
         a->addAction( ui.action_TotalRatio );
         a->addAction( ui.action_TotalTransfer );
@@ -491,10 +491,10 @@ TrMainWindow :: createStatusBar( )
         p->setIcon( QIcon( ":/icons/ratio.png" ) );
         p->setFlat( true );
         p->setMenu( m );
-        h->addWidget( p );  
+        h->addWidget( p );
         l = myStatsLabel = new QLabel( this );
-        h->addWidget( l );  
-   
+        h->addWidget( l );
+
         w = new QWidget( this );
         w->setMinimumSize( HIG::PAD_BIG, 1 );
         w->setMaximumSize( HIG::PAD_BIG, 1 );
@@ -987,7 +987,7 @@ TrMainWindow :: refreshPref( int key )
         case Prefs::DSPEED_ENABLED:
             (myPrefs.get<bool>(key) ? myDlimitOnAction : myDlimitOffAction)->setChecked( true );
             break;
-     
+
         case Prefs::DSPEED:
             myDlimitOnAction->setText( tr( "Limited at %1" ).arg( Utils::speedToString( Speed::fromKbps( myPrefs.get<int>(key) ) ) ) );
             break;
@@ -995,7 +995,7 @@ TrMainWindow :: refreshPref( int key )
         case Prefs::USPEED_ENABLED:
             (myPrefs.get<bool>(key) ? myUlimitOnAction : myUlimitOffAction)->setChecked( true );
             break;
-     
+
         case Prefs::USPEED:
             myUlimitOnAction->setText( tr( "Limited at %1" ).arg( Utils::speedToString( Speed::fromKbps( myPrefs.get<int>(key) ) ) ) );
             break;

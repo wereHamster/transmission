@@ -187,16 +187,16 @@ dht_bootstrap(void *closure)
 
     if(!bootstrap_done(cl->session, 0)) {
         char *bootstrap_file;
-        FILE *f;
+        FILE *f = NULL;
 
         bootstrap_file =
             tr_buildPath(cl->session->configDir, "dht.bootstrap", NULL);
 
         if(bootstrap_file)
             f = fopen(bootstrap_file, "r");
-        if(f) {
+        if(f != NULL) {
             tr_ninf("DHT", "Attempting manual bootstrap");
-            while(1) {
+            for(;;) {
                 char buf[201];
                 char *p;
                 int port = 0;
@@ -470,8 +470,11 @@ tr_dhtUninit(tr_session *ss)
 
     dht_uninit( 1 );
     tr_netCloseSocket( dht_socket );
-    if(dht6_socket > 0)
+    dht_socket = -1;
+    if(dht6_socket > 0) {
         tr_netCloseSocket( dht6_socket );
+        dht6_socket = -1;
+    }
 
     tr_ndbg("DHT", "Done uninitializing DHT");
 
@@ -512,11 +515,11 @@ getstatus( void * cl )
 }
 
 int
-tr_dhtStatus( tr_session * ss, int af, int * nodes_return )
+tr_dhtStatus( tr_session * session, int af, int * nodes_return )
 {
     struct getstatus_closure closure = { af, -1, -1 };
 
-    if( !tr_dhtEnabled( ss ) ||
+    if( !tr_dhtEnabled( session ) ||
         (af == AF_INET && dht_socket < 0) ||
         (af == AF_INET6 && dht6_socket < 0) ) {
         if( nodes_return )
@@ -524,9 +527,9 @@ tr_dhtStatus( tr_session * ss, int af, int * nodes_return )
         return TR_DHT_STOPPED;
     }
 
-    tr_runInEventThread( ss, getstatus, &closure );
+    tr_runInEventThread( session, getstatus, &closure );
     while( closure.status < 0 )
-        tr_wait( 10 /*msec*/ );
+        tr_wait_msec( 10 /*msec*/ );
 
     if( nodes_return )
         *nodes_return = closure.count;
@@ -599,7 +602,7 @@ callback( void *ignore UNUSED, int event,
 {
     if( event == DHT_EVENT_VALUES || event == DHT_EVENT_VALUES6 ) {
         tr_torrent *tor;
-        tr_globalLock( session );
+        tr_sessionLock( session );
         tor = tr_torrentFindFromHash( session, info_hash );
         if( tor && tr_torrentAllowsDHT( tor ))
         {
@@ -616,7 +619,7 @@ callback( void *ignore UNUSED, int event,
                       (int)n,
                       event == DHT_EVENT_VALUES6 ? " IPv6" : "");
         }
-        tr_globalUnlock( session );
+        tr_sessionUnlock( session );
     } else if( event == DHT_EVENT_SEARCH_DONE ||
                event == DHT_EVENT_SEARCH_DONE6) {
         tr_torrent * tor = tr_torrentFindFromHash( session, info_hash );

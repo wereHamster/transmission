@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2006-2009 Transmission authors and contributors
+ * Copyright (c) 2006-2010 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -587,6 +587,7 @@ int trashDataFile(const char * filename)
 {
     int count;
     tr_tracker_stat * stats = tr_torrentTrackers(fHandle, &count);
+    NSLog(@"count from tr_torrentTrackers: %d", count);
     
     NSMutableArray * trackers = [NSMutableArray arrayWithCapacity: (count > 0 ? count + stats[count-1].tier : 0)];
     
@@ -634,10 +635,10 @@ int trashDataFile(const char * filename)
     trackerStructs[oldTrackerCount].announce = (char *)[tracker UTF8String];
     trackerStructs[oldTrackerCount].tier = trackerStructs[oldTrackerCount-1].tier + 1;
     
-    const tr_announce_list_err result = tr_torrentSetAnnounceList(fHandle, trackerStructs, oldTrackerCount+1);
+    const BOOL success = tr_torrentSetAnnounceList(fHandle, trackerStructs, oldTrackerCount+1);
     tr_free(trackerStructs);
     
-    return result == TR_ANNOUNCE_LIST_OK;
+    return success;
 }
 
 - (void) removeTrackersAtIndexes: (NSIndexSet *) removeIndexes
@@ -649,13 +650,17 @@ int trashDataFile(const char * filename)
     
     //recreate the tracker structure
     tr_tracker_info * trackerStructs = tr_new(tr_tracker_info, [indexes count]);
+    NSLog(@"count from fInfo: %d", fInfo->trackerCount);
     
     int newCount = 0;
     for (NSUInteger oldIndex = [indexes firstIndex]; oldIndex != NSNotFound; oldIndex = [indexes indexGreaterThanIndex: oldIndex])
+    {
+        NSLog(@"oldIndex: %d %s", oldIndex, fInfo->trackers[oldIndex].announce);
         trackerStructs[newCount++] = fInfo->trackers[oldIndex];
+    }
     
-    const tr_announce_list_err result = tr_torrentSetAnnounceList(fHandle, trackerStructs, newCount);
-    NSAssert1(result == TR_ANNOUNCE_LIST_OK, @"Removing tracker addresses resulted in error: %d", result);
+    const BOOL success = tr_torrentSetAnnounceList(fHandle, trackerStructs, newCount);
+    NSAssert(success, @"Removing tracker addresses failed");
     
     tr_free(trackerStructs);
 }
@@ -1251,13 +1256,24 @@ int trashDataFile(const char * filename)
 
 - (void) checkGroupValueForRemoval: (NSNotification *) notification
 {
-    if (fGroupValue != -1 && [[[notification userInfo] objectForKey: @"Index"] intValue] == fGroupValue)
+    if (fGroupValue != -1 && [[[notification userInfo] objectForKey: @"Index"] integerValue] == fGroupValue)
         fGroupValue = -1;
 }
 
 - (NSArray *) fileList
 {
+    if (!fFileList && ![self isMagnet])
+        [self createFileList];
+    
     return fFileList;
+}
+
+- (NSArray *) flatFileList
+{
+    if (!fFlatFileList && ![self isMagnet])
+        [self createFileList];
+    
+    return fFlatFileList;
 }
 
 - (NSInteger) fileCount
@@ -1292,11 +1308,6 @@ int trashDataFile(const char * filename)
     
     NSAssert([node size], @"directory in torrent file has size 0");
     return (CGFloat)have / [node size];
-}
-
-- (NSArray *) flatFileList
-{
-    return fFlatFileList;
 }
 
 - (BOOL) canChangeDownloadCheckForFile: (NSUInteger) index
@@ -1586,9 +1597,6 @@ int trashDataFile(const char * filename)
     fWaitToStart = waitToStart && [waitToStart boolValue];
     fResumeOnWake = NO;
 	
-    if (![self isMagnet])
-        [self createFileList];
-	
     fGroupValue = groupValue ? [groupValue intValue] : [[GroupsController groups] groupIndexForTorrent: self]; 
     
     [[NSNotificationCenter defaultCenter] addObserver: self selector: @selector(checkGroupValueForRemoval:)
@@ -1607,24 +1615,26 @@ int trashDataFile(const char * filename)
     if ([self isFolder])
     {
         NSInteger count = [self fileCount];
-        NSMutableArray * fileList = [[NSMutableArray alloc] initWithCapacity: count],
-                    * flatFileList = [[NSMutableArray alloc] initWithCapacity: count];
+        NSMutableArray * fileList = [NSMutableArray arrayWithCapacity: count],
+                    * flatFileList = [NSMutableArray arrayWithCapacity: count];
         
         for (NSInteger i = 0; i < count; i++)
         {
             tr_file * file = &fInfo->files[i];
             
-            NSMutableArray * pathComponents = [[[NSString stringWithUTF8String: file->name] pathComponents] mutableCopy];
+            NSString * fullPath = [NSString stringWithUTF8String: file->name];
+            NSArray * pathComponents = [fullPath pathComponents];
+            NSAssert1([pathComponents count] >= 2, @"Not enough components in path %@", fullPath);
+            
             NSString * path = [pathComponents objectAtIndex: 0];
             NSString * name = [pathComponents objectAtIndex: 1];
-            [pathComponents removeObjectsAtIndexes: [NSIndexSet indexSetWithIndexesInRange: NSMakeRange(0, 2)]];
             
-            if ([pathComponents count] > 0)
+            if ([pathComponents count] > 2)
             {
                 //determine if folder node already exists
                 FileListNode * node;
                 for (node in fileList)
-                    if ([node isFolder] && [[node name] isEqualToString: name])
+                    if ([[node name] isEqualToString: name] && [node isFolder])
                         break;
                 
                 if (!node)
@@ -1634,8 +1644,11 @@ int trashDataFile(const char * filename)
                     [node release];
                 }
                 
+                NSMutableArray * trimmedComponents = [NSMutableArray arrayWithArray: [pathComponents subarrayWithRange:
+                                                        NSMakeRange(2, [pathComponents count]-2)]];
+                
                 [node insertIndex: i withSize: file->length];
-                [self insertPath: pathComponents forParent: node fileSize: file->length index: i flatList: flatFileList];
+                [self insertPath: trimmedComponents forParent: node fileSize: file->length index: i flatList: flatFileList];
             }
             else
             {
@@ -1644,15 +1657,10 @@ int trashDataFile(const char * filename)
                 [flatFileList addObject: node];
                 [node release];
             }
-            
-            [pathComponents release];
         }
         
         fFileList = [[NSArray alloc] initWithArray: fileList];
-        [fileList release];
-        
         fFlatFileList = [[NSArray alloc] initWithArray: flatFileList];
-        [flatFileList release];
     }
     else
     {
@@ -1736,8 +1744,6 @@ int trashDataFile(const char * filename)
 - (void) metadataRetrieved
 {
     fStat = tr_torrentStat(fHandle);
-    
-    [self createFileList];
     
     [[NSNotificationCenter defaultCenter] postNotificationName: @"ResetInspector" object: self];
 }

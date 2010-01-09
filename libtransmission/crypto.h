@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2009 Mnemosyne LLC
+ * This file Copyright (C) 2007-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -88,16 +88,19 @@ void           tr_sha1( uint8_t *    setme,
                         ... ) TR_GNUC_NULL_TERMINATED;
 
 
-/** Returns a random number in the range of [0...n) */
+/** @brief Returns a random number in the range of [0...n) */
 int            tr_cryptoRandInt( int n );
 
-/** Returns a vaguely random number in the range of [0...n).
-    This is faster -- BUT WEAKER -- than tr_cryptoRandInt()
-    and should only be used when tr_cryptoRandInt() is too
-    slow, and NEVER in sensitive cases */
+/**
+ * @brief Returns a vaguely random number in the range of [0...n).
+ *
+ * This is faster, BUT WEAKER, than tr_cryptoRandInt() and never
+ * be used in sensitive cases.
+ * @see tr_cryptoRandInt()
+ */
 int            tr_cryptoWeakRandInt( int n );
 
-/** Fills a buffer with random bytes */
+/** @brief Fills a buffer with random bytes */
 void           tr_cryptoRandBuf( void * buf, size_t len );
 
 char*          tr_ssha1( const void * plaintext );

@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009 Mnemosyne LLC
+ * This file Copyright (C) 2009-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -151,7 +151,7 @@ Details :: Details( Session& session, TorrentModel& model, QWidget * parent ):
     myTimer.setSingleShot( false );
     myTimer.start( REFRESH_INTERVAL_MSEC );
 }
-    
+
 Details :: ~Details( )
 {
 }
@@ -182,7 +182,7 @@ Details :: setIds( const QSet<int>& ids )
 
     foreach( QWidget * w, myWidgets )
         w->setEnabled( false );
-    
+
     onTimer( );
 }
 
@@ -229,7 +229,7 @@ Details :: refresh( )
     }
 
     ///
-    ///  activity tab 
+    ///  activity tab
     ///
 
     // myStateLabel
@@ -348,7 +348,7 @@ Details :: refresh( )
                 string = tr( "Unknown" );
             else
                 string = Utils::timeToString( baseline );
-       } 
+       }
     }
     myETALabel->setText( string );
 
@@ -482,8 +482,7 @@ Details :: refresh( )
             string = tr( "Created by %1 on %2" ).arg( creator ).arg( date );
     }
     myOriginLabel->setText( string );
-    
-    
+
     // myLocationLabel
     if( torrents.empty( ) )
         string = none;
@@ -782,7 +781,7 @@ Details :: refresh( )
 
     if( single )
         myFileTreeView->update( torrents[0]->files( ) );
-    else 
+    else
         myFileTreeView->clear( );
 
     myHavePendingRefresh = false;
@@ -952,7 +951,6 @@ Details :: createOptionsTab( )
     connect( m, SIGNAL(currentIndexChanged(int)), this, SLOT(onBandwidthPriorityChanged(int)));
     hig->addRow( tr( "Torrent &priority:" ), m );
     myBandwidthPriorityCombo = m;
-    
 
     hig->addSectionDivider( );
     hig->addSectionTitle( tr( "Seed-Until Ratio" ) );

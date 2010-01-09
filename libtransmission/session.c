@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2008-2009 Mnemosyne LLC
+ * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -499,6 +499,7 @@ struct init_data
 {
     tr_session  * session;
     const char  * configDir;
+    tr_bool       done;
     tr_bool       messageQueuingEnabled;
     tr_benc     * clientSettings;
 };
@@ -535,14 +536,14 @@ tr_sessionInit( const char  * tag,
     assert( session->events != NULL );
 
     /* run the rest in the libtransmission thread */
-    ++session->waiting;
+    data.done = FALSE;
     data.session = session;
     data.configDir = configDir;
     data.messageQueuingEnabled = messageQueuingEnabled;
     data.clientSettings = clientSettings;
     tr_runInEventThread( session, tr_sessionInitImpl, &data );
-    while( session->waiting > 0 )
-        tr_wait( 100 );
+    while( !data.done )
+        tr_wait_msec( 100 );
 
     return session;
 }
@@ -639,7 +640,6 @@ tr_sessionInitImpl( void * vdata )
     tr_statsInit( session );
 
     session->web = tr_webInit( session );
-    --session->waiting;
 
     tr_sessionSet( session, &settings );
 
@@ -650,6 +650,7 @@ tr_sessionInitImpl( void * vdata )
 
     /* cleanup */
     tr_bencFree( &settings );
+    data->done = TRUE;
 }
 
 static void
@@ -805,21 +806,21 @@ sessionSetImpl( void * vdata )
     else if( tr_bencDictFindBool( settings, TR_PREFS_KEY_ALT_SPEED_ENABLED, &boolVal ) )
         useAltSpeed( session, boolVal, FALSE );
 
-    --session->waiting;
+    data->done = TRUE;
 }
 
 void
 tr_sessionSet( tr_session * session, struct tr_benc  * settings )
 {
     struct init_data data;
+    data.done = FALSE;
     data.session = session;
     data.clientSettings = settings;
 
     /* run the rest in the libtransmission thread */
-    ++session->waiting;
     tr_runInEventThread( session, sessionSetImpl, &data );
-    while( session->waiting > 0 )
-        tr_wait( 100 );
+    while( !data.done )
+        tr_wait_msec( 100 );
 }
 
 /***
@@ -915,7 +916,7 @@ tr_sessionIsIncompleteDirEnabled( const tr_session * session )
 ***/
 
 void
-tr_globalLock( tr_session * session )
+tr_sessionLock( tr_session * session )
 {
     assert( tr_isSession( session ) );
 
@@ -923,7 +924,7 @@ tr_globalLock( tr_session * session )
 }
 
 void
-tr_globalUnlock( tr_session * session )
+tr_sessionUnlock( tr_session * session )
 {
     assert( tr_isSession( session ) );
 
@@ -931,7 +932,7 @@ tr_globalUnlock( tr_session * session )
 }
 
 tr_bool
-tr_globalIsLocked( const tr_session * session )
+tr_sessionIsLocked( const tr_session * session )
 {
     return tr_isSession( session ) && tr_lockHave( session->lock );
 }
@@ -1526,7 +1527,7 @@ tr_sessionClose( tr_session * session )
     while( !session->isClosed && !deadlineReached( deadline ) )
     {
         dbgmsg( "waiting for the libtransmission thread to finish" );
-        tr_wait( 100 );
+        tr_wait_msec( 100 );
     }
 
     /* "shared" and "tracker" have live sockets,
@@ -1538,7 +1539,7 @@ tr_sessionClose( tr_session * session )
     {
         dbgmsg( "waiting on port unmap (%p) or announcer (%p)",
                 session->shared, session->announcer );
-        tr_wait( 100 );
+        tr_wait_msec( 100 );
     }
 
     tr_fdClose( session );
@@ -1549,7 +1550,7 @@ tr_sessionClose( tr_session * session )
     {
         static tr_bool forced = FALSE;
         dbgmsg( "waiting for libtransmission thread to finish" );
-        tr_wait( 100 );
+        tr_wait_msec( 100 );
         if( deadlineReached( deadline ) && !forced )
         {
             event_loopbreak( );
@@ -1723,9 +1724,9 @@ tr_sessionSetPortForwardingEnabled( tr_session  * session,
 {
     assert( tr_isSession( session ) );
 
-    tr_globalLock( session );
+    tr_sessionLock( session );
     tr_sharedTraversalEnable( session->shared, enabled );
-    tr_globalUnlock( session );
+    tr_sessionUnlock( session );
 }
 
 tr_bool

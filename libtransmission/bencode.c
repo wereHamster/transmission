@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2008-2009 Mnemosyne LLC
+ * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -354,7 +354,7 @@ tr_bencLoad( const void * buf_in,
 ***/
 
 /* returns true if the given string length would fit in our string buffer */
-static TR_INLINE int
+static inline int
 stringFitsInBuffer( const tr_benc * val, int len )
 {
     return len < (int)sizeof( val->val.s.str.buf );
@@ -362,14 +362,14 @@ stringFitsInBuffer( const tr_benc * val, int len )
 
 /* returns true if the benc's string was malloced.
  * this occurs when the string is too long for our string buffer */
-static TR_INLINE int
+static inline int
 stringIsAlloced( const tr_benc * val )
 {
     return !stringFitsInBuffer( val, val->val.s.len );
 }
 
 /* returns a const pointer to the benc's string */
-static TR_INLINE const char*
+static inline const char*
 getStr( const tr_benc* val )
 {
     return stringIsAlloced(val) ? val->val.s.str.ptr : val->val.s.str.buf;

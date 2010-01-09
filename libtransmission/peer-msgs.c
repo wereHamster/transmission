@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2009 Mnemosyne LLC
+ * This file Copyright (C) 2007-2010 Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2.  Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -245,7 +245,7 @@ getHave( const struct tr_peermsgs * msgs )
 }
 #endif
 
-static TR_INLINE tr_session*
+static inline tr_session*
 getSession( struct tr_peermsgs * msgs )
 {
     return msgs->torrent->session;
@@ -307,7 +307,7 @@ pokeBatchPeriod( tr_peermsgs * msgs,
     }
 }
 
-static TR_INLINE void
+static inline void
 dbgOutMessageLen( tr_peermsgs * msgs )
 {
     dbgmsg( msgs, "outMessage size is now %zu", EVBUFFER_LENGTH( msgs->outMessages ) );
@@ -1377,7 +1377,9 @@ readBtMessage( tr_peermsgs * msgs, struct evbuffer * inbuf, size_t inlen )
     uint32_t      ui32;
     uint32_t      msglen = msgs->incoming.length;
     const uint8_t id = msgs->incoming.id;
+#ifndef NDEBUG
     const size_t  startBufLen = EVBUFFER_LENGTH( inbuf );
+#endif
     const tr_bool fext = tr_peerIoSupportsFEXT( msgs->peer->io );
 
     --msglen; /* id length */
@@ -1564,7 +1566,7 @@ readBtMessage( tr_peermsgs * msgs, struct evbuffer * inbuf, size_t inlen )
     return READ_NOW;
 }
 
-static TR_INLINE void
+static inline void
 decrementDownloadedCount( tr_peermsgs * msgs, uint32_t byteCount )
 {
     tr_torrent * tor = msgs->torrent;
@@ -1572,7 +1574,7 @@ decrementDownloadedCount( tr_peermsgs * msgs, uint32_t byteCount )
     tor->downloadedCur -= MIN( tor->downloadedCur, byteCount );
 }
 
-static TR_INLINE void
+static inline void
 clientGotUnwantedBlock( tr_peermsgs * msgs, const struct peer_request * req )
 {
     decrementDownloadedCount( msgs, req->length );
@@ -1766,7 +1768,7 @@ updateMetadataRequests( tr_peermsgs * msgs, time_t now )
 static void
 updateBlockRequests( tr_peermsgs * msgs )
 {
-    if( ( msgs->desiredRequestCount > 0 ) && 
+    if( ( msgs->desiredRequestCount > 0 ) &&
         ( msgs->peer->pendingReqsToPeer <= ( msgs->desiredRequestCount * 0.66 ) ) )
     {
         int i;
@@ -2123,7 +2125,7 @@ pexAddedCb( void * vpex,
     }
 }
 
-static TR_INLINE void
+static inline void
 pexDroppedCb( void * vpex,
               void * userData )
 {
@@ -2136,7 +2138,7 @@ pexDroppedCb( void * vpex,
     }
 }
 
-static TR_INLINE void
+static inline void
 pexElementCb( void * vpex,
               void * userData )
 {

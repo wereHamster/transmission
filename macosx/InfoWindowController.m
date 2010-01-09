@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2006-2009 Transmission authors and contributors
+ * Copyright (c) 2006-2010 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -1744,26 +1744,29 @@ typedef enum
     NSMutableIndexSet * removeIndexes = [NSMutableIndexSet indexSet];
     
     NSIndexSet * selectedIndexes = [fTrackerTable selectedRowIndexes];
-    for (NSUInteger i=0, trackerIndex = 0; i <= [selectedIndexes lastIndex]; ++i)
+    NSLog(@"%@", fTrackers);
+    NSLog(@"selected: %@", selectedIndexes);
+    BOOL groupSelected = NO;
+    for (NSUInteger i = 0, trackerIndex = 0; i < [fTrackers count]; ++i)
     {
-        const BOOL isSelected = [selectedIndexes containsIndex: i];
-        
         if ([[fTrackers objectAtIndex: i] isKindOfClass: [NSNumber class]])
         {
-            if (isSelected)
-            {
-                for (++i; i < [fTrackers count] && ![[fTrackers objectAtIndex: i] isKindOfClass: [NSNumber class]]; ++i)
-                    [removeIndexes addIndex: trackerIndex++];
-                --i;
-            }
+            groupSelected = [selectedIndexes containsIndex: i];
+            if (!groupSelected && i > [selectedIndexes lastIndex])
+                break;
         }
         else
         {
-            if (isSelected)
+            if (groupSelected || [selectedIndexes containsIndex: i])
+            {
                 [removeIndexes addIndex: trackerIndex];
+                NSLog(@"adding for remove %d (%d): %@", trackerIndex, i, [fTrackers objectAtIndex: i]);
+            }
             ++trackerIndex;
         }
     }
+    
+    NSLog(@"%@", removeIndexes);
     
     NSAssert([removeIndexes count] > 0, @"Trying to remove no trackers.");
     
