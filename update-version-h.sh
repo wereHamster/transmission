@@ -23,15 +23,8 @@ if [ -d ".svn" ] && type svnversion >/dev/null 2>&1; then
     svn_revision=`svnversion -n . | cut -d: -f1 | cut -dM -f1 | cut -dS -f1`
     source_version="svn:${svn_revision}"
 elif head=`git rev-parse --verify --short HEAD 2>/dev/null`; then
-    if ! git update-index --refresh > /dev/null; then
-	source_version="git:${head}-dirty"
-    elif git diff-index --cached --name-status -r HEAD -- | read dummy; then
-	source_version="git:${head}-dirty"
-    else
-	source_version="git:${head}"
-    fi
-
     svn_revision=0
+    source_version="git:${head}"
 else
     # Give up and check the source files
     svn_revision=`awk '/\\$Id: /{ if ($4>i) i=$4 } END {print i}' */*.cc */*.[chm] */*.po`
