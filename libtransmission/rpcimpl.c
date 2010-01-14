@@ -359,8 +359,9 @@ addTrackers( const tr_info * info,
     for( i = 0; i < info->trackerCount; ++i )
     {
         const tr_tracker_info * t = &info->trackers[i];
-        tr_benc *               d = tr_bencListAddDict( trackers, 3 );
+        tr_benc *               d = tr_bencListAddDict( trackers, 4 );
         tr_bencDictAddStr( d, "announce", t->announce );
+        tr_bencDictAddInt( d, "id", t->id );
         tr_bencDictAddStr( d, "scrape", t->scrape );
         tr_bencDictAddInt( d, "tier", t->tier );
     }
@@ -374,13 +375,14 @@ addTrackerStats( const tr_tracker_stat * st, int n, tr_benc * list )
     for( i=0; i<n; ++i )
     {
         const tr_tracker_stat * s = &st[i];
-        tr_benc * d = tr_bencListAddDict( list, 22 );
+        tr_benc * d = tr_bencListAddDict( list, 23 );
         tr_bencDictAddStr ( d, "announce", s->announce );
         tr_bencDictAddInt ( d, "announceState", s->announceState );
         tr_bencDictAddInt ( d, "downloadCount", s->downloadCount );
         tr_bencDictAddBool( d, "hasAnnounced", s->hasAnnounced );
         tr_bencDictAddBool( d, "hasScraped", s->hasScraped );
         tr_bencDictAddStr ( d, "host", s->host );
+        tr_bencDictAddInt ( d, "id", s->id );
         tr_bencDictAddBool( d, "isBackup", s->isBackup );
         tr_bencDictAddInt ( d, "lastAnnouncePeerCount", s->lastAnnouncePeerCount );
         tr_bencDictAddStr ( d, "lastAnnounceResult", s->lastAnnounceResult );
@@ -519,10 +521,12 @@ addField( const tr_torrent * tor, tr_benc * d, const char * key )
         tr_bencDictAddInt( d, key, st->peersConnected );
     else if( tr_streq( key, keylen, "peersFrom" ) )
     {
-        tr_benc *   tmp = tr_bencDictAddDict( d, key, 4 );
+        tr_benc *   tmp = tr_bencDictAddDict( d, key, 6 );
         const int * f = st->peersFrom;
         tr_bencDictAddInt( tmp, "fromCache",    f[TR_PEER_FROM_RESUME] );
+        tr_bencDictAddInt( tmp, "fromDht",      f[TR_PEER_FROM_DHT] );
         tr_bencDictAddInt( tmp, "fromIncoming", f[TR_PEER_FROM_INCOMING] );
+        tr_bencDictAddInt( tmp, "fromLtep",     f[TR_PEER_FROM_LTEP] );
         tr_bencDictAddInt( tmp, "fromPex",      f[TR_PEER_FROM_PEX] );
         tr_bencDictAddInt( tmp, "fromTracker",  f[TR_PEER_FROM_TRACKER] );
     }

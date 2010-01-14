@@ -249,13 +249,14 @@ void tr_sessionGetSettings( tr_session *, struct tr_benc * dictionary );
  * @param dictionary pointer to an uninitialized tr_benc
  * @param configDir the configuration directory to find settings.json
  * @param appName if configDir is empty, appName is used to find the default dir.
+ * @return success TRUE if the settings were loaded, FALSE otherwise
  * @see tr_sessionGetDefaultSettings()
  * @see tr_sessionInit()
  * @see tr_sessionSaveSettings()
  */
-void tr_sessionLoadSettings( struct tr_benc  * dictionary,
-                             const char      * configDir,
-                             const char      * appName );
+tr_bool tr_sessionLoadSettings( struct tr_benc  * dictionary,
+                                const char      * configDir,
+                                const char      * appName );
 
 /**
  * Add the session's configuration settings to the benc dictionary
@@ -1200,15 +1201,16 @@ char* tr_torrentGetMagnetLink( const tr_torrent * tor );
 ***
 **/
 
+
 /** @brief a part of tr_info that represents a single tracker */
 typedef struct tr_tracker_info
 {
-    int     tier;
-    char *  announce;
-    char *  scrape;
+    int      tier;
+    char *   announce;
+    char *   scrape;
+    uint32_t id; /* unique identifier used to match to a tr_tracker_stat */
 }
 tr_tracker_info;
-
 
 /**
  * @brief Modify a torrent's tracker list.
@@ -1458,6 +1460,9 @@ typedef struct
 
     /* which tier this tracker is in */
     int tier;
+    
+    /* used to match to a tr_tracker_info */
+    uint32_t id;
 }
 tr_tracker_stat;
 

@@ -132,7 +132,6 @@ sockoptfunction( void * vtask, curl_socket_t fd, curlsocktype purpose UNUSED )
     return 0;
 }
 
-#if 0
 static int
 getCurlProxyType( tr_proxy_type t )
 {
@@ -140,7 +139,6 @@ getCurlProxyType( tr_proxy_type t )
     if( t == TR_PROXY_SOCKS5 ) return CURLPROXY_SOCKS5;
     return CURLPROXY_HTTP;
 }
-#endif
 
 static int
 getTimeoutFromURL( const char * url )
@@ -168,8 +166,6 @@ addTask( void * vtask )
 
         dbgmsg( "adding task #%lu [%s]", task->tag, task->url );
 
-/* experimentally disable proxies to see if that has any effect on the libevent crashes */
-#if 0
         if( !task->range && session->isProxyEnabled ) {
             curl_easy_setopt( e, CURLOPT_PROXY, session->proxy );
             curl_easy_setopt( e, CURLOPT_PROXYAUTH, CURLAUTH_ANY );
@@ -183,7 +179,6 @@ addTask( void * vtask )
             curl_easy_setopt( e, CURLOPT_PROXYUSERPWD, str );
             tr_free( str );
         }
-#endif
 
         task->easy = e;
         task->multi = web->multi;
@@ -345,11 +340,8 @@ sock_cb( CURL * e UNUSED, curl_socket_t fd, int curl_what,
 
     if( ( io_event != NULL ) && ( curl_what & CURL_POLL_REMOVE ) )
     {
-        CURLMcode m;
         memset( io_event, TR_MEMORY_TRASH, sizeof( struct event ) );
         tr_free( io_event );
-        m = curl_multi_assign( web->multi, fd, NULL );
-        assert( m == CURLM_OK );
         /*fprintf( stderr, "-1 io_events to %d\n", --num_events );*/
     }
 
@@ -514,32 +506,14 @@ tr_http_escape( struct evbuffer  * out,
         len = strlen( str );
 
     for( i = 0; i < len; i++ ) {
-        switch( str[i] ) {
-        case ',': case '-': case '.':
-        case '0': case '1': case '2': case '3': case '4':
-        case '5': case '6': case '7': case '8': case '9':
-        case 'a': case 'b': case 'c': case 'd': case 'e':
-        case 'f': case 'g': case 'h': case 'i': case 'j':
-        case 'k': case 'l': case 'm': case 'n': case 'o':
-        case 'p': case 'q': case 'r': case 's': case 't':
-        case 'u': case 'v': case 'w': case 'x': case 'y': case 'z':
-        case 'A': case 'B': case 'C': case 'D': case 'E':
-        case 'F': case 'G': case 'H': case 'I': case 'J':
-        case 'K': case 'L': case 'M': case 'N': case 'O':
-        case 'P': case 'Q': case 'R': case 'S': case 'T':
-        case 'U': case 'V': case 'W': case 'X': case 'Y': case 'Z':
+        if( str[i] == ',' || str[i] == '-' || str[i] == '.'
+            || ( '0' <= str[i] && str[i] <= '9' )
+            || ( 'A' <= str[i] && str[i] <= 'Z' )
+            || ( 'a' <= str[i] && str[i] <= 'z' )
+            || ( str[i] == '/' && !escape_slashes ) )
             evbuffer_add( out, &str[i], 1 );
-            break;
-        case '/':
-            if(!escape_slashes) {
-                evbuffer_add( out, &str[i], 1 );
-                break;
-            }
-            /* Fall through. */
-        default:
+        else
             evbuffer_add_printf( out, "%%%02X", (unsigned)(str[i]&0xFF) );
-            break;
-        }
     }
 }
 

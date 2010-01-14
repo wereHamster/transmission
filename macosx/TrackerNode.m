@@ -64,6 +64,11 @@
     return fStat.tier;
 }
 
+- (NSUInteger) identifier
+{
+    return fStat.id;
+}
+
 - (NSInteger) totalSeeders
 {
     return fStat.seederCount;
