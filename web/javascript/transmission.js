@@ -437,11 +437,10 @@ Transmission.prototype =
 	},
 
 	selectElement: function( e, doUpdate ) {
-		$.className.add( e[0], 'selected' );
+		e.addClass('selected');
 		this.scrollToElement( e );
 		if( doUpdate )
 			this.selectionChanged( );
-		$.className.add( e[0], 'selected' );
 	},
 	selectRow: function( rowIndex, doUpdate ) {
 		this.selectElement( this._rows[rowIndex], doUpdate );
@@ -452,7 +451,7 @@ Transmission.prototype =
 	},
 
 	deselectElement: function( e, doUpdate ) {
-		$.className.remove( e[0], 'selected' );
+		e.removeClass('selected');
 		if( doUpdate )
 			this.selectionChanged( );
 	},
@@ -1083,6 +1082,7 @@ Transmission.prototype =
 			setInnerHTML( tab.progress, na );
 			setInnerHTML( tab.comment, na );
 			setInnerHTML( tab.creator, na );
+			setInnerHTML( tab.download_dir, na );
 			setInnerHTML( tab.error, na );
 			this.updateVisibleFileLists();
 			$("#torrent_inspector_size, .inspector_row > div:contains('N/A')").css('color', '#666');
@@ -1154,9 +1154,9 @@ Transmission.prototype =
 		setInnerHTML( tab.secure, private_string );
 		setInnerHTML( tab.creator_date, date_created );
 		setInnerHTML( tab.progress, torrents.length ? Math.ratio( sizeDone*100, sizeWhenDone ) + '%' : na );
-		setInnerHTML( tab.comment, comment.replace(/\//g, '/&#8203;') );
+		setInnerHTML( tab.comment, comment == na ? comment : comment.replace(/\//g, '/&#8203;') );
 		setInnerHTML( tab.creator, creator );
-		setInnerHTML( tab.download_dir, download_dir.replace(/([\/_\.])/g, "$1&#8203;") );
+		setInnerHTML( tab.download_dir, download_dir == na ? download_dir : download_dir.replace(/([\/_\.])/g, "$1&#8203;") );
 		setInnerHTML( tab.error, error );
 		
 		$(".inspector_row > div:contains('N/A')").css('color', '#666');

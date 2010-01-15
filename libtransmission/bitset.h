@@ -7,7 +7,7 @@
  * This exemption does not extend to derived works not owned by
  * the Transmission project.
  *
- * $Id:$
+ * $Id$
  */
 
 #ifndef __TRANSMISSION__
@@ -16,6 +16,8 @@
 
 #ifndef TR_BITSET_H
 #define TR_BITSET_H 1
+
+#include <assert.h>
 
 #include "transmission.h"
 #include "bitfield.h"
@@ -50,7 +52,9 @@ tr_bitsetReserve( tr_bitset * b, size_t size )
 
         tr_bitfieldDestruct( &b->bitfield );
         tr_bitfieldConstruct( &b->bitfield, size );
-        memcpy( b->bitfield.bits, tmp->bits, tmp->byteCount );
+
+        if( ( tmp->bits != NULL ) && ( tmp->byteCount > 0 ) )
+            memcpy( b->bitfield.bits, tmp->bits, tmp->byteCount );
 
         tr_bitfieldFree( tmp );
     }
