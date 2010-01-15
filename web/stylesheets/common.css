@@ -362,6 +362,9 @@ ul.torrent_list {
 	cursor: default;
 }
 
+/* TORRENT LIST CONTAINERS */
+
+
 ul.torrent_list li {
 	list-style-type: none;
 	list-style-image: none;
@@ -374,15 +377,74 @@ ul.torrent_list li {
 
 ul.torrent_list li.torrent {
 	border-bottom: 1px solid #ccc;
-	padding: 4px 30px 5px 10px; /* Make space for buttons on the right */
+	padding: 4px 8px 5px 10px;
 	margin: 0 !important;
 	color: #666;
 }
+ul.torrent_list li.torrent.compact {
+	padding: 3px 4px 4px 20px;
+}
 
+ul.torrent_list div#torrent_std_view {
+	margin-top: -1px; /* div seems to add 1px by existing */
+	padding:0;
+	border:0;
+}
+ul.torrent_list div#torrent_compact_view {
+	margin-top: -1px; /* div seems to add 1px by existing */
+	padding:0;
+	border:0;
+}
+
+ul.torrent_list li.torrent div.torrent_main_container {
+	margin-right: 25px; /* for button */
+	position: relative; /* TEST FF */
+}
+ul.torrent_list li.torrent.compact div.torrent_main_container {
+	display: block;
+	margin-right: 20px; /* for button */
+}
+
+ul.torrent_list li.torrent div.torrent_progress_bar_container {
+	position: relative;
+	margin-right: 10px;
+	width: 100%;
+	overflow: hidden; /* used to clear the floats */
+}
+ul.torrent_list li.torrent.compact div.torrent_progress_bar_container {
+	float: left;
+	width: 10%; /* width of compact progress bar */
+}
+
+ul.torrent_list li.torrent div.button_container {
+	float: right;
+	height: 18px; /* same as torrent_main_container (or enclose both in a div? ) */
+	width: 14px;
+	margin: 2px 2px; /* fudge to centre img. table-cell vert-align doesn't work in a float */
+}
+ul.torrent_list li.torrent.compact div.button_container {
+	height: 14px;
+	margin: 0;
+}
+
+ul.torrent_list li.torrent p {
+	margin: 0;
+}
+
+/* TORRENT LIST ELEMENTS */
+
+/* Unused!? */
 ul.torrent_list li.torrent a img {
+	position: relative;
+	right: 0px;
+}
+
+/* Unused!?
+ul.torrent_list li.torrent.compact a img {
 	position: relative;
 	right: -10px;
 }
+*/
 
 ul.torrent_list li.torrent.even {
 	background-color: #EDF3FE;
@@ -402,6 +464,14 @@ ul.torrent_list li.torrent div.torrent_name {
 	margin-bottom: 2px;
 }
 
+ul.torrent_list li.torrent.compact div.torrent_name {
+	font-size: 1.0em;
+	font-weight: normal;
+	margin-bottom: 1px;
+	display: inline; /* NOTE: works ok without this */
+	width: 50%; /* NOTE: works out without this */
+}
+
 ul.torrent_list li.torrent.selected div.torrent_name {
 	color: #fff;
 }
@@ -411,9 +481,28 @@ ul.torrent_list li.torrent div.torrent_peer_details {
 	font-size: 1em;
 }
 
+ul.torrent_list li.torrent.compact div.torrent_progress_details,
+ul.torrent_list li.torrent.compact div.torrent_peer_details {
+	/* Safari is ok with just float right, FF needs abs + pos witin a relative div */
+	/* float: right; */
+	position: absolute;
+	top: 3px; /* vertical fudge to centre text */
+	right: 0;
+
+	font-size: 0.8em;
+	line-height: 1.0em; /* simplifies vertical positioning between Safari & FF */
+
+	/* Alternative: puts details on two lines (could prob. reformat text too)
+	top: -3px; (change the one above)
+	width:25%;
+	*/
+}
+
 ul.torrent_list li.torrent div.torrent_progress_bar {
 	height: 10px;
-	margin: 3px 0;
+	/* left -1px: Hack because progress bars wrap - 1px too wide to fit container */
+	/* -1px ok for Safari, FF needs -2px */
+	margin: 3px 0px 3px -2px; /* T,B visual padding */
 	float: left;
 	line-height: 1px;
 	font-size: 1px;
@@ -421,6 +510,9 @@ ul.torrent_list li.torrent div.torrent_progress_bar {
 	background-image: url('../images/progress/progress.png');
 	background-repeat: repeat-x;
 	background-color: transparent;
+}
+ul.torrent_list li.torrent.compact div.torrent_progress_bar {
+	height: 5px; /* image is actually 10 but clipping to 5 looks ok */
 }
 
 ul.torrent_list li.torrent div.torrent_progress_bar.complete {
@@ -439,14 +531,14 @@ ul.torrent_list li.torrent div.torrent_progress_bar.in_progress {
 	border-right: none;
 }
 
-ul.torrent_list li.torrent div.torrent_progress_bar.incomplete {
-	margin-right: -10px;
+ul.torrent_list li.torrent         div.torrent_progress_bar.incomplete {
+/* KRL	margin-right: -10px; */
 	background-position: left -20px;
 	border: 1px solid #C8CACD;
 	border-left: none;
 }
 
-ul.torrent_list li.torrent div.torrent_progress_bar.incomplete.seeding {
+ul.torrent_list li.torrent         div.torrent_progress_bar.incomplete.seeding {
 	background-position: left -10px;
 	border: 1px solid #29AD35;
 }
@@ -480,14 +572,12 @@ ul.torrent_list li.torrent div.torrent_progress_bar.in_progress.meta.empty {
 	border: 0 none;
 }
 
+/* FIXME: class should be more specific: */
 li.torrent a div {
-	float: right;
-	position: relative;
-	right: -22px;
-	top: -16px;
 	background: url('../images/buttons/torrent_buttons.png');
 	height: 14px;
 	width: 14px;
+	/* top: 0px; FIXME: not needed ? */
 }
 
 li.torrent a div.torrent_pause {
@@ -538,7 +628,7 @@ div#torrent_inspector #torrent_inspector_name {
 }
 div#torrent_inspector #torrent_inspector_size {
 	font-size: 1.2em;
-	margin: 3;
+	margin: 3px;
 	display: block;
 	padding-top: 2px;
 }
@@ -796,17 +886,24 @@ div.torrent_footer {
 	text-shadow: 0 1px 0 #ccc;
 }
 
+
+/* Std footer button: */
+div.torrent_footer div.footer_button {
+	float: left;
+	height: 22px;
+	width: 32px !important;
+	margin: 0 0 0 3px;
+	padding: 0;
+	-moz-user-select: none;
+	-webkit-user-select: none;
+}
+
 div.torrent_footer ul#settings_menu li#button {
 	height: 22px;
 	width: 32px !important;
 	background: transparent url('../images/graphics/chrome.png') left -75px no-repeat;
-	margin: 0 0 0 3px;
-	padding: 0;
-	float: left;
-	position: relative;
-	-moz-user-select: none;
-	-webkit-user-select: none;
 }
+
 
 div.torrent_footer ul#settings_menu li#button:active {
 	/background: transparent url('../images/graphics/chrome.png') -32px -75px no-repeat;
@@ -825,14 +922,21 @@ div.torrent_footer div#disk_space_container {
 	padding: 0px;
 }
 
-div.torrent_footer div#turtle_button {
-	height: 22px;
-	width: 32px !important;
-	margin: 0 0 0 38px;
-	padding: 0;
-	-moz-user-select: none;
-	-webkit-user-select: none;
+/* FIXME: change graphics */
+.compactDisplayEnabled {
+	background: transparent url('../images/graphics/chrome.png') -64px -119px no-repeat;
 }
+.compactDisplayEnabled:active {
+	background: transparent url('../images/graphics/chrome.png') -96px -119px no-repeat;
+}
+.compactDisplayDisabled {
+	background: transparent url('../images/graphics/chrome.png') -64px -97px no-repeat;
+}
+.compactDisplayDisabled:active {
+	background: transparent url('../images/graphics/chrome.png') -96px -97px no-repeat;
+}
+
+
 
 .turtleEnabled {
 	background: transparent url('../images/graphics/chrome.png') left -119px no-repeat;
@@ -1161,7 +1265,7 @@ div#prefs_container div#pref_error {
 	color: #000;
 	font-size: 14px;
 	cursor: default;
-	text-indent: auto !important;
+	text-indent: auto; /* !important */
 	width: inherit;
 }
 

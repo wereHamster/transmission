@@ -166,7 +166,7 @@ Math.formatBytes = function(bytes) {
  *   @param integer seconds
  *   @returns string
  */
-Math.formatSeconds = function(seconds)
+Math.formatSeconds = function(seconds, compact_mode)
 {
 	var result;
 	var days = Math.floor(seconds / 86400);
@@ -174,20 +174,28 @@ Math.formatSeconds = function(seconds)
 	var minutes = Math.floor((seconds % 3600) / 60);
 	var seconds = Math.floor((seconds % 3600) % 60);
 
+	var day_str = ' days';
+	var hr_str  = ' hr';
+	var min_str = ' min';
+	var sec_str = ' seconds';
+
+	if (compact_mode)
+		return days + "d " + hours + ":" + minutes + ":" + seconds;
+
 	if (days > 0 && hours == 0)
-		result = days + ' days';
+		result = days + day_str;
 	else if (days > 0 && hours > 0)
-		result = days + ' days ' + hours + ' hr';
+		result = days + day_str + ' ' + hours + hr_str ;
 	else if (hours > 0 && minutes == 0)
-		result = hours + ' hr';
+		result = hours + hr_str;
 	else if (hours > 0 && minutes > 0)
-		result = hours + ' hr ' + minutes + ' min';
+		result = hours + hr_str + ' ' + minutes + min_str;
 	else if (minutes > 0 && seconds == 0)
-		result = minutes + ' min';
+		result = minutes + min_str;
 	else if (minutes > 0 && seconds > 0)
-		result = minutes + ' min ' + seconds + ' seconds';
+		result = minutes + min_str + ' ' + seconds + sec_str;
 	else
-		result = seconds + ' seconds';
+		result = seconds + sec_str;
 
 	return result;
 };
@@ -359,6 +367,7 @@ Prefs._SortByState        = 'state';
 Prefs._SortByTracker      = 'tracker';
 
 Prefs._TurtleState        = 'turtle-state';
+Prefs._CompactDisplayState= 'compact_display_state';
 
 Prefs._Defaults =
 {
@@ -369,7 +378,8 @@ Prefs._Defaults =
 	'show_inspector': false,
 	'sort_direction': 'ascending',
 	'sort_method': 'name',
-	'turtle-state' : false
+	'turtle-state' : false,
+	'compact_display_state' : false
 };
 
 /*

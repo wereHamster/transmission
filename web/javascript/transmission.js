@@ -55,6 +55,7 @@ Transmission.prototype =
 		$('#upload_confirm_button').bind('click', function(e){ tr.confirmUploadClicked(e); return false;});
 		$('#upload_cancel_button').bind('click', function(e){ tr.cancelUploadClicked(e); return false; });
 		$('#turtle_button').bind('click', function(e){ tr.toggleTurtleClicked(e); return false; });
+		$('#compact_display_button').bind('click', function(e){ tr.toggleCompactDisplayClicked(e); return false; });
 		$('#prefs_tab_general_tab').click(function(e){ changeTab(this, 'prefs_tab_general') });
 		$('#prefs_tab_speed_tab').click(function(e){ changeTab(this, 'prefs_tab_speed') });
 
@@ -72,6 +73,8 @@ Transmission.prototype =
 			this.createSettingsMenu();
 		}
 		this.initTurtleDropDowns();
+
+		this.updateCompactDisplayButton();
 
 		this._torrent_list             = $('#torrent_list')[0];
 		this._inspector_file_list      = $('#inspector_file_list')[0];
@@ -843,6 +846,23 @@ Transmission.prototype =
 		w.attr( 'title', t );
 	},
 
+	toggleCompactDisplayClicked: function() {
+		// Toggle the value
+		this[Prefs._CompactDisplayState] = !this[Prefs._CompactDisplayState];
+		this.updateCompactDisplayButton();
+		this.setDisplayMode( this[Prefs._CompactDisplayState] );
+	},
+
+	updateCompactDisplayButton: function() {
+		if ( this[Prefs._CompactDisplayState] ) {
+			$('#compact_display_button').removeClass('compactDisplayDisabled');
+			$('#compact_display_button').addClass('compactDisplayEnabled');
+		} else {
+			$('#compact_display_button').removeClass('compactDisplayEnabled');
+			$('#compact_display_button').addClass('compactDisplayDisabled');
+		}
+	},
+
 	/*--------------------------------------------
 	 *
 	 *  I N T E R F A C E   F U N C T I O N S
@@ -1484,6 +1504,16 @@ Transmission.prototype =
 		});
 
 		return removedAny;
+	},
+
+	setDisplayMode: function( iscompact )
+	{
+		var torrents = this.getAllTorrents();
+
+		for( var i=0; torrents[i]; ++i )
+		{
+		    torrents[i].setListDisplayElements(this[Prefs._CompactDisplayState]);
+		}
 	},
 
 	/*
