@@ -52,6 +52,8 @@ freeMetaUI( gpointer p )
 {
     MakeMetaUI * ui = p;
 
+    tr_metaInfoBuilderFree( ui->builder );
+    g_free( ui->target );
     memset( ui, ~0, sizeof( MakeMetaUI ) );
     g_free( ui );
 }

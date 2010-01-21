@@ -3,8 +3,8 @@ dnl STATUS: "X" for prerelease beta builds,
 dnl         "Z" for unsupported trunk builds,
 dnl         "0" for stable, supported releases
 dnl these should be the only two lines you need to change
-m4_define([user_agent_prefix],[1.76+])
-m4_define([peer_id_prefix],[-TR176Z-])
+m4_define([user_agent_prefix],[1.80+])
+m4_define([peer_id_prefix],[-TR180Z-])
 
 AC_INIT([transmission],
         [user_agent_prefix],
@@ -202,7 +202,7 @@ AC_CHECK_HEADER([event-config.h],
 libevent_source=bundled
 if test "x$libevent_found" = "xyes" ; then
     if test "x$libevent_headers_found" = "xyes"; then
-      libevent_source=system
+        libevent_source=system
     fi
 fi
 if test "x$libevent_source" = "xbundled"; then

@@ -21,8 +21,9 @@
 ****
 ***/
 
-static struct tr_session_stats STATS_INIT = { 0.0f, 0, 0, 0, 0, 0 };
+static const struct tr_session_stats STATS_INIT = { 0.0f, 0, 0, 0, 0, 0 };
 
+/** @brief Opaque, per-session data structure for bandwidth use statistics */
 struct tr_stats_handle
 {
     tr_session_stats    single;

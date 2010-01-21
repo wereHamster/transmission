@@ -17,12 +17,10 @@
 #ifndef TR_BITSET_H
 #define TR_BITSET_H 1
 
-#include <assert.h>
-
 #include "transmission.h"
 #include "bitfield.h"
 
-/** This like a tr_bitfield, but supports haveAll and haveNone */
+/** @brief like a tr_bitfield, but supports haveAll and haveNone */
 typedef struct tr_bitset
 {
     tr_bool haveAll;

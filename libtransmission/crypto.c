@@ -86,6 +86,7 @@ static const uint8_t dh_P[PRIME_LEN] =
 
 static const uint8_t dh_G[] = { 2 };
 
+/** @brief Holds state information for encrypted peer communications */
 struct tr_crypto
 {
     RC4_KEY         dec_key;
@@ -374,8 +375,8 @@ tr_ssha1( const void * plaintext )
                                  "abcdefghijklmnopqrstuvwxyz"
                                  "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                  "./";
-    static const size_t salter_len = 64;
-    static const size_t saltval_len = 8;
+    const size_t salter_len = 64;
+    const size_t saltval_len = 8;
 
     size_t i;
     char salt[saltval_len];

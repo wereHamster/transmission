@@ -17,7 +17,7 @@
 
 #include <assert.h>
 #include <limits.h> /* INT_MAX */
-#include <math.h> /* fabs */
+#include <math.h>
 #include <stdarg.h>
 #include <string.h> /* memcmp */
 #include <stdlib.h> /* qsort */
@@ -331,8 +331,11 @@ onTrackerResponse( void * tracker UNUSED,
             break;
 
         case TR_TRACKER_ERROR_CLEAR:
-            tor->error = TR_STAT_OK;
-            tor->errorString[0] = '\0';
+            if( tor->error != TR_STAT_LOCAL_ERROR )
+            {
+                tor->error = TR_STAT_OK;
+                tor->errorString[0] = '\0';
+            }
             break;
     }
 }
@@ -1316,7 +1319,7 @@ checkAndStartImpl( void * vtor )
         stop the torrent and log an error. */
     if( tor->preVerifyTotal && !tr_cpHaveTotal( &tor->completion ) )
     {
-        tr_torrentSetLocalError( tor, _( "Can't find local data.  Try \"Set Location\" to find it, or restart the torrent to re-download." ) );
+        tr_torrentSetLocalError( tor, _( "No data found!  Reconnect any disconnected drives, use \"Set Location\", or restart the torrent to re-download." ) );
         tr_torrentStop( tor );
     }
     else
