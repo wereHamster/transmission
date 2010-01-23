@@ -18,6 +18,8 @@
 
 #include <signal.h>
 
+#include <event.h>
+
 #include "transmission.h"
 #include "net.h"
 #include "session.h"

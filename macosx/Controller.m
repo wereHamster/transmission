@@ -327,6 +327,10 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         
         [NSApp setDelegate: self];
         
+        //register for magnet URLs (has to be in init)
+        [[NSAppleEventManager sharedAppleEventManager] setEventHandler: self andSelector: @selector(handleOpenContentsEvent:replyEvent:)
+            forEventClass: kInternetEventClass andEventID: kAEGetURL];
+        
         fTorrents = [[NSMutableArray alloc] init];
         fDisplayedTorrents = [[NSMutableArray alloc] init];
         
@@ -344,14 +348,6 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
             [fDefaults setBool: tr_sessionUsesAltSpeed(fLib) forKey: @"SpeedLimit"];
         
         tr_sessionSetRPCCallback(fLib, rpcCallback, self);
-        
-        //register for dock icon drags
-        [[NSAppleEventManager sharedAppleEventManager] setEventHandler: self andSelector: @selector(handleOpenContentsEvent:replyEvent:)
-            forEventClass: kCoreEventClass andEventID: kAEOpenContents];
-        
-        //register for magnet URLs
-        [[NSAppleEventManager sharedAppleEventManager] setEventHandler: self andSelector: @selector(handleOpenContentsEvent:replyEvent:)
-        forEventClass: kInternetEventClass andEventID: kAEGetURL];
         
         [GrowlApplicationBridge setGrowlDelegate: self];
         
@@ -577,6 +573,10 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
 - (void) applicationDidFinishLaunching: (NSNotification *) notification
 {
     [NSApp setServicesProvider: self];
+    
+    //register for dock icon drags (has to be in applicationDidFinishLaunching: to work)
+    [[NSAppleEventManager sharedAppleEventManager] setEventHandler: self andSelector: @selector(handleOpenContentsEvent:replyEvent:)
+        forEventClass: kCoreEventClass andEventID: kAEOpenContents];
     
     //auto importing
     [self checkAutoImportDirectory];
