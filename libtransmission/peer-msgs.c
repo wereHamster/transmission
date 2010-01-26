@@ -1425,7 +1425,14 @@ readBtMessage( tr_peermsgs * msgs, struct evbuffer * inbuf, size_t inlen )
         case BT_HAVE:
             tr_peerIoReadUint32( msgs->peer->io, inbuf, &ui32 );
             dbgmsg( msgs, "got Have: %u", ui32 );
-            if( tr_bitsetAdd( &msgs->peer->have, ui32 ) ) {
+            if( tr_torrentHasMetadata( msgs->torrent )
+                    && ( ui32 >= msgs->torrent->info.pieceCount ) )
+            {
+                fireError( msgs, ERANGE );
+                return READ_ERR;
+            }
+            if( tr_bitsetAdd( &msgs->peer->have, ui32 ) )
+            {
                 fireError( msgs, ERANGE );
                 return READ_ERR;
             }
@@ -1705,7 +1712,7 @@ updateDesiredRequestCount( tr_peermsgs * msgs, uint64_t now )
         int irate;
         int estimatedBlocksInPeriod;
         double rate;
-        const int floor = 2;
+        const int floor = 4;
         const int seconds = REQUEST_BUF_SECS;
 
         /* Get the rate limit we should use.

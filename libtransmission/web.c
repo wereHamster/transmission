@@ -29,7 +29,9 @@ enum
 {
     TR_MEMORY_TRASH = 0xCC,
 
-    DEFAULT_TIMER_MSEC = 1500 /* arbitrary */
+    DEFAULT_TIMER_MSEC = 1500, /* arbitrary */
+
+    MIN_DNS_CACHE_TIME = 60 * 60 * 24
 };
 
 #if 0
@@ -97,6 +99,7 @@ struct tr_web_task
     struct event timer_event;
     CURL * easy;
     CURLM * multi;
+    tr_bool timer_event_isSet;
 };
 
 static void
@@ -104,7 +107,8 @@ task_free( struct tr_web_task * task )
 {
     if( task->slist != NULL )
         curl_slist_free_all( task->slist );
-    evtimer_del( &task->timer_event );
+    if( task->timer_event_isSet )
+        evtimer_del( &task->timer_event );
     evbuffer_free( task->response );
     tr_free( task->host );
     tr_free( task->range );
@@ -159,13 +163,15 @@ dns_get_cached_host( struct tr_web_task * task, const char * host )
     }
 
     if( item != NULL )
-        dbgmsg( "found cached dns entry for \"%s\": %s", host, item->resolved_host );
+        dbgmsg( "found cached dns entry for \"%s\": %s",
+                host, item->resolved_host );
 
     return item ? item->resolved_host : NULL;
 }
 
 static const char*
-dns_set_cached_host( struct tr_web_task * task, const char * host, const char * resolved, int ttl )
+dns_set_cached_host( struct tr_web_task * task, const char * host,
+                     const char * resolved, int ttl )
 {
     char * ret = NULL;
     tr_web * g;
@@ -174,6 +180,8 @@ dns_set_cached_host( struct tr_web_task * task, const char * host, const char * 
     assert( host != NULL );
     assert( resolved != NULL );
     assert( ttl >= 0 );
+
+    ttl = MAX( MIN_DNS_CACHE_TIME, ttl );
 
     g = task->session->web;
     if( g != NULL )
@@ -235,11 +243,12 @@ static int
 getTimeoutFromURL( const char * url )
 {
     if( strstr( url, "scrape" ) != NULL ) return 20;
-    if( strstr( url, "announce" ) != NULL ) return 30;
+    if( strstr( url, "announce" ) != NULL ) return 45;
     return 240;
 }
 
 static void task_timeout_cb( int fd UNUSED, short what UNUSED, void * task );
+static void task_finish( struct tr_web_task * task, long response_code );
 
 static void
 addTask( void * vtask )
@@ -247,7 +256,15 @@ addTask( void * vtask )
     struct tr_web_task * task = vtask;
     const tr_session * session = task->session;
 
-    if( session && session->web )
+    if( ( session == NULL ) || ( session->web == NULL ) )
+        return;
+
+    if( task->resolved_host == NULL )
+    {
+        dbgmsg( "couldn't resolve host for \"%s\"... task failed", task->url );
+        task_finish( task, 0 );
+    }
+    else
     {
         CURL * e = curl_easy_init( );
         struct tr_web * web = session->web;
@@ -256,11 +273,10 @@ addTask( void * vtask )
         const char * user_agent = TR_NAME "/" LONG_VERSION_STRING;
         char * url = NULL;
 
-        /* If we've got a resolved host, insert it into the URL: replace
-         * "http://www.craptrackular.org/announce?key=val&key2=..." with
-         * "http://127.0.0.1/announce?key=val&key2=..."
-         * so that curl's DNS won't block */
-        if( task->resolved_host != NULL )
+        /* insert the resolved host into the URL s.t. curl's DNS won't block
+         * even if -- like on most OSes -- it wasn't built with C-Ares :(
+         * "http://www.craptrackular.org/announce?key=val&key2=..." becomes
+         * "http://127.0.0.1/announce?key=val&key2=..." */
         {
             char * host;
             struct evbuffer * buf = evbuffer_new( );
@@ -273,7 +289,14 @@ addTask( void * vtask )
             dbgmsg( "old url: \"%s\" -- new url: \"%s\"", task->url, url );
             evbuffer_free( buf );
 
-            host = tr_strdup_printf( "Host: %s:%d", task->host, task->port );
+            /* Manually add a Host: argument that refers to the true URL */
+            if( ( ( task->port <= 0 ) ) ||
+                ( ( task->port == 80 ) && !strncmp( task->url, "http://", 7 ) ) ||
+                ( ( task->port == 443 ) && !strncmp( task->url, "https://", 8 ) ) )
+                host = tr_strdup_printf( "Host: %s", task->host );
+            else
+                host = tr_strdup_printf( "Host: %s:%d", task->host, task->port );
+
             task->slist = curl_slist_append( NULL, host );
             curl_easy_setopt( e, CURLOPT_HTTPHEADER, task->slist );
             tr_free( host );
@@ -300,6 +323,7 @@ addTask( void * vtask )
 
         /* use our own timeout instead of CURLOPT_TIMEOUT because the latter
          * doesn't play nicely with curl_multi.  See curl bug #2501457 */
+        task->timer_event_isSet = TRUE;
         evtimer_set( &task->timer_event, task_timeout_cb, task );
         tr_timerAdd( &task->timer_event, timeout, 0 );
 
@@ -308,7 +332,7 @@ addTask( void * vtask )
         curl_easy_setopt( e, CURLOPT_SOCKOPTDATA, task );
         curl_easy_setopt( e, CURLOPT_WRITEDATA, task );
         curl_easy_setopt( e, CURLOPT_WRITEFUNCTION, writeFunc );
-        curl_easy_setopt( e, CURLOPT_DNS_CACHE_TIMEOUT, 1800L );
+        curl_easy_setopt( e, CURLOPT_DNS_CACHE_TIMEOUT, MIN_DNS_CACHE_TIME );
         curl_easy_setopt( e, CURLOPT_FOLLOWLOCATION, 1L );
         curl_easy_setopt( e, CURLOPT_AUTOREFERER, 1L );
         curl_easy_setopt( e, CURLOPT_FORBID_REUSE, 1L );
@@ -369,7 +393,9 @@ dns_ipv4_done_cb( int err, char type, int count, int ttl, void * addresses, void
         /* FIXME: if count > 1, is there a way to decide which is best to use? */
     }
 
-    if( task->resolved_host || evdns_resolve_ipv6( task->host, 0, dns_ipv6_done_cb, task ) )
+    if( ( task->resolved_host != NULL )
+            || ( task->host == NULL )
+            || evdns_resolve_ipv6( task->host, 0, dns_ipv6_done_cb, task ) )
         dns_ipv6_done_cb( DNS_ERR_UNKNOWN, DNS_IPv6_AAAA, 0, 0, NULL, task );
 }
 
@@ -388,7 +414,9 @@ doDNS( void * vtask )
         task->resolved_host = dns_get_cached_host( task, host );
     }
 
-    if( task->resolved_host || evdns_resolve_ipv4( host, 0, dns_ipv4_done_cb, task ) )
+    if( ( task->resolved_host != NULL )
+            || ( host == NULL )
+            || evdns_resolve_ipv4( host, 0, dns_ipv4_done_cb, task ) )
         dns_ipv4_done_cb( DNS_ERR_UNKNOWN, DNS_IPv4_A, 0, 0, NULL, task );
 }
 
