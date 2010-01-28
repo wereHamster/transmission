@@ -620,10 +620,6 @@ handle_request( struct evhttp_request * req, void * arg )
         {
             handle_web_client( req, server );
         }
-        else if( !strncmp( req->uri, "/transmission/upload", 20 ) )
-        {
-            handle_upload( req, server );
-        }
 #ifdef REQUIRE_SESSION_ID
         else if( !test_session_id( server, req ) )
         {
@@ -648,6 +644,10 @@ handle_request( struct evhttp_request * req, void * arg )
         else if( !strncmp( req->uri, "/transmission/rpc", 17 ) )
         {
             handle_rpc( req, server );
+        }
+        else if( !strncmp( req->uri, "/transmission/upload", 20 ) )
+        {
+            handle_upload( req, server );
         }
         else
         {
