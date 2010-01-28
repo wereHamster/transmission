@@ -37,7 +37,7 @@
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
 #else 
-#include <sys/_time.h>
+#include <sys/_libevent_time.h>
 #endif
 #include <sys/queue.h>
 #include <stdio.h>
@@ -200,7 +200,7 @@ event_base_new(void)
 	if (base->evbase == NULL)
 		event_errx(1, "%s: no event mechanism available", __func__);
 
-	if (getenv("EVENT_SHOW_METHOD")) 
+	if (evutil_getenv("EVENT_SHOW_METHOD")) 
 		event_msgx("libevent using: %s\n",
 			   base->evsel->name);
 
@@ -333,8 +333,8 @@ event_base_priority_init(struct event_base *base, int npriorities)
 
 	/* Allocate our priority queues */
 	base->nactivequeues = npriorities;
-	base->activequeues = (struct event_list **)calloc(base->nactivequeues,
-	    npriorities * sizeof(struct event_list *));
+	base->activequeues = (struct event_list **)
+	    calloc(base->nactivequeues, sizeof(struct event_list *));
 	if (base->activequeues == NULL)
 		event_err(1, "%s: calloc", __func__);
 

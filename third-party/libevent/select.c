@@ -34,7 +34,7 @@
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
 #else
-#include <sys/_time.h>
+#include <sys/_libevent_time.h>
 #endif
 #ifdef HAVE_SYS_SELECT_H
 #include <sys/select.h>
@@ -51,12 +51,20 @@
 #endif
 
 #include "event.h"
+#include "evutil.h"
 #include "event-internal.h"
 #include "evsignal.h"
 #include "log.h"
 
 #ifndef howmany
 #define        howmany(x, y)   (((x)+((y)-1))/(y))
+#endif
+
+#ifndef _EVENT_HAVE_FD_MASK
+/* This type is mandatory, but Android doesn't define it. */
+#undef NFDBITS
+#define NFDBITS (sizeof(long)*8)
+typedef unsigned long fd_mask;
 #endif
 
 struct selectop {
@@ -94,7 +102,7 @@ select_init(struct event_base *base)
 	struct selectop *sop;
 
 	/* Disable select when this environment variable is set */
-	if (getenv("EVENT_NOSELECT"))
+	if (evutil_getenv("EVENT_NOSELECT"))
 		return (NULL);
 
 	if (!(sop = calloc(1, sizeof(struct selectop))))

@@ -33,7 +33,7 @@
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
 #else
-#include <sys/_time.h>
+#include <sys/_libevent_time.h>
 #endif
 #include <sys/queue.h>
 #include <sys/devpoll.h>
@@ -131,7 +131,7 @@ devpoll_init(struct event_base *base)
 	struct devpollop *devpollop;
 
 	/* Disable devpoll when this environment variable is set */
-	if (getenv("EVENT_NODEVPOLL"))
+	if (evutil_getenv("EVENT_NODEVPOLL"))
 		return (NULL);
 
 	if (!(devpollop = calloc(1, sizeof(struct devpollop))))

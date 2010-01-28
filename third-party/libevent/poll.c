@@ -34,7 +34,7 @@
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
 #else
-#include <sys/_time.h>
+#include <sys/_libevent_time.h>
 #endif
 #include <sys/queue.h>
 #include <poll.h>
@@ -87,7 +87,7 @@ poll_init(struct event_base *base)
 	struct pollop *pollop;
 
 	/* Disable poll when this environment variable is set */
-	if (getenv("EVENT_NOPOLL"))
+	if (evutil_getenv("EVENT_NOPOLL"))
 		return (NULL);
 
 	if (!(pollop = calloc(1, sizeof(struct pollop))))

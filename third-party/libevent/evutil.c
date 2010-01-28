@@ -53,7 +53,11 @@
 #include <sys/timeb.h>
 #endif
 #include <stdio.h>
+#include <signal.h>
 
+#include <sys/queue.h>
+#include "event.h"
+#include "event-internal.h"
 #include "evutil.h"
 #include "log.h"
 
@@ -164,10 +168,17 @@ evutil_make_socket_nonblocking(int fd)
 		ioctlsocket(fd, FIONBIO, (unsigned long*) &nonblocking);
 	}
 #else
-	if (fcntl(fd, F_SETFL, O_NONBLOCK) == -1) {
-		event_warn("fcntl(O_NONBLOCK)");
-		return -1;
-}	
+	{
+		long flags;
+		if ((flags = fcntl(fd, F_GETFL, NULL)) < 0) {
+			event_warn("fcntl(%d, F_GETFL)", fd);
+			return -1;
+		}
+		if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+			event_warn("fcntl(%d, F_SETFL)", fd);
+			return -1;
+		}
+	}
 #endif
 	return 0;
 }
@@ -242,4 +253,32 @@ evutil_vsnprintf(char *buf, size_t buflen, const char *format, va_list ap)
 	buf[buflen-1] = '\0';
 	return r;
 #endif
+}
+
+static int
+evutil_issetugid(void)
+{
+#ifdef _EVENT_HAVE_ISSETUGID
+	return issetugid();
+#else
+
+#ifdef _EVENT_HAVE_GETEUID
+	if (getuid() != geteuid())
+		return 1;
+#endif
+#ifdef _EVENT_HAVE_GETEGID
+	if (getgid() != getegid())
+		return 1;
+#endif
+	return 0;
+#endif
+}
+
+const char *
+evutil_getenv(const char *varname)
+{
+	if (evutil_issetugid())
+		return NULL;
+
+	return getenv(varname);
 }

@@ -207,7 +207,9 @@
 #define _EVENT_TIME_WITH_SYS_TIME 1
 
 /* Version number of package */
-#define _EVENT_VERSION "1.3.99-trunk"
+#define _EVENT_VERSION "1.4.13-stable-dev"
+
+#define _EVENT_NUMERIC_VERSION 0x01040d01
 
 /* Define to appropriate substitue if compiler doesnt have __func__ */
 /* #undef _EVENT___func__ */
@@ -220,6 +222,8 @@
 #ifndef _EVENT___cplusplus
 #define _EVENT_inline __inline
 #endif
+
+#define _EVENT___func__ __FUNCTION__
 
 /* Define to `int' if <sys/types.h> does not define. */
 /* #undef _EVENT_pid_t */
