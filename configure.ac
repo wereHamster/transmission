@@ -3,8 +3,8 @@ dnl STATUS: "X" for prerelease beta builds,
 dnl         "Z" for unsupported trunk builds,
 dnl         "0" for stable, supported releases
 dnl these should be the only two lines you need to change
-m4_define([user_agent_prefix],[1.82+])
-m4_define([peer_id_prefix],[-TR182Z-])
+m4_define([user_agent_prefix],[1.83+])
+m4_define([peer_id_prefix],[-TR183Z-])
 
 AC_INIT([transmission],
         [user_agent_prefix],
@@ -133,7 +133,7 @@ AC_CHECK_HEADER([sys/inotify.h],
                 [have_inotify="no"]) 
 AC_ARG_WITH([inotify], 
             [AS_HELP_STRING([--with-inotify],[Enable inotify support (default=auto)])], 
-            [want_inotify=${enableval}], 
+            [want_inotify=${withval}], 
             [want_inotify=${have_inotify}]) 
 if test "x$want_inotify" = "xyes" ; then 
     if test "x$have_inotify" = "xyes"; then 
@@ -148,7 +148,7 @@ AC_CHECK_HEADER([sys/event.h],
                 [have_kqueue="no"]) 
 AC_ARG_WITH([kqueue], 
             [AS_HELP_STRING([--with-kqueue],[Enable kqueue support (default=auto)])], 
-            [want_kqueue=${enableval}], 
+            [want_kqueue=${withval}], 
             [want_kqueue=${have_kqueue}]) 
 if test "x$want_kqueue" = "xyes" ; then 
     if test "x$have_kqueue" = "xyes"; then 
@@ -385,18 +385,7 @@ case $host_os in
 
   *darwin*)
     have_darwin="yes"
-    # Make sure the proper Mac SDK is installed
-    if test ! -d /Developer/SDKs/MacOSX10.5.sdk; then
-      cat << EOF
-You need to install the Mac OS X 10.5 SDK in order to build Transmission:
-  Get your Xcode CD or package
-  Restart the install
-  When it gets to "Installation Type", select "Customize"
-  Select "Mac OS X 10.5 SDK" under "Cross Development"
-  Finish the install.
-EOF
-      exit 1
-    fi
+    CFLAGS="-DMACOSX $CFLAGS"
     ;;
 
 esac
@@ -420,6 +409,21 @@ AC_ARG_ENABLE([daemon],
 AM_CONDITIONAL([BUILD_DAEMON],[test "x$build_daemon" = "xyes"])
 
 
+if test "x$build_mac" = "xyes" ; then
+    # Make sure the proper Mac SDK is installed
+    if test ! -d /Developer/SDKs/MacOSX10.5.sdk; then
+      cat << EOF
+You need to install the Mac OS X 10.5 SDK in order to build Transmission
+with --enable-mac:
+  Get your Xcode CD or package
+  Restart the install
+  When it gets to "Installation Type", select "Customize"
+  Select "Mac OS X 10.5 SDK" under "Cross Development"
+  Finish the install.
+EOF
+      exit 1
+    fi
+fi
 if test "x$have_darwin" = "xyes"; then
     AC_DEFINE([HAVE_DARWIN], 1)
 fi

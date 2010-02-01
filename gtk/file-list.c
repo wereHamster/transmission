@@ -22,6 +22,7 @@
 #include "file-list.h"
 #include "hig.h"
 #include "icons.h"
+#include "tr-prefs.h"
 
 enum
 {
@@ -111,7 +112,7 @@ refreshFilesForeach( GtkTreeModel * model,
         const int enabled = tr_torrentGetFileDL( tor, index );
         const int priority = tr_torrentGetFilePriority( tor, index );
         const uint64_t have = data->refresh_file_stat[index].bytesCompleted;
-        const int prog = (int)((100.0*have)/size);
+        const int prog = size ? (int)((100.0*have)/size) : 1;
 
         if( (priority!=old_priority) || (enabled!=old_enabled) || (have!=old_have) || (prog!=old_prog) )
             gtk_tree_store_set( data->store, iter, FC_PRIORITY, priority,
@@ -159,7 +160,7 @@ refreshFilesForeach( GtkTreeModel * model,
         }
         while( gtk_tree_model_iter_next( model, &child ) );
 
-        prog = (int)((100.0*have)/sub_size);
+        prog = sub_size ? (int)((100.0*have)/sub_size) : 1;
 
         if( (size!=sub_size) || (have!=old_have)
                              || (priority!=old_priority)
@@ -521,7 +522,7 @@ file_list_set_torrent( GtkWidget * w, int torrentId )
         }
 
         refresh( data );
-        data->timeout_tag = gtr_timeout_add_seconds( 2, refreshModel, data );
+        data->timeout_tag = gtr_timeout_add_seconds( SECONDARY_WINDOW_REFRESH_INTERVAL_SECONDS, refreshModel, data );
     }
 
     gtk_tree_view_set_model( GTK_TREE_VIEW( data->view ), data->model );

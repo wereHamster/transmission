@@ -26,11 +26,17 @@
 #import "DragOverlayView.h"
 #import "NSStringAdditions.h"
 
+@interface DragOverlayWindow (Private)
+
+- (void) resizeWindow;
+
+@end
+
 @implementation DragOverlayWindow
 
 - (id) initWithLib: (tr_session *) lib forWindow: (NSWindow *) window
 {
-    if ((self = ([super initWithContentRect: NSMakeRect(0, 0, 1.0, 1.0) styleMask: NSBorderlessWindowMask
+    if ((self = ([super initWithContentRect: NSZeroRect styleMask: NSBorderlessWindowMask
                     backing: NSBackingStoreBuffered defer: NO])))
     {
         fLib = lib;
@@ -60,12 +66,18 @@
         [fFadeOutAnimation setAnimationBlockingMode: NSAnimationNonblockingThreaded];
         
         [window addChildWindow: self ordered: NSWindowAbove];
+        [self setFrame: [window frame] display: NO];
+        
+        [[NSNotificationCenter defaultCenter] addObserver: self selector: @selector(resizeWindow)
+            name: NSWindowDidResizeNotification object: window];
     }
     return self;
 }
 
 - (void) dealloc
 {
+    [[NSNotificationCenter defaultCenter] removeObserver: self];
+    
     [fFadeInAnimation release];
     [fFadeOutAnimation release];
     
@@ -158,7 +170,6 @@
         [fFadeOutAnimation stopAnimation];
         [fFadeInAnimation setCurrentProgress: 1.0 - [fFadeOutAnimation currentProgress]];
     }
-    [self setFrame: [[self parentWindow] frame] display: YES];
     [fFadeInAnimation startAnimation];
 }
 
@@ -172,6 +183,15 @@
     }
     if ([self alphaValue] > 0.0)
         [fFadeOutAnimation startAnimation];
+}
+
+@end
+
+@implementation DragOverlayWindow (Private)
+
+- (void) resizeWindow
+{
+    [self setFrame: [[self parentWindow] frame] display: NO];
 }
 
 @end

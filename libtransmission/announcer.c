@@ -1074,6 +1074,7 @@ static tr_bool
 parseAnnounceResponse( tr_tier     * tier,
                        const char  * response,
                        size_t        responseLen,
+                       tr_bool       isStopped,
                        tr_bool     * gotScrape )
 {
     tr_benc benc;
@@ -1085,6 +1086,7 @@ parseAnnounceResponse( tr_tier     * tier,
     publishErrorClear( tier );
     if( bencLoaded && tr_bencIsDict( &benc ) )
     {
+        int peerCount = 0;
         int incomplete = -1;
         size_t rawlen;
         int64_t i;
@@ -1152,7 +1154,7 @@ parseAnnounceResponse( tr_tier     * tier,
         {
             /* "compact" extension */
             const int allAreSeeds = incomplete == 0;
-            tier->lastAnnouncePeerCount = publishNewPeersCompact( tier, allAreSeeds, raw, rawlen );
+            peerCount += publishNewPeersCompact( tier, allAreSeeds, raw, rawlen );
         }
         else if( tr_bencDictFindList( &benc, "peers", &tmp ) )
         {
@@ -1160,7 +1162,7 @@ parseAnnounceResponse( tr_tier     * tier,
             const tr_bool allAreSeeds = incomplete == 0;
             size_t byteCount = 0;
             uint8_t * array = parseOldPeers( tmp, &byteCount );
-            tier->lastAnnouncePeerCount = publishNewPeers( tier, allAreSeeds, array, byteCount );
+            peerCount += publishNewPeers( tier, allAreSeeds, array, byteCount );
             tr_free( array );
         }
 
@@ -1168,12 +1170,15 @@ parseAnnounceResponse( tr_tier     * tier,
         {
             /* "compact" extension */
             const tr_bool allAreSeeds = incomplete == 0;
-            tier->lastAnnouncePeerCount += publishNewPeersCompact6( tier, allAreSeeds, raw, rawlen );
+            peerCount += publishNewPeersCompact6( tier, allAreSeeds, raw, rawlen );
         }
 
         if( tier->lastAnnounceStr[0] == '\0' )
             tr_strlcpy( tier->lastAnnounceStr, _( "Success" ),
                         sizeof( tier->lastAnnounceStr ) );
+
+        if( !isStopped )
+            tier->lastAnnouncePeerCount = peerCount;
     }
 
     if( bencLoaded )
@@ -1189,6 +1194,7 @@ struct announce_data
     int torrentId;
     int tierId;
     time_t timeSent;
+    const char * event;
 
     /** If the request succeeds, the value for tier's "isRunning" flag */
     tr_bool isRunningOnSuccess;
@@ -1207,11 +1213,10 @@ onAnnounceDone( tr_session   * session,
     tr_bool gotScrape = FALSE;
     tr_bool success = FALSE;
     const time_t now = time ( NULL );
+    const tr_bool isStopped = !strcmp( data->event, "stopped" );
 
     if( announcer && tier )
     {
-        tier->lastAnnouncePeerCount = 0;
-
         if( tier->currentTracker->host )
         {
             tr_host * host = tier->currentTracker->host;
@@ -1219,10 +1224,11 @@ onAnnounceDone( tr_session   * session,
             host->lastResponseInterval = now - data->timeSent;
         }
 
+        tier->lastAnnounceTime = now;
+
         if( responseCode == HTTP_OK )
         {
-            tier->lastAnnounceTime = now;
-            success = parseAnnounceResponse( tier, response, responseLen, &gotScrape );
+            success = parseAnnounceResponse( tier, response, responseLen, isStopped, &gotScrape );
             dbgmsg( tier, "success is %d", success );
         }
         else if( responseCode )
@@ -1236,8 +1242,6 @@ onAnnounceDone( tr_session   * session,
 
             tr_strlcpy( tier->lastAnnounceStr, buf,
                         sizeof( tier->lastAnnounceStr ) );
-
-            tier->lastAnnounceTime = now;
 
             /* if the response is serious, *and* if the response may require
              * human intervention, then notify the user... otherwise just log it */
@@ -1264,9 +1268,10 @@ onAnnounceDone( tr_session   * session,
 
         if( responseCode == 0 )
         {
-            dbgmsg( tier, "No response from tracker... retrying in two minutes." );
+            const int interval = 120 + tr_cryptoWeakRandInt( 120 );
+            dbgmsg( tier, "No response from tracker... retrying in %d seconds.", interval );
             tier->manualAnnounceAllowedAt = ~(time_t)0;
-            tierSetNextAnnounce( tier, tier->announceEvent, now + 120 );
+            tierSetNextAnnounce( tier, tier->announceEvent, now + interval );
         }
         else if( 200 <= responseCode && responseCode <= 299 )
         {
@@ -1379,8 +1384,8 @@ tierAnnounce( tr_announcer * announcer, tr_tier * tier )
     data->tierId = tier->key;
     data->isRunningOnSuccess = tor->isRunning;
     data->timeSent = now;
-
-    url = createAnnounceURL( announcer, tor, tier, getAnnounceEvent( tier ) );
+    data->event = getAnnounceEvent( tier );
+    url = createAnnounceURL( announcer, tor, tier, data->event );
 
     tier->isAnnouncing = TRUE;
     tier->lastAnnounceStartTime = now;
@@ -1795,9 +1800,8 @@ tr_announcerStats( const tr_torrent * torrent,
                 if(( st->hasAnnounced = tier->lastAnnounceTime != 0 )) {
                     st->lastAnnounceTime = tier->lastAnnounceTime;
                     tr_strlcpy( st->lastAnnounceResult, tier->lastAnnounceStr, sizeof( st->lastAnnounceResult ) );
-                    if(( st->lastAnnounceSucceeded = tier->lastAnnounceSucceeded )) {
-                        st->lastAnnouncePeerCount = tier->lastAnnouncePeerCount;
-                    }
+                    st->lastAnnounceSucceeded = tier->lastAnnounceSucceeded;
+                    st->lastAnnouncePeerCount = tier->lastAnnouncePeerCount;
                 }
 
                 if( tier->isAnnouncing )

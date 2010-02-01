@@ -27,12 +27,18 @@ Torrent._ErrTrackerWarning     = 1;
 Torrent._ErrTrackerError       = 2;
 Torrent._ErrLocalError         = 3;
 
+Torrent._TrackerInactive         = 0;
+Torrent._TrackerWaiting          = 1;
+Torrent._TrackerQueued           = 2;
+Torrent._TrackerActive           = 3;
+
+
 Torrent._StaticFields = [ 'addedDate', 'comment', 'creator', 'dateCreated',
 		'hashString', 'id', 'isPrivate', 'name', 'totalSize', 'pieceCount', 'pieceSize' ]
 Torrent._DynamicFields = [ 'downloadedEver', 'error', 'errorString', 'eta',
     'haveUnchecked', 'haveValid', 'leftUntilDone', 'metadataPercentComplete', 'peersConnected',
     'peersGettingFromUs', 'peersSendingToUs', 'rateDownload', 'rateUpload',
-    'recheckProgress', 'sizeWhenDone', 'status',
+    'recheckProgress', 'sizeWhenDone', 'status', 'trackerStats',
     'uploadedEver', 'uploadRatio', 'seedRatioLimit', 'seedRatioMode', 'downloadDir' ]
 
 Torrent.prototype =
@@ -54,6 +60,7 @@ Torrent.prototype =
 		this._sizeWhenDone  = data.sizeWhenDone;
 		this._name          = data.name;
 		this._name_lc       = this._name.toLowerCase( );
+		this._trackerStats  = this.buildTrackerStats(data.trackerStats);
 		this._file_model    = [ ];
 		this._file_view     = [ ];
 
@@ -152,6 +159,34 @@ Torrent.prototype =
 		return $(this._fileList);
 	},
 	
+	buildTrackerStats: function(trackerStats) {
+		result = [];
+		for( var i=0, tracker; tracker=trackerStats[i]; ++i ) {
+			tier = result[tracker.tier - 1] || [];
+			tier[tier.length] = {
+				'host': tracker.host,
+				'announce': tracker.announce,
+				'hasAnnounced': tracker.hasAnnounced,
+				'lastAnnounceTime': tracker.lastAnnounceTime,
+				'lastAnnounceSucceeded': tracker.lastAnnounceSucceeded,
+				'lastAnnounceResult': tracker.lastAnnounceResult,
+				'lastAnnouncePeerCount': tracker.lastAnnouncePeerCount,
+				'announceState': tracker.announceState,
+				'nextAnnounceTime': tracker.nextAnnounceTime,
+				'isBackup': tracker.isBackup,
+				'hasScraped': tracker.hasScraped,
+				'lastScrapeTime': tracker.lastScrapeTime,
+				'lastScrapeSucceeded': tracker.lastScrapeSucceeded,
+				'lastScrapeResult': tracker.lastScrapeResult,
+				'seederCount': tracker.seederCount,
+				'leecherCount': tracker.leecherCount,
+				'downloadCount': tracker.downloadCount
+			};
+			result[tracker.tier - 1] = tier;
+		}
+		return result;
+	},
+
 	/*--------------------------------------------
 	 *
 	 *  S E T T E R S   /   G E T T E R S
@@ -207,6 +242,7 @@ Torrent.prototype =
 			default:                            return 'error';
 		}
 	},
+	trackerStats: function() { return this._trackerStats; },
 	uploadSpeed: function() { return this._upload_speed; },
 	uploadTotal: function() { return this._upload_total; },
 	showFileList: function() {
@@ -333,6 +369,7 @@ Torrent.prototype =
 		this._error                   = data.error;
 		this._error_string            = data.errorString;
 		this._eta                     = data.eta;
+		this._trackerStats            = this.buildTrackerStats(data.trackerStats);
 		this._state                   = data.status;
 		this._download_dir            = data.downloadDir;
 		this._metadataPercentComplete = data.metadataPercentComplete;

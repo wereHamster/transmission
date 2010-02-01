@@ -11,8 +11,6 @@
  */
 
 #include <ctype.h> /* isspace */
-#include <errno.h>
-#include <stdarg.h>
 #include <limits.h> /* USHRT_MAX */
 #include <stdlib.h> /* free() */
 #include <unistd.h>
@@ -297,6 +295,10 @@ torrentPage( GObject * core )
 
     s = _( "Mo_ve .torrent file to the trash" );
     w = new_check_button( s, PREF_KEY_TRASH_ORIGINAL, core );
+    hig_workarea_add_wide_control( t, &row, w );
+
+    s = _( "Append \"._part\" to incomplete files' names" );
+    w = new_check_button( s, TR_PREFS_KEY_RENAME_PARTIAL_FILES, core );
     hig_workarea_add_wide_control( t, &row, w );
 
     s = _( "Keep _incomplete torrents in:" );

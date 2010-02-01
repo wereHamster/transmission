@@ -75,6 +75,7 @@ Transmission.prototype =
 
 		this._torrent_list             = $('#torrent_list')[0];
 		this._inspector_file_list      = $('#inspector_file_list')[0];
+		this._inspector_trackers_list  = $('#inspector_trackers_list')[0];
 		this._inspector_tab_files      = $('#inspector_tab_files')[0];
 		this._toolbar_buttons          = $('#torrent_global_menu ul li');
 		this._toolbar_pause_button     = $('li#pause_selected')[0];
@@ -682,6 +683,7 @@ Transmission.prototype =
 		this.hideiPhoneAddressbar();
 	
 		this.updateVisibleFileLists();
+		this.updateTrackersLists();
 	},
 
 	fileWantedClicked: function(event, element){
@@ -1085,6 +1087,7 @@ Transmission.prototype =
 			setInnerHTML( tab.download_dir, na );
 			setInnerHTML( tab.error, na );
 			this.updateVisibleFileLists();
+			this.updateTrackersLists();
 			$("#torrent_inspector_size, .inspector_row > div:contains('N/A')").css('color', '#666');
 			return;
 		}
@@ -1159,6 +1162,7 @@ Transmission.prototype =
 		setInnerHTML( tab.download_dir, download_dir == na ? download_dir : download_dir.replace(/([\/_\.])/g, "$1&#8203;") );
 		setInnerHTML( tab.error, error );
 		
+		this.updateTrackersLists();
 		$(".inspector_row > div:contains('N/A')").css('color', '#666');
 		this.updateVisibleFileLists();
 	},
@@ -1181,6 +1185,102 @@ Transmission.prototype =
 					$("#select_all_button_container").show();
 			}
 		}
+	},
+
+	updateTrackersLists: function() {
+		// By building up the HTML as as string, then have the browser
+		// turn this into a DOM tree, this is a fast operation.
+		var tr = this;
+		var html = '';
+		var na = 'N/A';
+		var torrents = this.getSelectedTorrents( );
+		if( $(this._inspector_trackers_list).is(':visible') && torrents.length == 1 ) {
+			for( var i=0, tier; tier=torrents[0]._trackerStats[i]; ++i ) {
+				html += '<div class="inspector_group"><div class="inspector_group_label">';
+				html += 'Tier ' + (i + 1) + '</div><ul class="tier_list">';
+				for( var j=0, tracker; tracker=tier[j]; ++j ) {
+					var lastAnnounceStatusHash = tr.lastAnnounceStatus(tracker);
+					var announceState = tr.announceState(tracker);
+					var lastScrapeStatusHash = tr.lastScrapeStatus(tracker);
+
+					// Display construction
+					var parity = ((j+1) % 2 == 0 ? 'even' : 'odd');
+					html += '<li class="inspector_tracker_entry ' + parity + '"><div class="tracker_host" title="' + tracker.announce + '">';
+					html += tracker.host + '</div>';
+					html += '<div class="tracker_activity">';
+					html += '<div>' + lastAnnounceStatusHash['label'] + ': ' + lastAnnounceStatusHash['value'] + '</div>';
+					html += '<div>' + announceState + '</div>';
+					html += '<div>' + lastScrapeStatusHash['label'] + ': ' + lastScrapeStatusHash['value'] + '</div>';
+					html += '</div><table class="tracker_stats">';
+					html += '<tr><th>Seeders:</th><td>' + (tracker.seederCount > -1 ? tracker.seederCount : na) + '</td></tr>';
+					html += '<tr><th>Leechers:</th><td>' + (tracker.leecherCount > -1 ? tracker.leecherCount : na) + '</td></tr>';
+					html += '<tr><th>Downloads:</th><td>' + (tracker.downloadCount > -1 ? tracker.downloadCount : na)+ '</td></tr>';
+					html += '</table></li>';
+				}
+				html += '</ul></div>';
+			}
+		}
+		setInnerHTML(this._inspector_trackers_list, html);
+	},
+
+	lastAnnounceStatus: function(tracker){
+		var lastAnnounceLabel = 'Last Announce';
+		var lastAnnounce = 'N/A';
+		if (tracker.hasAnnounced) {
+			var lastAnnounceTime = Math.formatTimestamp(tracker.lastAnnounceTime);
+			if (tracker.lastAnnounceSucceeded) {
+				lastAnnounce = lastAnnounceTime;
+				lastAnnounce += ' (got ' + tracker.lastAnnouncePeerCount + ' peer';
+				if (tracker.lastAnnouncePeerCount != 1){ lastAnnounce += 's'; }
+				lastAnnounce += ')';
+			} else {
+				lastAnnounceLabel = 'Announce error';
+				lastAnnounce = (tracker.lastAnnounceResult ? tracker.lastAnnounceResult + ' - ' : '') + lastAnnounceTime;
+			}
+		}
+		return {'label':lastAnnounceLabel, 'value':lastAnnounce};
+	},
+
+	announceState: function(tracker){
+		var announceState = '';
+		switch (tracker.announceState) {
+			case Torrent._TrackerActive:
+				announceState = 'Announce in progress';
+				break;
+			case Torrent._TrackerWaiting:
+				var timeUntilAnnounce = tracker.nextAnnounceTime - ((new Date()).getTime() / 1000);
+				if(timeUntilAnnounce < 0){
+					timeUntilAnnounce = 0;
+				}
+				announceState = 'Next announce in ' + Math.formatSeconds(timeUntilAnnounce);
+				break;
+			case Torrent._TrackerQueued:
+				announceState = 'Announce is queued';
+				break;
+			case Torrent._TrackerInactive:
+				announceState = tracker.isBackup ?
+					'Tracker will be used as a backup' :
+					'Announce not scheduled';
+				break;
+			default:
+				announceState = 'unknown announce state: ' + tracker.announceState;
+		}
+		return announceState;
+	},
+
+	lastScrapeStatus: function(tracker){
+		var lastScrapeLabel = 'Last Scrape';
+		var lastScrape = 'N/A';
+		if (tracker.hasScraped) {
+			var lastScrapeTime = Math.formatTimestamp(tracker.lastScrapeTime);
+			if (tracker.lastScrapeSucceeded) {
+				lastScrape = lastScrapeTime;
+			} else {
+				lastScrapeLabel = 'Scrape error';
+				lastScrape = (tracker.lastScrapeResult ? tracker.lastScrapeResult + ' - ' : '') + lastScrapeTime;
+			}
+		}
+		return {'label':lastScrapeLabel, 'value':lastScrape}
 	},
 
 	/*
