@@ -1053,7 +1053,9 @@ printSession( tr_benc * top )
             printf( "  RPC minimum version: %" PRId64 "\n", i );
         printf( "\n" );
 
-        printf( "TRANSFER\n" );
+        printf( "CONFIG\n" );
+        if( tr_bencDictFindStr( args, "config-dir", &str ) )
+            printf( "  Configuration directory: %s\n", str );
         if( tr_bencDictFindStr( args,  TR_PREFS_KEY_DOWNLOAD_DIR, &str ) )
             printf( "  Download directory: %s\n", str );
         if( tr_bencDictFindInt( args, TR_PREFS_KEY_PEER_PORT, &i ) )
@@ -1322,6 +1324,7 @@ printDetails( tr_benc * top )
                     int64_t lastAnnounceStartTime;
                     tr_bool lastAnnounceSucceeded;
                     int64_t lastAnnounceTime;
+                    tr_bool lastAnnounceTimedOut;
                     const char * lastScrapeResult;
                     tr_bool lastScrapeSucceeded;
                     int64_t lastScrapeStartTime;
@@ -1346,6 +1349,7 @@ printDetails( tr_benc * top )
                         tr_bencDictFindInt ( t, "lastAnnounceStartTime", &lastAnnounceStartTime ) &&
                         tr_bencDictFindBool( t, "lastAnnounceSucceeded", &lastAnnounceSucceeded ) &&
                         tr_bencDictFindInt ( t, "lastAnnounceTime", &lastAnnounceTime ) &&
+                        tr_bencDictFindBool( t, "lastAnnounceTimedOut", &lastAnnounceTimedOut ) &&
                         tr_bencDictFindStr ( t, "lastScrapeResult", &lastScrapeResult ) &&
                         tr_bencDictFindInt ( t, "lastScrapeStartTime", &lastScrapeStartTime ) &&
                         tr_bencDictFindBool( t, "lastScrapeSucceeded", &lastScrapeSucceeded ) &&
@@ -1373,6 +1377,8 @@ printDetails( tr_benc * top )
                                 if( lastAnnounceSucceeded )
                                     printf( "  Got a list of %'d peers %s ago\n",
                                             (int)lastAnnouncePeerCount, buf );
+                                else if( lastAnnounceTimedOut )
+                                    printf( "  Peer list request timed out; will retry\n" );
                                 else
                                     printf( "  Got an error \"%s\" %s ago\n",
                                             lastAnnounceResult, buf );

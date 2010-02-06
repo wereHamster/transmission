@@ -65,6 +65,7 @@ struct DetailsImpl
     GtkWidget * size_lb;
     GtkWidget * state_lb;
     GtkWidget * have_lb;
+    GtkWidget * availability_lb;
     GtkWidget * dl_lb;
     GtkWidget * ul_lb;
     GtkWidget * ratio_lb;
@@ -175,35 +176,6 @@ set_double_spin_if_different( GtkWidget * w, guint tag, double value )
 }
 
 static void
-set_int_combo_if_different( GtkWidget * w, guint tag, int column, int value )
-{
-    int i;
-    int currentValue;
-    GtkTreeIter iter;
-    GtkComboBox * combobox = GTK_COMBO_BOX( w );
-    GtkTreeModel * model = gtk_combo_box_get_model( combobox );
-
-    /* do the value and current value match? */
-    if( gtk_combo_box_get_active_iter( combobox, &iter ) ) {
-        gtk_tree_model_get( model, &iter, column, &currentValue, -1 );
-        if( currentValue == value )
-            return;
-    }
-
-    /* find the one to select */
-    i = 0;
-    while(( gtk_tree_model_iter_nth_child( model, &iter, NULL, i++ ))) {
-        gtk_tree_model_get( model, &iter, column, &currentValue, -1 );
-        if( currentValue == value ) {
-            g_signal_handler_block( combobox, tag );
-            gtk_combo_box_set_active_iter( combobox, &iter );
-            g_signal_handler_unblock( combobox, tag );
-            return;
-        }
-    }
-}
-
-static void
 unset_combo( GtkWidget * w, guint tag )
 {
     GtkComboBox * combobox = GTK_COMBO_BOX( w );
@@ -287,9 +259,11 @@ refreshOptions( struct DetailsImpl * di, tr_torrent ** torrents, int n )
         for( i=1; i<n; ++i )
             if( baseline != tr_torrentGetPriority( torrents[i] ) )
                 break;
-        if( i == n )
-            set_int_combo_if_different( di->bandwidthCombo,
-                                        di->bandwidthComboTag, 0, baseline );
+        if( i == n ) {
+            g_signal_handler_block( di->bandwidthCombo, di->bandwidthComboTag );
+            gtr_priority_combo_set_value( di->bandwidthCombo, baseline );
+            g_signal_handler_unblock( di->bandwidthCombo, di->bandwidthComboTag );
+        }
         else
             unset_combo( di->bandwidthCombo, di->bandwidthComboTag );
     }
@@ -446,51 +420,15 @@ max_peers_spun_cb( GtkSpinButton * s, struct DetailsImpl * di )
 static void
 onPriorityChanged( GtkComboBox * w, struct DetailsImpl * di )
 {
-    GtkTreeIter iter;
-
-    if( gtk_combo_box_get_active_iter( w, &iter ) )
-    {
-        int val = 0;
-        gtk_tree_model_get( gtk_combo_box_get_model( w ), &iter, 0, &val, -1 );
-        torrent_set_int( di, "bandwidthPriority", val );
-    }
+    const tr_priority_t priority = gtr_priority_combo_get_value( GTK_WIDGET( w ) );
+    torrent_set_int( di, "bandwidthPriority", priority );
 }
 
 static GtkWidget*
 new_priority_combo( struct DetailsImpl * di )
 {
-    int i;
-    guint tag;
-    GtkWidget * w;
-    GtkCellRenderer * r;
-    GtkListStore * store;
-    const struct {
-        int value;
-        const char * text;
-    } items[] = {
-        { TR_PRI_HIGH,   N_( "High" )  },
-        { TR_PRI_NORMAL, N_( "Normal" ) },
-        { TR_PRI_LOW,    N_( "Low" )  }
-    };
-
-    store = gtk_list_store_new( 2, G_TYPE_INT, G_TYPE_STRING );
-    for( i=0; i<(int)G_N_ELEMENTS(items); ++i ) {
-        GtkTreeIter iter;
-        gtk_list_store_append( store, &iter );
-        gtk_list_store_set( store, &iter, 0, items[i].value,
-                                          1, _( items[i].text ),
-                                         -1 );
-    }
-
-    w = gtk_combo_box_new_with_model( GTK_TREE_MODEL( store ) );
-    r = gtk_cell_renderer_text_new( );
-    gtk_cell_layout_pack_start( GTK_CELL_LAYOUT( w ), r, TRUE );
-    gtk_cell_layout_set_attributes( GTK_CELL_LAYOUT( w ), r, "text", 1, NULL );
-    tag = g_signal_connect( w, "changed", G_CALLBACK( onPriorityChanged ), di );
-    di->bandwidthComboTag = tag;
-
-    /* cleanup */
-    g_object_unref( store );
+    GtkWidget * w = gtr_priority_combo_new( );
+    di->bandwidthComboTag = g_signal_connect( w, "changed", G_CALLBACK( onPriorityChanged ), di );
     return w;
 }
 
@@ -624,6 +562,8 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
     const char * none = _( "None" );
     const char * mixed = _( "Mixed" );
     char buf[512];
+    double available = 0;
+    double sizeWhenDone = 0;
     const tr_stat ** stats = g_new( const tr_stat*, n );
     const tr_info ** infos = g_new( const tr_info*, n );
     for( i=0; i<n; ++i ) {
@@ -800,18 +740,19 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
     if( n <= 0 )
         str = none;
     else {
-        double sizeWhenDone = 0;
         double leftUntilDone = 0;
         double haveUnchecked = 0;
         double haveValid = 0;
         double verifiedPieces = 0;
         for( i=0; i<n; ++i ) {
-            const double v = stats[i]->haveValid;
-            haveUnchecked += stats[i]->haveUnchecked;
+            const tr_stat * st = stats[i];
+            const double v = st->haveValid;
+            haveUnchecked += st->haveUnchecked;
             haveValid += v;
             verifiedPieces += v / tr_torrentInfo(torrents[i])->pieceSize;
-            sizeWhenDone += stats[i]->sizeWhenDone;
-            leftUntilDone += stats[i]->leftUntilDone;
+            sizeWhenDone += st->sizeWhenDone;
+            leftUntilDone += st->leftUntilDone;
+            available += st->sizeWhenDone - st->leftUntilDone + st->desiredAvailable;
         }
         if( !haveValid && !haveUnchecked )
             str = none;
@@ -829,6 +770,15 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
     }
     gtr_label_set_text( GTK_LABEL( di->have_lb ), str );
 
+    /* availability_lb */
+    if( !sizeWhenDone  )
+        str = none;
+    else {
+        const double d = ( 100.0 * available ) / sizeWhenDone;
+        g_snprintf( buf, sizeof( buf ), _( "%1$.1f%%" ),  d );
+        str = buf;
+    }
+    gtr_label_set_text( GTK_LABEL( di->availability_lb ), str );
 
     /* dl_lb */
     if( n <= 0 )
@@ -948,6 +898,10 @@ info_page_new( struct DetailsImpl * di )
         /* have */
         l = di->have_lb = gtk_label_new( NULL );
         hig_workarea_add_row( t, &row, _( "Have:" ), l, NULL );
+
+        /* availability */
+        l = di->availability_lb = gtk_label_new( NULL );
+        hig_workarea_add_row( t, &row, _( "Availability:" ), l, NULL );
 
         /* downloaded */
         l = di->dl_lb = gtk_label_new( NULL );
@@ -1716,6 +1670,8 @@ buildTrackerSummary( const char * key, const tr_tracker_stat * st, gboolean show
     GString * gstr = g_string_new( NULL );
     const char * err_markup_begin = "<span color=\"red\">";
     const char * err_markup_end = "</span>";
+    const char * timeout_markup_begin = "<span color=\"#224466\">";
+    const char * timeout_markup_end = "</span>";
     const char * success_markup_begin = "<span color=\"#008B00\">";
     const char * success_markup_end = "</span>";
 
@@ -1742,13 +1698,15 @@ buildTrackerSummary( const char * key, const tr_tracker_stat * st, gboolean show
             g_string_append_c( gstr, '\n' );
             tr_strltime_rounded( timebuf, now - st->lastAnnounceTime, sizeof( timebuf ) );
             if( st->lastAnnounceSucceeded )
-                g_string_append_printf( gstr, _( "Got a list of %s%'d peers%s %s ago" ),
+                g_string_append_printf( gstr, _( "Got a list of %1$s%2$'d peers%3$s %4$s ago" ),
                                         success_markup_begin, st->lastAnnouncePeerCount, success_markup_end,
                                         timebuf );
+            else if( st->lastAnnounceTimedOut )
+                g_string_append_printf( gstr, _( "Peer list request %1$stimed out%2$s %3$s ago; will retry" ),
+                                        timeout_markup_begin, timeout_markup_end, timebuf );
             else
-                g_string_append_printf( gstr, _( "Got an error %s\"%s\"%s %s ago" ),
-                                        err_markup_begin, st->lastAnnounceResult, err_markup_end,
-                                        timebuf );
+                g_string_append_printf( gstr, _( "Got an error %1$s\"%2$s\"%3$s %4$s ago" ),
+                                        err_markup_begin, st->lastAnnounceResult, err_markup_end, timebuf );
         }
 
         switch( st->announceState )

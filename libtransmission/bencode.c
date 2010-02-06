@@ -18,8 +18,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <sys/types.h> /* stat() */
+#include <sys/stat.h> /* stat() */
 #include <locale.h>
-#include <unistd.h> /* close() */
+#include <unistd.h> /* stat(), close() */
 
 #include <event.h> /* evbuffer */
 
@@ -353,19 +355,12 @@ tr_bencLoad( const void * buf_in,
 ****
 ***/
 
-/* returns true if the given string length would fit in our string buffer */
-static inline int
-stringFitsInBuffer( const tr_benc * val, int len )
-{
-    return len < (int)sizeof( val->val.s.str.buf );
-}
-
 /* returns true if the benc's string was malloced.
  * this occurs when the string is too long for our string buffer */
 static inline int
 stringIsAlloced( const tr_benc * val )
 {
-    return !stringFitsInBuffer( val, val->val.s.len );
+    return val->val.s.len >= sizeof( val->val.s.str.buf );
 }
 
 /* returns a const pointer to the benc's string */
@@ -575,29 +570,34 @@ tr_bencDictFindRaw( tr_benc         * dict,
 void
 tr_bencInitRaw( tr_benc * val, const void * src, size_t byteCount )
 {
+    char * setme;
     tr_bencInit( val, TR_TYPE_STR );
 
-    if( stringFitsInBuffer( val, val->val.s.len = byteCount ))
-        memcpy( val->val.s.str.buf, src, byteCount );
+    /* There's no way in benc notation to distinguish between
+     * zero-terminated strings and raw byte arrays.
+     * Because of this, tr_bencMergeDicts() and tr_bencListCopy()
+     * don't know whether or not a TR_TYPE_STR node needs a '\0'.
+     * Append one, een to the raw arrays, just to be safe. */
+
+    if( byteCount < sizeof( val->val.s.str.buf ) )
+        setme = val->val.s.str.buf;
     else
-        val->val.s.str.ptr = tr_memdup( src, byteCount );
+        setme = val->val.s.str.ptr = tr_new( char, byteCount + 1 );
+
+    memcpy( setme, src, byteCount );
+    setme[byteCount] = '\0';
+    val->val.s.len = byteCount;
 }
 
 void
 tr_bencInitStr( tr_benc * val, const void * str, int len )
 {
-    tr_bencInit( val, TR_TYPE_STR );
-
     if( str == NULL )
         len = 0;
     else if( len < 0 )
         len = strlen( str );
 
-    if( stringFitsInBuffer( val, val->val.s.len = len )) {
-        memcpy( val->val.s.str.buf, str, len );
-        val->val.s.str.buf[len] = '\0';
-    } else
-        val->val.s.str.ptr = tr_strndup( str, len );
+    tr_bencInitRaw( val, str, len );
 }
 
 void
@@ -669,8 +669,7 @@ tr_bencListAdd( tr_benc * list )
 }
 
 tr_benc *
-tr_bencListAddInt( tr_benc * list,
-                   int64_t   val )
+tr_bencListAddInt( tr_benc * list, int64_t val )
 {
     tr_benc * node = tr_bencListAdd( list );
 
@@ -679,12 +678,34 @@ tr_bencListAddInt( tr_benc * list,
 }
 
 tr_benc *
-tr_bencListAddStr( tr_benc *    list,
-                   const char * val )
+tr_bencListAddReal( tr_benc * list, double val )
 {
     tr_benc * node = tr_bencListAdd( list );
+    tr_bencInitReal( node, val );
+    return node;
+}
 
+tr_benc *
+tr_bencListAddBool( tr_benc * list, tr_bool val )
+{
+    tr_benc * node = tr_bencListAdd( list );
+    tr_bencInitBool( node, val );
+    return node;
+}
+
+tr_benc *
+tr_bencListAddStr( tr_benc * list, const char * val )
+{
+    tr_benc * node = tr_bencListAdd( list );
     tr_bencInitStr( node, val, -1 );
+    return node;
+}
+
+tr_benc *
+tr_bencListAddRaw( tr_benc * list, const uint8_t * val, size_t len )
+{
+    tr_benc * node = tr_bencListAdd( list );
+    tr_bencInitRaw( node, val, len );
     return node;
 }
 
@@ -801,6 +822,35 @@ tr_bencDictAddStr( tr_benc * dict, const char * key, const char * val )
 }
 
 tr_benc*
+tr_bencDictAddRaw( tr_benc *    dict,
+                   const char * key,
+                   const void * src,
+                   size_t       len )
+{
+    tr_benc * child;
+
+    /* see if it already exists, and if so, try to reuse it */
+    if(( child = tr_bencDictFind( dict, key ))) {
+        if( tr_bencIsString( child ) ) {
+            if( stringIsAlloced( child ) )
+                tr_free( child->val.s.str.ptr );
+        } else {
+            tr_bencDictRemove( dict, key );
+            child = NULL;
+        }
+    }
+
+    /* if it doesn't exist, create it */
+    if( child == NULL )
+        child = tr_bencDictAdd( dict, key );
+
+    /* set it */
+    tr_bencInitRaw( child, src, len );
+
+    return child;
+}
+
+tr_benc*
 tr_bencDictAddList( tr_benc *    dict,
                     const char * key,
                     size_t       reserveCount )
@@ -819,18 +869,6 @@ tr_bencDictAddDict( tr_benc *    dict,
     tr_benc * child = tr_bencDictAdd( dict, key );
 
     tr_bencInitDict( child, reserveCount );
-    return child;
-}
-
-tr_benc*
-tr_bencDictAddRaw( tr_benc *    dict,
-                   const char * key,
-                   const void * src,
-                   size_t       len )
-{
-    tr_benc * child = tr_bencDictAdd( dict, key );
-
-    tr_bencInitRaw( child, src, len );
     return child;
 }
 
@@ -1402,6 +1440,51 @@ static const struct WalkFuncs jsonWalkFuncs = { jsonIntFunc,
 ****
 ***/
 
+static void
+tr_bencListCopy( tr_benc * target, const tr_benc * src )
+{
+    int i = 0;
+    const tr_benc * val;
+
+    while(( val = tr_bencListChild( (tr_benc*)src, i++ )))
+    {
+       if( tr_bencIsBool( val ) )
+       {
+           tr_bool boolVal = 0;
+           tr_bencGetBool( val, &boolVal );
+           tr_bencListAddBool( target, boolVal );
+       }
+       else if( tr_bencIsReal( val ) )
+       {
+           double realVal = 0;
+           tr_bencGetReal( val, &realVal );
+           tr_bencListAddReal( target, realVal );
+       }
+       else if( tr_bencIsInt( val ) )
+       {
+           int64_t intVal = 0;
+           tr_bencGetInt( val, &intVal );
+           tr_bencListAddInt( target, intVal );
+       }
+       else if( tr_bencIsString( val ) )
+       {
+           tr_bencListAddRaw( target, (const uint8_t*)getStr( val ), val->val.s.len );
+       }
+       else if( tr_bencIsDict( val ) )
+       {
+           tr_bencMergeDicts( tr_bencListAddDict( target, 0 ), val );
+       }
+       else if ( tr_bencIsList( val ) )
+       {
+           tr_bencListCopy( tr_bencListAddList( target, 0 ), val );
+       }
+       else
+       {
+           tr_err( "tr_bencListCopy skipping item" );
+       }
+   }
+}
+
 static size_t
 tr_bencDictSize( const tr_benc * dict )
 {
@@ -1468,13 +1551,18 @@ tr_bencMergeDicts( tr_benc * target, const tr_benc * source )
             }
             else if( tr_bencIsString( val ) )
             {
-                const char * strVal = NULL;
-                tr_bencGetStr( val, &strVal );
-                tr_bencDictAddStr( target, key, strVal );
+                tr_bencDictAddRaw( target, key, getStr( val ), val->val.s.len );
             }
             else if( tr_bencIsDict( val ) && tr_bencDictFindDict( target, key, &t ) )
             {
                 tr_bencMergeDicts( t, val );
+            }
+            else if( tr_bencIsList( val ) )
+            {
+                if( tr_bencDictFind( target, key ) == NULL )
+                {
+                    tr_bencListCopy( tr_bencDictAddList( target, key, tr_bencListSize( val ) ), val );
+                }
             }
             else
             {
@@ -1529,31 +1617,62 @@ tr_bencToStr( const tr_benc * top, tr_fmt_mode mode, int * len )
 int
 tr_bencToFile( const tr_benc * top, tr_fmt_mode mode, const char * filename )
 {
+    char * tmp;
+    int fd;
     int err = 0;
-    FILE * fp = fopen( filename, "wb+" );
 
-    if( fp == NULL )
-    {
-        err = errno;
-        tr_err( _( "Couldn't open \"%1$s\": %2$s" ),
-                filename, tr_strerror( errno ) );
-    }
-    else
+    /* if the file already exists, try to move it out of the way & keep it as a backup */
+    tmp = tr_strdup_printf( "%s.tmp.XXXXXX", filename );
+    fd = mkstemp( tmp );
+    if( fd >= 0 )
     {
         int len;
         char * str = tr_bencToStr( top, mode, &len );
+        tr_dbg( "Writing %d bytes to temporary file \"%s\"", (int)len, tmp );
 
-        if( fwrite( str, 1, len, fp ) == (size_t)len )
-            tr_dbg( "tr_bencToFile saved \"%s\"", filename );
-        else {
+        if( write( fd, str, len ) == (ssize_t)len )
+        {
+            close( fd );
+
+            if( !unlink( filename ) || ( errno == ENOENT ) )
+            {
+                tr_dbg( "Renaming \"%s\" as \"%s\"", tmp, filename );
+
+                if( !rename( tmp, filename ) )
+                {
+                    tr_inf( _( "Saved \"%s\"" ), filename );
+                }
+                else
+                {
+                    err = errno;
+                    tr_err( _( "Couldn't save file \"%1$s\": %2$s" ), filename, tr_strerror( err ) );
+                    unlink( tmp );
+                }
+            }
+            else
+            {
+                err = errno;
+                tr_err( _( "Couldn't save file \"%1$s\": %2$s" ), filename, tr_strerror( err ) );
+                unlink( tmp );
+            }
+        }
+        else
+        {
             err = errno;
-            tr_err( _( "Couldn't save file \"%1$s\": %2$s" ), filename, tr_strerror( errno ) );
+            tr_err( _( "Couldn't save temporary file \"%1$s\": %2$s" ), tmp, tr_strerror( err ) );
+            close( fd );
+            unlink( tmp );
         }
 
         tr_free( str );
-        fclose( fp );
+    }
+    else
+    {
+        err = errno;
+        tr_err( _( "Couldn't save temporary file \"%1$s\": %2$s" ), tmp, tr_strerror( err ) );
     }
 
+    tr_free( tmp );
     return err;
 }
 

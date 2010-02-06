@@ -375,7 +375,7 @@ addTrackerStats( const tr_tracker_stat * st, int n, tr_benc * list )
     for( i=0; i<n; ++i )
     {
         const tr_tracker_stat * s = &st[i];
-        tr_benc * d = tr_bencListAddDict( list, 23 );
+        tr_benc * d = tr_bencListAddDict( list, 24 );
         tr_bencDictAddStr ( d, "announce", s->announce );
         tr_bencDictAddInt ( d, "announceState", s->announceState );
         tr_bencDictAddInt ( d, "downloadCount", s->downloadCount );
@@ -389,6 +389,7 @@ addTrackerStats( const tr_tracker_stat * st, int n, tr_benc * list )
         tr_bencDictAddInt ( d, "lastAnnounceStartTime", s->lastAnnounceStartTime );
         tr_bencDictAddBool( d, "lastAnnounceSucceeded", s->lastAnnounceSucceeded );
         tr_bencDictAddInt ( d, "lastAnnounceTime", s->lastAnnounceTime );
+        tr_bencDictAddBool( d, "lastAnnounceTimedOut", s->lastAnnounceTimedOut );
         tr_bencDictAddStr ( d, "lastScrapeResult", s->lastScrapeResult );
         tr_bencDictAddInt ( d, "lastScrapeStartTime", s->lastScrapeStartTime );
         tr_bencDictAddBool( d, "lastScrapeSucceeded", s->lastScrapeSucceeded );
@@ -1061,6 +1062,9 @@ torrentAdd( tr_session               * session,
         if( tr_bencDictFindInt( args_in, "peer-limit", &i ) )
             tr_ctorSetPeerLimit( ctor, TR_FORCE, i );
 
+        if( tr_bencDictFindInt( args_in, "bandwidthPriority", &i ) )
+            tr_ctorSetBandwidthPriority( ctor, i );
+
         if( tr_bencDictFindList( args_in, "files-unwanted", &l ) ) {
             tr_file_index_t fileCount;
             tr_file_index_t * files = fileListFromList( l, &fileCount );
@@ -1093,7 +1097,7 @@ torrentAdd( tr_session               * session,
             tr_free( files );
         }
 
-        dbgmsg( "torrentAdd: filename is \"%s\"", filename );
+        dbgmsg( "torrentAdd: filename is \"%s\"", filename ? filename : "(null)" );
 
         if( isCurlURL( filename ) )
         {
@@ -1115,7 +1119,7 @@ torrentAdd( tr_session               * session,
             }
             else if( !strncmp( fname, "magnet:?", 8 ) )
             {
-                tr_ctorSetMagnet( ctor, fname );
+                tr_ctorSetMetainfoFromMagnetLink( ctor, fname );
             }
             else
             {
@@ -1279,6 +1283,7 @@ sessionGet( tr_session               * s,
     tr_bencDictAddBool( d, TR_PREFS_KEY_ALT_SPEED_TIME_ENABLED, tr_sessionUsesAltSpeedTime(s) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_BLOCKLIST_ENABLED, tr_blocklistIsEnabled( s ) );
     tr_bencDictAddInt ( d, "blocklist-size", tr_blocklistGetRuleCount( s ) );
+    tr_bencDictAddStr ( d, "config-dir", tr_sessionGetConfigDir( s ) );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_DOWNLOAD_DIR, tr_sessionGetDownloadDir( s ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_LIMIT_GLOBAL, tr_sessionGetPeerLimit( s ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_LIMIT_TORRENT, tr_sessionGetPeerLimitPerTorrent( s ) );

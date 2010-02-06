@@ -39,7 +39,7 @@ if( tr_deepLoggingIsActive( ) ) do { \
 enum
 {
     /* unless the tracker says otherwise, rescrape this frequently */
-    DEFAULT_SCRAPE_INTERVAL_SEC = ( 60 * 15 ),
+    DEFAULT_SCRAPE_INTERVAL_SEC = ( 60 * 30 ),
 
     /* unless the tracker says otherwise, this is the announce interval */
     DEFAULT_ANNOUNCE_INTERVAL_SEC = ( 60 * 10 ),
@@ -47,20 +47,11 @@ enum
     /* unless the tracker says otherwise, this is the announce min_interval */
     DEFAULT_ANNOUNCE_MIN_INTERVAL_SEC = ( 60 * 2 ),
 
-    /* how long to wait before a reannounce the first time we get an error */
-    FIRST_ANNOUNCE_RETRY_INTERVAL_SEC = 30,
-
-    /* how long to wait before a rescrape the first time we get an error */
-    FIRST_SCRAPE_RETRY_INTERVAL_SEC = 120,
-
     /* the length of the 'key' argument passed in tracker requests */
     KEYLEN = 8,
 
-    /* how many scrapes we allow at one time */
-    MAX_CONCURRENT_SCRAPES = 96,
-
-    /* how many announces we allow at one time */
-    MAX_CONCURRENT_ANNOUNCES = 96,
+    /* how many web tasks we allow at one time */
+    MAX_CONCURRENT_TASKS = 48,
 
     /* if a tracker takes more than this long to respond,
      * we treat it as nonresponsive */
@@ -112,6 +103,9 @@ typedef struct
 
     /* the last time we sent an announce or scrape message */
     time_t lastRequestTime;
+
+    /* the last successful announce/scrape time for this host */
+    time_t lastSuccessfulRequest;
 }
 tr_host;
 
@@ -205,16 +199,14 @@ typedef struct tr_announcer
     tr_ptrArray stops; /* struct stop_message */
     tr_session * session;
     struct event * upkeepTimer;
-    int announceSlotsAvailable;
-    int scrapeSlotsAvailable;
+    int slotsAvailable;
 }
 tr_announcer;
 
 tr_bool
 tr_announcerHasBacklog( const struct tr_announcer * announcer )
 {
-    return ( announcer->scrapeSlotsAvailable < 1 )
-        || ( announcer->announceSlotsAvailable < 1 );
+    return announcer->slotsAvailable < 1;
 }
 
 static tr_host *
@@ -248,8 +240,7 @@ tr_announcerInit( tr_session * session )
     a->hosts = TR_PTR_ARRAY_INIT;
     a->stops = TR_PTR_ARRAY_INIT;
     a->session = session;
-    a->announceSlotsAvailable = MAX_CONCURRENT_ANNOUNCES;
-    a->scrapeSlotsAvailable = MAX_CONCURRENT_SCRAPES;
+    a->slotsAvailable = MAX_CONCURRENT_TASKS;
     a->upkeepTimer = tr_new0( struct event, 1 );
     evtimer_set( a->upkeepTimer, onUpkeepTimer, a );
     tr_timerAdd( a->upkeepTimer, UPKEEP_INTERVAL_SECS, 0 );
@@ -367,6 +358,7 @@ typedef struct
     time_t lastAnnounceStartTime;
     tr_bool lastScrapeSucceeded;
     tr_bool lastAnnounceSucceeded;
+    tr_bool lastAnnounceTimedOut;
 
     time_t scrapeAt;
     time_t manualAnnounceAllowedAt;
@@ -381,8 +373,6 @@ typedef struct
     int scrapeIntervalSec;
     int announceIntervalSec;
     int announceMinIntervalSec;
-    int retryAnnounceIntervalSec;
-    int retryScrapeIntervalSec;
 
     int lastAnnouncePeerCount;
 
@@ -437,8 +427,6 @@ tierIncrementTracker( tr_tier * tier )
     tier->scrapeIntervalSec = DEFAULT_SCRAPE_INTERVAL_SEC;
     tier->announceIntervalSec = DEFAULT_ANNOUNCE_INTERVAL_SEC;
     tier->announceMinIntervalSec = DEFAULT_ANNOUNCE_MIN_INTERVAL_SEC;
-    tier->retryAnnounceIntervalSec = FIRST_ANNOUNCE_RETRY_INTERVAL_SEC;
-    tier->retryScrapeIntervalSec = FIRST_SCRAPE_RETRY_INTERVAL_SEC;
     tier->isAnnouncing = FALSE;
     tier->isScraping = FALSE;
     tier->lastAnnounceStartTime = 0;
@@ -661,6 +649,7 @@ createAnnounceURL( const tr_announcer     * announcer,
     const char * ann = tracker->announce;
     struct evbuffer * buf = evbuffer_new( );
     char * ret;
+    const char * str;
     const unsigned char * ipv6;
 
     evbuffer_add_printf( buf, "%s"
@@ -673,8 +662,7 @@ createAnnounceURL( const tr_announcer     * announcer,
                               "&left=%" PRIu64
                               "&numwant=%d"
                               "&key=%s"
-                              "&compact=1"
-                              "&supportcrypto=1",
+                              "&compact=1",
                               ann,
                               strchr( ann, '?' ) ? '&' : '?',
                               torrent->info.hashEscaped,
@@ -689,17 +677,13 @@ createAnnounceURL( const tr_announcer     * announcer,
     if( torrent->corruptCur )
         evbuffer_add_printf( buf, "&corrupt=%" PRIu64, torrent->corruptCur );
 
-    if( !isStopping )
-        evbuffer_add_printf( buf, "&upload_only=%d", tr_torrentIsSeed( torrent ) ? 1 : 0 );
+    str = eventName;
+    if( str && *str )
+        evbuffer_add_printf( buf, "&event=%s", str );
 
-    if( announcer->session->encryptionMode == TR_ENCRYPTION_REQUIRED )
-        evbuffer_add_printf( buf, "&requirecrypto=1" );
-
-    if( eventName && *eventName )
-        evbuffer_add_printf( buf, "&event=%s", eventName );
-
-    if( tracker->tracker_id && *tracker->tracker_id )
-        evbuffer_add_printf( buf, "&trackerid=%s", tracker->tracker_id );
+    str = tracker->tracker_id;
+    if( str && *str )
+        evbuffer_add_printf( buf, "&trackerid=%s", str );
 
     /* There are two incompatible techniques for announcing an IPv6 address.
        BEP-7 suggests adding an "ipv6=" parameter to the announce URL,
@@ -719,9 +703,8 @@ createAnnounceURL( const tr_announcer     * announcer,
     }
 
     ret = tr_strndup( EVBUFFER_DATA( buf ), EVBUFFER_LENGTH( buf ) );
-    evbuffer_free( buf );
-
     dbgmsg( tier, "announce URL is \"%s\"", ret );
+    evbuffer_free( buf );
     return ret;
 }
 
@@ -984,6 +967,20 @@ tierIsNotResponding( const tr_tier * tier, const time_t now )
 }
 
 static int
+getRetryInterval( const tr_host * host )
+{
+    int interval;
+    const int jitter = tr_cryptoWeakRandInt( 120 );
+    const time_t timeSinceLastSuccess = tr_time() - host->lastSuccessfulRequest;
+         if( timeSinceLastSuccess < 15*60 ) interval = 0;
+    else if( timeSinceLastSuccess < 30*60 ) interval = 60*4;
+    else if( timeSinceLastSuccess < 45*60 ) interval = 60*8;
+    else if( timeSinceLastSuccess < 60*60 ) interval = 60*16;
+    else                                    interval = 60*32;
+    return interval + jitter;
+}
+
+static int
 compareTiers( const void * va, const void * vb )
 {
     int ret = 0;
@@ -1095,8 +1092,6 @@ parseAnnounceResponse( tr_tier     * tier,
         const uint8_t * raw;
 
         success = TRUE;
-
-        tier->retryAnnounceIntervalSec = FIRST_ANNOUNCE_RETRY_INTERVAL_SEC;
 
         if( tr_bencDictFindStr( &benc, "failure reason", &str ) )
         {
@@ -1268,7 +1263,7 @@ onAnnounceDone( tr_session   * session,
 
         if( responseCode == 0 )
         {
-            const int interval = 120 + tr_cryptoWeakRandInt( 120 );
+            const int interval = getRetryInterval( tier->currentTracker->host );
             dbgmsg( tier, "No response from tracker... retrying in %d seconds.", interval );
             tier->manualAnnounceAllowedAt = ~(time_t)0;
             tierSetNextAnnounce( tier, tier->announceEvent, now + interval );
@@ -1316,9 +1311,9 @@ onAnnounceDone( tr_session   * session,
              * cases in which the server is aware that it has erred or is
              * incapable of performing the request.  So we pause a bit and
              * try again. */
+            const int interval = getRetryInterval( tier->currentTracker->host );
             tier->manualAnnounceAllowedAt = ~(time_t)0;
-            tierSetNextAnnounce( tier, tier->announceEvent, now + tier->retryAnnounceIntervalSec );
-            tier->retryAnnounceIntervalSec *= 2;
+            tierSetNextAnnounce( tier, tier->announceEvent, now + interval );
         }
         else
         {
@@ -1330,9 +1325,15 @@ onAnnounceDone( tr_session   * session,
         }
 
         tier->lastAnnounceSucceeded = success;
+        tier->lastAnnounceTimedOut = responseCode == 0;
 
         if( success )
+        {
             tier->isRunning = data->isRunningOnSuccess;
+
+            if( tier->currentTracker->host )
+                tier->currentTracker->host->lastSuccessfulRequest = now;
+        }
 
         if( !success )
             tierIncrementTracker( tier );
@@ -1340,7 +1341,7 @@ onAnnounceDone( tr_session   * session,
 
     if( announcer != NULL )
     {
-        ++announcer->announceSlotsAvailable;
+        ++announcer->slotsAvailable;
     }
 
     tr_free( data );
@@ -1389,7 +1390,7 @@ tierAnnounce( tr_announcer * announcer, tr_tier * tier )
 
     tier->isAnnouncing = TRUE;
     tier->lastAnnounceStartTime = now;
-    --announcer->announceSlotsAvailable;
+    --announcer->slotsAvailable;
     tr_webRun( announcer->session, url, NULL, onAnnounceDone, data );
 
     tr_free( url );
@@ -1435,18 +1436,11 @@ parseScrapeResponse( tr_tier     * tier,
 
             if( tr_bencDictFindDict( val, "flags", &flags ) )
                 if( ( tr_bencDictFindInt( flags, "min_request_interval", &intVal ) ) )
-                    tier->scrapeIntervalSec = intVal;
-
-            /* as per ticket #1045, safeguard against trackers returning
-             * a very low min_request_interval... */
-            if( tier->scrapeIntervalSec < DEFAULT_SCRAPE_INTERVAL_SEC )
-                tier->scrapeIntervalSec = DEFAULT_SCRAPE_INTERVAL_SEC;
+                    tier->scrapeIntervalSec = MAX( DEFAULT_SCRAPE_INTERVAL_SEC, (int)intVal );
 
             tr_tordbg( tier->tor,
                        "Scrape successful. Rescraping in %d seconds.",
                        tier->scrapeIntervalSec );
-
-            tier->retryScrapeIntervalSec = FIRST_SCRAPE_RETRY_INTERVAL_SEC;
         }
     }
 
@@ -1475,7 +1469,7 @@ onScrapeDone( tr_session   * session,
     const time_t now = tr_time( );
 
     if( announcer )
-        ++announcer->scrapeSlotsAvailable;
+        ++announcer->slotsAvailable;
 
     if( announcer && tier )
     {
@@ -1514,8 +1508,7 @@ onScrapeDone( tr_session   * session,
         }
         else
         {
-            const int interval = tier->retryScrapeIntervalSec;
-            tier->retryScrapeIntervalSec *= 2;
+            const int interval = getRetryInterval( tier->currentTracker->host );
 
             /* Don't retry on a 4xx.
              * Retry at growing intervals on a 5xx */
@@ -1536,6 +1529,9 @@ onScrapeDone( tr_session   * session,
         }
 
         tier->lastScrapeSucceeded = success;
+
+        if( success && tier->currentTracker->host )
+            tier->currentTracker->host->lastSuccessfulRequest = now;
     }
 
     tr_free( data );
@@ -1567,7 +1563,7 @@ tierScrape( tr_announcer * announcer, tr_tier * tier )
 
     tier->isScraping = TRUE;
     tier->lastScrapeStartTime = now;
-    --announcer->scrapeSlotsAvailable;
+    --announcer->slotsAvailable;
     dbgmsg( tier, "scraping \"%s\"", url );
     tr_webRun( announcer->session, url, NULL, onScrapeDone, data );
 
@@ -1602,7 +1598,7 @@ tierNeedsToAnnounce( const tr_tier * tier, const time_t now )
 static tr_bool
 tierNeedsToScrape( const tr_tier * tier, const time_t now )
 {
-    return !tier->isScraping
+    return ( !tier->isScraping )
         && ( tier->scrapeAt != 0 )
         && ( tier->scrapeAt <= now )
         && ( tier->currentTracker != NULL )
@@ -1612,12 +1608,10 @@ tierNeedsToScrape( const tr_tier * tier, const time_t now )
 static void
 announceMore( tr_announcer * announcer )
 {
-    const tr_bool canAnnounce = announcer->announceSlotsAvailable > 0;
-    const tr_bool canScrape = announcer->scrapeSlotsAvailable > 0;
     tr_torrent * tor = NULL;
     const time_t now = tr_time( );
 
-    if( announcer->announceSlotsAvailable > 0 )
+    if( announcer->slotsAvailable > 0 )
     {
         int i;
         int n;
@@ -1630,9 +1624,9 @@ announceMore( tr_announcer * announcer )
                 n = tr_ptrArraySize( &tor->tiers->tiers );
                 for( i=0; i<n; ++i ) {
                     tr_tier * tier = tr_ptrArrayNth( &tor->tiers->tiers, i );
-                    if( canAnnounce && tierNeedsToAnnounce( tier, now ) )
+                    if( tierNeedsToAnnounce( tier, now ) )
                         tr_ptrArrayAppend( &announceMe, tier );
-                    else if( canScrape && tierNeedsToScrape( tier, now ) )
+                    else if( tierNeedsToScrape( tier, now ) )
                         tr_ptrArrayAppend( &scrapeMe, tier );
                 }
             }
@@ -1640,20 +1634,19 @@ announceMore( tr_announcer * announcer )
 
         /* if there are more tiers than slots available, prioritize */
         n = tr_ptrArraySize( &announceMe );
-        if( n > announcer->announceSlotsAvailable )
+        if( n > announcer->slotsAvailable )
             qsort( tr_ptrArrayBase( &announceMe ), n, sizeof( tr_tier * ), compareTiers );
 
         /* announce some */
-        n = MIN( tr_ptrArraySize( &announceMe ), announcer->announceSlotsAvailable );
+        n = MIN( tr_ptrArraySize( &announceMe ), announcer->slotsAvailable );
         for( i=0; i<n; ++i ) {
             tr_tier * tier = tr_ptrArrayNth( &announceMe, i );
             dbgmsg( tier, "announcing tier %d of %d", i, n );
             tierAnnounce( announcer, tier );
         }
 
-
         /* scrape some */
-        n = MIN( tr_ptrArraySize( &scrapeMe ), announcer->scrapeSlotsAvailable );
+        n = MIN( tr_ptrArraySize( &scrapeMe ), announcer->slotsAvailable );
         for( i=0; i<n; ++i ) {
             tr_tier * tier = tr_ptrArrayNth( &scrapeMe, i );
             dbgmsg( tier, "scraping tier %d of %d", (i+1), n );
@@ -1801,6 +1794,7 @@ tr_announcerStats( const tr_torrent * torrent,
                     st->lastAnnounceTime = tier->lastAnnounceTime;
                     tr_strlcpy( st->lastAnnounceResult, tier->lastAnnounceStr, sizeof( st->lastAnnounceResult ) );
                     st->lastAnnounceSucceeded = tier->lastAnnounceSucceeded;
+                    st->lastAnnounceTimedOut = tier->lastAnnounceTimedOut;
                     st->lastAnnouncePeerCount = tier->lastAnnouncePeerCount;
                 }
 

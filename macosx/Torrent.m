@@ -565,7 +565,7 @@ int trashDataFile(const char * filename)
 
 - (NSString *) name
 {
-    return fInfo->name != NULL ? [NSString stringWithUTF8String: fInfo->name] : @"";
+    return fInfo->name != NULL ? [NSString stringWithUTF8String: fInfo->name] : fHashString;
 }
 
 - (BOOL) isFolder
@@ -595,7 +595,8 @@ int trashDataFile(const char * filename)
     {
         if (stats[i].tier != prevTier)
         {
-            [trackers addObject: [NSNumber numberWithInteger: stats[i].tier]];
+            [trackers addObject: [NSDictionary dictionaryWithObjectsAndKeys: [NSNumber numberWithInteger: stats[i].tier], @"Tier",
+                                    [self name], @"Name", nil]];
             prevTier = stats[i].tier;
         }
         
@@ -1563,7 +1564,7 @@ int trashDataFile(const char * filename)
             result = tr_ctorSetMetainfoFromFile(ctor, [path UTF8String]);
         
         if (result != TR_PARSE_OK && magnetAddress)
-            result = tr_ctorSetMagnet(ctor, [magnetAddress UTF8String]);
+            result = tr_ctorSetMetainfoFromMagnetLink(ctor, [magnetAddress UTF8String]);
         
         //backup - shouldn't be needed after upgrade to 1.70
         if (result != TR_PARSE_OK && hashString)

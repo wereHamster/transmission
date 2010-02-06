@@ -38,12 +38,11 @@ struct tr_ctor
     tr_bool                 saveInOurTorrentsDir;
     tr_bool                 doDelete;
 
+    tr_priority_t           bandwidthPriority;
     tr_bool                 isSet_metainfo;
     tr_bool                 isSet_delete;
     tr_benc                 metainfo;
     char *                  sourceFile;
-
-    tr_magnet_info        * magnetInfo;
 
     struct optional_args    optionalArgs[2];
 
@@ -105,16 +104,26 @@ tr_ctorGetSourceFile( const tr_ctor * ctor )
 }
 
 int
-tr_ctorSetMagnet( tr_ctor * ctor, const char * uri )
+tr_ctorSetMetainfoFromMagnetLink( tr_ctor * ctor, const char * magnet_link )
 {
     int err;
+    tr_magnet_info * magnet_info = tr_magnetParse( magnet_link );
 
-    if( ctor->magnetInfo != NULL )
-        tr_magnetFree( ctor->magnetInfo );
+    if( magnet_info == NULL )
+        err = -1;
+    else {
+        int len;
+        tr_benc tmp;
+        char * str;
 
-    ctor->magnetInfo = tr_magnetParse( uri );
+        tr_magnetCreateMetainfo( magnet_info, &tmp );
+        str = tr_bencToStr( &tmp, TR_FMT_BENC, &len );
+        err = tr_ctorSetMetainfo( ctor, (const uint8_t*)str, len );
 
-    err = ctor->magnetInfo == NULL;
+        tr_free( str );
+        tr_magnetFree( magnet_info );
+    }
+
     return err;
 }
 
@@ -389,19 +398,6 @@ tr_ctorGetIncompleteDir( const tr_ctor  * ctor,
 }
 
 int
-tr_ctorGetMagnet( const tr_ctor * ctor, const tr_magnet_info ** setme )
-{
-    int err = 0;
-
-    if( ctor->magnetInfo == NULL )
-        err = 1;
-    else
-        *setme = ctor->magnetInfo;
-
-    return err;
-}
-
-int
 tr_ctorGetMetainfo( const tr_ctor *  ctor,
                     const tr_benc ** setme )
 {
@@ -425,12 +421,37 @@ tr_ctorGetSession( const tr_ctor * ctor )
 ****
 ***/
 
+static tr_bool
+isPriority( int i )
+{
+    return (i==TR_PRI_LOW) || (i==TR_PRI_NORMAL) || (i==TR_PRI_HIGH);
+}
+
+void
+tr_ctorSetBandwidthPriority( tr_ctor * ctor, tr_priority_t priority )
+{
+fprintf( stderr, "in tr_ctorSetPriority with %d\n", (int)priority );
+    if( isPriority( priority ) )
+        ctor->bandwidthPriority = priority;
+}
+
+tr_priority_t
+tr_ctorGetBandwidthPriority( const tr_ctor * ctor )
+{
+    return ctor->bandwidthPriority;
+}
+
+/***
+****
+***/
+
 tr_ctor*
 tr_ctorNew( const tr_session * session )
 {
     tr_ctor * ctor = tr_new0( struct tr_ctor, 1 );
 
     ctor->session = session;
+    ctor->bandwidthPriority = TR_PRI_NORMAL;
     tr_ctorSetPaused( ctor, TR_FALLBACK, FALSE );
     if( session != NULL ) {
         tr_ctorSetPeerLimit( ctor, TR_FALLBACK, session->peerLimitPerTorrent );

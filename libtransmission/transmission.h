@@ -339,6 +339,18 @@ void tr_sessionSetDownloadDir( tr_session * session, const char * downloadDir );
  */
 const char * tr_sessionGetDownloadDir( const tr_session * session );
 
+
+/**
+ * @brief Set the torrent's bandwidth priority.
+ */
+void tr_ctorSetBandwidthPriority( tr_ctor * ctor, tr_priority_t priority );
+
+/**
+ * @brief Get the torrent's bandwidth priority.
+ */
+tr_priority_t tr_ctorGetBandwidthPriority( const tr_ctor * ctor );
+
+
 /**
  * @brief set the per-session incomplete download folder.
  *
@@ -867,8 +879,8 @@ void  tr_ctorFree( tr_ctor * ctor );
 /** @brief Set whether or not to delete the source .torrent file when a torrent is added. (Default: False) */
 void  tr_ctorSetDeleteSource( tr_ctor * ctor, tr_bool doDelete );
 
-/** @brief Set the link for creating a tr_torrent from a magnet link */
-int tr_ctorSetMagnet( tr_ctor * ctor, const char * magnet_link );
+/** @brief Set the constructor's metainfo from a magnet link */
+int tr_ctorSetMetainfoFromMagnetLink( tr_ctor * ctor, const char * magnet_link );
 
 /** @brief Set the constructor's metainfo from a raw benc already in memory */
 int tr_ctorSetMetainfo( tr_ctor * ctor, const uint8_t * metainfo, size_t len );
@@ -1062,6 +1074,8 @@ tr_torrent* tr_torrentFindFromId( tr_session * session, int id );
 
 tr_torrent* tr_torrentFindFromHash( tr_session * session, const uint8_t * hash );
 
+/** @brief Convenience function similar to tr_torrentFindFromHash() */
+tr_torrent* tr_torrentFindFromMagnetLink( tr_session * session, const char * link );
 
 
 /**
@@ -1426,6 +1440,9 @@ typedef struct
     /* whether or not the last announce was a success.
        if "hasAnnounced" is false, this field is undefined */
     tr_bool lastAnnounceSucceeded;
+
+    /* whether or not the last announce timed out. */
+    tr_bool lastAnnounceTimedOut;
 
     /* when the last announce was completed.
        if "hasAnnounced" is false, this field is undefined */

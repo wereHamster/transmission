@@ -351,15 +351,27 @@ gtr_is_hex_hashcode( const char * str )
     return TRUE;
 }
 
+static GtkWindow *
+getWindow( GtkWidget * w )
+{
+    if( w == NULL )
+        return NULL;
+
+    if( GTK_IS_WINDOW( w ) )
+        return GTK_WINDOW( w );
+
+    return GTK_WINDOW( gtk_widget_get_ancestor( w, GTK_TYPE_WINDOW ) );
+}
+
 void
 addTorrentErrorDialog( GtkWidget *  child,
                        int          err,
                        const char * filename )
 {
-    GtkWidget *  w;
-    GtkWidget *  win;
+    char * secondary;
     const char * fmt;
-    char *       secondary;
+    GtkWidget * w;
+    GtkWindow * win = getWindow( child );
 
     switch( err )
     {
@@ -368,15 +380,12 @@ addTorrentErrorDialog( GtkWidget *  child,
         default: fmt = _( "The torrent file \"%s\" encountered an unknown error." ); break;
     }
     secondary = g_strdup_printf( fmt, filename );
-    win = ( !child || GTK_IS_WINDOW( child ) )
-          ? child
-          : gtk_widget_get_ancestor( child ? GTK_WIDGET(
-                                         child ) : NULL, GTK_TYPE_WINDOW );
-    w = gtk_message_dialog_new( GTK_WINDOW( win ),
-                               GTK_DIALOG_DESTROY_WITH_PARENT,
-                               GTK_MESSAGE_ERROR,
-                               GTK_BUTTONS_CLOSE,
-                               "%s", _( "Error opening torrent" ) );
+
+    w = gtk_message_dialog_new( win,
+                                GTK_DIALOG_DESTROY_WITH_PARENT,
+                                GTK_MESSAGE_ERROR,
+                                GTK_BUTTONS_CLOSE,
+                                "%s", _( "Error opening torrent" ) );
     gtk_message_dialog_format_secondary_text( GTK_MESSAGE_DIALOG( w ),
                                               "%s", secondary );
     g_signal_connect_swapped( w, "response",
@@ -384,6 +393,7 @@ addTorrentErrorDialog( GtkWidget *  child,
     gtk_widget_show_all( w );
     g_free( secondary );
 }
+
 typedef void ( PopupFunc )( GtkWidget*, GdkEventButton* );
 
 /* pop up the context menu if a user right-clicks.
@@ -627,6 +637,86 @@ gtr_button_new_from_stock( const char * stock,
 ***/
 
 void
+gtr_priority_combo_set_value( GtkWidget * w, tr_priority_t value )
+{
+    int i;
+    int currentValue;
+    const int column = 0;
+    GtkTreeIter iter;
+    GtkComboBox * combobox = GTK_COMBO_BOX( w );
+    GtkTreeModel * model = gtk_combo_box_get_model( combobox );
+
+    /* do the value and current value match? */
+    if( gtk_combo_box_get_active_iter( combobox, &iter ) ) {
+        gtk_tree_model_get( model, &iter, column, &currentValue, -1 );
+        if( currentValue == value )
+            return;
+    }
+
+    /* find the one to select */
+    i = 0;
+    while(( gtk_tree_model_iter_nth_child( model, &iter, NULL, i++ ))) {
+        gtk_tree_model_get( model, &iter, column, &currentValue, -1 );
+        if( currentValue == value ) {
+            gtk_combo_box_set_active_iter( combobox, &iter );
+            return;
+        }
+    }
+}
+ 
+tr_priority_t
+gtr_priority_combo_get_value( GtkWidget * w )
+{
+    int value = 0;
+    GtkTreeIter iter;
+    GtkComboBox * combo_box = GTK_COMBO_BOX( w );
+
+    if( gtk_combo_box_get_active_iter( combo_box, &iter ) )
+        gtk_tree_model_get( gtk_combo_box_get_model( combo_box ), &iter, 0, &value, -1 );
+
+    return value;
+}
+
+GtkWidget *
+gtr_priority_combo_new( void )
+{
+    int i;
+    GtkWidget * w;
+    GtkCellRenderer * r;
+    GtkListStore * store;
+    const struct {
+        int value;
+        const char * text;
+    } items[] = {
+        { TR_PRI_HIGH,   N_( "High" )  },
+        { TR_PRI_NORMAL, N_( "Normal" ) },
+        { TR_PRI_LOW,    N_( "Low" )  }
+    };
+
+    store = gtk_list_store_new( 2, G_TYPE_INT, G_TYPE_STRING );
+    for( i=0; i<(int)G_N_ELEMENTS(items); ++i ) {
+        GtkTreeIter iter;
+        gtk_list_store_append( store, &iter );
+        gtk_list_store_set( store, &iter, 0, items[i].value,
+                                          1, _( items[i].text ),
+                                         -1 );
+    }
+
+    w = gtk_combo_box_new_with_model( GTK_TREE_MODEL( store ) );
+    r = gtk_cell_renderer_text_new( );
+    gtk_cell_layout_pack_start( GTK_CELL_LAYOUT( w ), r, TRUE );
+    gtk_cell_layout_set_attributes( GTK_CELL_LAYOUT( w ), r, "text", 1, NULL );
+
+    /* cleanup */
+    g_object_unref( store );
+    return w;
+}
+
+/***
+****
+***/
+
+void
 gtr_widget_set_tooltip_text( GtkWidget * w, const char * tip )
 {
 #if GTK_CHECK_VERSION( 2,12,0 )
@@ -725,4 +815,32 @@ gtr_timeout_add_seconds( guint seconds, GSourceFunc function, gpointer data )
                                gtr_func_data_new( function, data ),
                                gtr_func_data_free );
 #endif
+}
+
+void
+gtr_unrecognized_url_dialog( GtkWidget * parent, const char * url )
+{
+    const char * xt = "xt=urn:btih";
+
+    GtkWindow * window = getWindow( parent );
+
+    GString * gstr = g_string_new( NULL );
+
+    GtkWidget * w = gtk_message_dialog_new( window, 0,
+                                            GTK_MESSAGE_ERROR,
+                                            GTK_BUTTONS_CLOSE,
+                                            "%s", _( "Unrecognized URL" ) );
+
+    g_string_append_printf( gstr, _( "Transmission doesn't know how to use \"%s\"" ), url );
+
+    if( gtr_is_magnet_link( url ) && ( strstr( url, xt ) == NULL ) )
+    {
+        g_string_append_printf( gstr, "\n \n" );
+        g_string_append_printf( gstr, _( "This magnet link appears to be intended for something other than BitTorrent.  BitTorrent magnet links have a section containing \"%s\"." ), xt ); 
+    }
+
+    gtk_message_dialog_format_secondary_text( GTK_MESSAGE_DIALOG( w ), "%s", gstr->str );
+    g_signal_connect_swapped( w, "response", G_CALLBACK( gtk_widget_destroy ), w );
+    gtk_widget_show( w );
+    g_string_free( gstr, TRUE );
 }

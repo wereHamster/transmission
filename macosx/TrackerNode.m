@@ -103,11 +103,13 @@
         dateString = NSLocalizedString(@"N/A", "Tracker last announce");
     
     NSString * baseString;
-    if (fStat.hasAnnounced && !fStat.lastAnnounceSucceeded)
+    if (fStat.hasAnnounced && fStat.lastAnnounceTimedOut)
+        baseString = [NSLocalizedString(@"Announce timed out", "Tracker last announce") stringByAppendingFormat: @": %@", dateString];
+    else if (fStat.hasAnnounced && !fStat.lastAnnounceSucceeded)
     {
         baseString = NSLocalizedString(@"Announce error", "Tracker last announce");
-        NSString * errorString = [NSString stringWithUTF8String: fStat.lastAnnounceResult];
         
+        NSString * errorString = [NSString stringWithUTF8String: fStat.lastAnnounceResult];
         if ([errorString isEqualToString: @""])
             baseString = [baseString stringByAppendingFormat: @": %@", dateString];
         else
@@ -177,8 +179,8 @@
     if (fStat.hasScraped && !fStat.lastScrapeSucceeded)
     {
         baseString = NSLocalizedString(@"Scrape error", "Tracker last scrape");
-        NSString * errorString = [NSString stringWithUTF8String: fStat.lastScrapeResult];
         
+        NSString * errorString = [NSString stringWithUTF8String: fStat.lastScrapeResult];
         if ([errorString isEqualToString: @""])
             baseString = [baseString stringByAppendingFormat: @": %@", dateString];
         else
