@@ -197,6 +197,11 @@ int trashDataFile(const char * filename)
     return [@"Torrent: " stringByAppendingString: [self name]];
 }
 
+- (id) copyWithZone: (NSZone *) zone
+{
+    return [self retain];
+}
+
 - (void) closeRemoveTorrent
 {
     //allow the file to be index by Time Machine
@@ -600,7 +605,7 @@ int trashDataFile(const char * filename)
             prevTier = stats[i].tier;
         }
         
-        TrackerNode * tracker = [[TrackerNode alloc] initWithTrackerStat: &stats[i]];
+        TrackerNode * tracker = [[TrackerNode alloc] initWithTrackerStat: &stats[i] torrent: self];
         [trackers addObject: tracker];
         [tracker release];
     }
@@ -858,8 +863,9 @@ int trashDataFile(const char * filename)
     for (int i = 0; i < totalPeers; i++)
     {
         tr_peer_stat * peer = &peers[i];
-        NSMutableDictionary * dict = [NSMutableDictionary dictionaryWithCapacity: 10];
+        NSMutableDictionary * dict = [NSMutableDictionary dictionaryWithCapacity: 11];
         
+        [dict setObject: [self name] forKey: @"Name"];
         [dict setObject: [NSNumber numberWithInt: peer->from] forKey: @"From"];
         [dict setObject: [NSString stringWithUTF8String: peer->addr] forKey: @"IP"];
         [dict setObject: [NSNumber numberWithInt: peer->port] forKey: @"Port"];
@@ -889,15 +895,15 @@ int trashDataFile(const char * filename)
 
 - (NSArray *) webSeeds
 {
-    const NSInteger webSeedCount = fInfo->webseedCount;
-    NSMutableArray * webSeeds = [NSMutableArray arrayWithCapacity: webSeedCount];
+    NSMutableArray * webSeeds = [NSMutableArray arrayWithCapacity: fInfo->webseedCount];
     
     float * dlSpeeds = tr_torrentWebSpeeds(fHandle);
     
-    for (NSInteger i = 0; i < webSeedCount; i++)
+    for (NSInteger i = 0; i < fInfo->webseedCount; i++)
     {
-        NSMutableDictionary * dict = [NSMutableDictionary dictionaryWithCapacity: 2];
+        NSMutableDictionary * dict = [NSMutableDictionary dictionaryWithCapacity: 3];
         
+        [dict setObject: [self name] forKey: @"Name"];
         [dict setObject: [NSString stringWithUTF8String: fInfo->webseeds[i]] forKey: @"Address"];
         
         if (dlSpeeds[i] != -1.0)
@@ -1339,7 +1345,7 @@ int trashDataFile(const char * filename)
     BOOL onState = NO, offState = NO;
     for (NSUInteger index = [indexSet firstIndex]; index != NSNotFound; index = [indexSet indexGreaterThanIndex: index])
     {
-        if (tr_torrentGetFileDL(fHandle, index) || ![self canChangeDownloadCheckForFile: index])
+        if (!fInfo->files[index].dnd || ![self canChangeDownloadCheckForFile: index])
             onState = YES;
         else
             offState = YES;
@@ -1378,7 +1384,7 @@ int trashDataFile(const char * filename)
 - (BOOL) hasFilePriority: (tr_priority_t) priority forIndexes: (NSIndexSet *) indexSet
 {
     for (NSUInteger index = [indexSet firstIndex]; index != NSNotFound; index = [indexSet indexGreaterThanIndex: index])
-        if (priority == tr_torrentGetFilePriority(fHandle, index) && [self canChangeDownloadCheckForFile: index])
+        if (priority == fInfo->files[index].priority && [self canChangeDownloadCheckForFile: index])
             return YES;
     return NO;
 }
@@ -1393,24 +1399,26 @@ int trashDataFile(const char * filename)
         if (![self canChangeDownloadCheckForFile: index])
             continue;
         
-        const tr_priority_t priority = tr_torrentGetFilePriority(fHandle, index);
-        if (priority == TR_PRI_LOW)
+        const tr_priority_t priority = fInfo->files[index].priority;
+        switch (priority)
         {
-            if (low)
-                continue;
-            low = YES;
-        }
-        else if (priority == TR_PRI_HIGH)
-        {
-            if (high)
-                continue;
-            high = YES;
-        }
-        else
-        {
-            if (normal)
-                continue;
-            normal = YES;
+            case TR_PRI_LOW:
+                if (low)
+                    continue;
+                low = YES;
+                break;
+            case TR_PRI_NORMAL:
+                if (normal)
+                    continue;
+                normal = YES;
+                break;
+            case TR_PRI_HIGH:
+                if (high)
+                    continue;
+                high = YES;
+                break;
+            default:
+                NSAssert2(NO, @"Unknown priority %d for file index %d", priority, index);
         }
         
         [priorities addObject: [NSNumber numberWithInteger: priority]];

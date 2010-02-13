@@ -320,7 +320,7 @@ onTrackerResponse( void * tracker UNUSED,
              if( event->allAreSeeds )
                 tr_tordbg( tor, "Got %d seeds from tracker", (int)n );
             else
-                tr_torinf( tor, _( "Got %d peers from tracker" ), (int)n );
+                tr_tordbg( tor, "Got %d peers from tracker", (int)n );
 
             for( i = 0; i < n; ++i )
             {
@@ -765,10 +765,9 @@ tr_torrentNew( const tr_ctor * ctor, int * setmeError )
     tr_info tmpInfo;
     tr_parse_result r;
     tr_torrent * tor = NULL;
-    tr_session * session = tr_ctorGetSession( ctor );
 
     assert( ctor != NULL );
-    assert( tr_isSession( session ) );
+    assert( tr_isSession( tr_ctorGetSession( ctor ) ) );
 
     r = torrentParseImpl( ctor, &tmpInfo, &hasInfo, &off, &len );
     if( r == TR_PARSE_OK )
@@ -784,6 +783,9 @@ tr_torrentNew( const tr_ctor * ctor, int * setmeError )
     }
     else if( setmeError )
     {
+        if( r == TR_PARSE_DUPLICATE )
+            tr_metainfoFree( &tmpInfo );
+
         *setmeError = r;
     }
 
@@ -1736,23 +1738,6 @@ tr_torrentSetFilePriorities( tr_torrent *      tor,
     tr_torrentUnlock( tor );
 }
 
-tr_priority_t
-tr_torrentGetFilePriority( const tr_torrent * tor,
-                           tr_file_index_t    file )
-{
-    tr_priority_t ret;
-
-    assert( tr_isTorrent( tor ) );
-
-    tr_torrentLock( tor );
-    assert( tor );
-    assert( file < tor->info.fileCount );
-    ret = tor->info.files[file].priority;
-    tr_torrentUnlock( tor );
-
-    return ret;
-}
-
 tr_priority_t*
 tr_torrentGetFilePriorities( const tr_torrent * tor )
 {
@@ -1773,23 +1758,6 @@ tr_torrentGetFilePriorities( const tr_torrent * tor )
 /**
 ***  File DND
 **/
-
-int
-tr_torrentGetFileDL( const tr_torrent * tor,
-                     tr_file_index_t    file )
-{
-    int doDownload;
-
-    assert( tr_isTorrent( tor ) );
-
-    tr_torrentLock( tor );
-
-    assert( file < tor->info.fileCount );
-    doDownload = !tor->info.files[file].dnd;
-
-    tr_torrentUnlock( tor );
-    return doDownload != 0;
-}
 
 static void
 setFileDND( tr_torrent * tor, tr_file_index_t fileIndex, int doDownload )

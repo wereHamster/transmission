@@ -11,6 +11,7 @@
  */
 
 #include <assert.h>
+#include <errno.h> /* ENOENT */
 #include <stdlib.h>
 #include <string.h> /* memcpy */
 
@@ -362,6 +363,7 @@ tr_sessionGetSettings( tr_session * s, struct tr_benc * d )
 tr_bool
 tr_sessionLoadSettings( tr_benc * d, const char * configDir, const char * appName )
 {
+    int err = 0;
     char * filename;
     tr_benc fileSettings;
     tr_benc sessionDefaults;
@@ -383,15 +385,16 @@ tr_sessionLoadSettings( tr_benc * d, const char * configDir, const char * appNam
 
     /* file settings override the defaults */
     filename = tr_buildPath( configDir, "settings.json", NULL );
-    if( !tr_bencLoadFile( &fileSettings, TR_FMT_JSON, filename ) ) {
+    err = tr_bencLoadFile( &fileSettings, TR_FMT_JSON, filename );
+    if( !err ) {
         tr_bencMergeDicts( d, &fileSettings );
         tr_bencFree( &fileSettings );
-        success = TRUE;
     }
 
     /* cleanup */
     tr_bencFree( &sessionDefaults );
     tr_free( filename );
+    success = (err==0) || (err==ENOENT);
     return success;
 }
 
@@ -410,7 +413,8 @@ tr_sessionSaveSettings( tr_session    * session,
     /* the existing file settings are the fallback values */
     {
         tr_benc fileSettings;
-        if( !tr_bencLoadFile( &fileSettings, TR_FMT_JSON, filename ) )
+        const int err = tr_bencLoadFile( &fileSettings, TR_FMT_JSON, filename );
+        if( !err )
         {
             tr_bencMergeDicts( &settings, &fileSettings );
             tr_bencFree( &fileSettings );
@@ -431,7 +435,6 @@ tr_sessionSaveSettings( tr_session    * session,
 
     /* save the result */
     tr_bencToFile( &settings, TR_FMT_JSON, filename );
-    tr_inf( "Saved \"%s\"", filename );
 
     /* cleanup */
     tr_free( filename );
@@ -623,7 +626,7 @@ tr_sessionInitImpl( void * vdata )
     data->done = TRUE;
 }
 
-static void turtleBootstrap( tr_session *, struct tr_turtle_info *, tr_bool isEnabled );
+static void turtleBootstrap( tr_session *, struct tr_turtle_info * );
 
 static void
 sessionSetImpl( void * vdata )
@@ -775,10 +778,7 @@ sessionSetImpl( void * vdata )
         turtle->days = i;
     if( tr_bencDictFindBool( settings, TR_PREFS_KEY_ALT_SPEED_TIME_ENABLED, &boolVal ) )
         turtle->isClockEnabled = boolVal;
-
-    if( !tr_bencDictFindBool( settings, TR_PREFS_KEY_ALT_SPEED_ENABLED, &boolVal ) )
-        boolVal = FALSE;
-    turtleBootstrap( session, turtle, boolVal );
+    turtleBootstrap( session, turtle );
 
     data->done = TRUE;
 }
@@ -1073,6 +1073,7 @@ updateBandwidth( tr_session * session, tr_direction dir )
 static void
 turtleFindNextChange( struct tr_turtle_info * t )
 {
+    int day;
     struct tm tm;
     time_t today_began_at;
     time_t next_begin;
@@ -1104,15 +1105,16 @@ turtleFindNextChange( struct tr_turtle_info * t )
        if the next change is tomorrow to turn limits OFF, look for today in t->days.
        if the next change is tomorrow to turn limits ON, look for tomorrow in t->days. */
     if( t->_nextChangeValue && (( t->_nextChangeAt >= today_began_at + SECONDS_PER_DAY )))
-        t->_nextChangeAllowed = ( t->days & ( ( tm.tm_wday + 1 ) % 7 ) ) != 0;
+        day = ( tm.tm_wday + 1 ) % 7;
     else
-        t->_nextChangeAllowed = ( t->days & tm.tm_wday ) != 0;
+        day = tm.tm_wday;
+    t->_nextChangeAllowed = ( t->days & (1<<day) ) != 0;
 
     if( t->isClockEnabled && t->_nextChangeAllowed ) {
         char buf[128];
         tr_localtime_r( &t->_nextChangeAt, &tm );
         strftime( buf, sizeof( buf ), "%a %b %d %T %Y", &tm );
-        tr_dbg( "Turtle clock updated: at %s we'll turn limits %s", buf, (t->_nextChangeValue?"on":"off") );
+        tr_inf( "Turtle clock updated: at %s we'll turn limits %s", buf, (t->_nextChangeValue?"on":"off") );
     }
 }
 
@@ -1148,28 +1150,18 @@ useAltSpeed( tr_session * s, struct tr_turtle_info * t, tr_bool enabled, tr_bool
     }
 }
 
-static tr_bool
-turtleTestClock( struct tr_turtle_info * t, tr_bool * enabled )
-{
-    tr_bool hit;
-
-    if(( hit = ( t->testedAt < t->_nextChangeAt ) && ( t->_nextChangeAt <= tr_time( ))))
-        *enabled = t->_nextChangeValue;
-
-    return hit;
-}
-
 static void
 turtleCheckClock( tr_session * session, struct tr_turtle_info * t, tr_bool byUser )
 {
-    tr_bool enabled;
     const time_t now = tr_time( );
-    const tr_bool hit = turtleTestClock( t, &enabled );
+    const tr_bool hit = ( t->testedAt < t->_nextChangeAt ) && ( t->_nextChangeAt <= tr_time( ));
 
     t->testedAt = now;
 
     if( hit )
     {
+        const tr_bool enabled = t->_nextChangeValue;
+
         if( t->isClockEnabled && t->_nextChangeAllowed )
         {
             tr_inf( "Time to turn %s turtle mode!", (enabled?"on":"off") );
@@ -1184,13 +1176,12 @@ turtleCheckClock( tr_session * session, struct tr_turtle_info * t, tr_bool byUse
  * It initializes the implementation fields 
  * and turns on turtle mode if the clock settings say to. */
 static void
-turtleBootstrap( tr_session * session, struct tr_turtle_info * turtle, tr_bool isEnabled )
+turtleBootstrap( tr_session * session, struct tr_turtle_info * turtle )
 {
+    tr_bool isEnabled;
+
     turtleFindNextChange( turtle );
-
-    if( !isEnabled )
-        turtleTestClock( turtle, &isEnabled );
-
+    isEnabled = turtle->isClockEnabled && !turtle->_nextChangeValue;
     useAltSpeed( session, turtle, isEnabled, FALSE );
 }
 
@@ -1516,9 +1507,9 @@ sessionCloseImpl( void * vsession )
 }
 
 static int
-deadlineReached( const uint64_t deadline )
+deadlineReached( const time_t deadline )
 {
-    return tr_date( ) >= deadline;
+    return time( NULL ) >= deadline;
 }
 
 #define SHUTDOWN_MAX_SECONDS 20
@@ -1526,8 +1517,7 @@ deadlineReached( const uint64_t deadline )
 void
 tr_sessionClose( tr_session * session )
 {
-    const int      maxwait_msec = SHUTDOWN_MAX_SECONDS * 1000;
-    const uint64_t deadline = tr_date( ) + maxwait_msec;
+    const time_t deadline = time( NULL ) + SHUTDOWN_MAX_SECONDS;
 
     assert( tr_isSession( session ) );
 
@@ -1559,11 +1549,14 @@ tr_sessionClose( tr_session * session )
     {
         static tr_bool forced = FALSE;
         dbgmsg( "waiting for libtransmission thread to finish" );
-        tr_wait_msec( 100 );
+        tr_wait_msec( 500 );
         if( deadlineReached( deadline ) && !forced )
         {
             event_loopbreak( );
             forced = TRUE;
+
+            if( time( NULL ) >= deadline + 3 )
+                break;
         }
     }
 
@@ -1727,15 +1720,28 @@ tr_sessionIsLazyBitfieldEnabled( const tr_session * session )
 ****
 ***/
 
-void
-tr_sessionSetPortForwardingEnabled( tr_session  * session,
-                                    tr_bool       enabled )
+struct port_forwarding_data
 {
-    assert( tr_isSession( session ) );
+    tr_bool enabled;
+    struct tr_shared * shared;
+};
 
-    tr_sessionLock( session );
-    tr_sharedTraversalEnable( session->shared, enabled );
-    tr_sessionUnlock( session );
+static void
+setPortForwardingEnabled( void * vdata )
+{
+    struct port_forwarding_data * data = vdata;
+    tr_sharedTraversalEnable( data->shared, data->enabled );
+    tr_free( data );
+}
+
+void
+tr_sessionSetPortForwardingEnabled( tr_session  * session, tr_bool enabled )
+{
+    struct port_forwarding_data * d;
+    d = tr_new0( struct port_forwarding_data, 1 );
+    d->shared = session->shared;
+    d->enabled = enabled;
+    tr_runInEventThread( session, setPortForwardingEnabled, d );
 }
 
 tr_bool

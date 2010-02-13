@@ -109,8 +109,9 @@ refreshFilesForeach( GtkTreeModel * model,
     if( is_file )
     {
         tr_torrent * tor = data->tor;
-        const int enabled = tr_torrentGetFileDL( tor, index );
-        const int priority = tr_torrentGetFilePriority( tor, index );
+        const tr_info * inf = tr_torrentInfo( tor );
+        const int enabled = !inf->files[index].dnd;
+        const int priority = inf->files[index].priority;
         const uint64_t have = data->refresh_file_stat[index].bytesCompleted;
         const int prog = size ? (int)((100.0*have)/size) : 1;
 
@@ -387,8 +388,9 @@ buildTree( GNode * node, gpointer gdata )
 
     const char * mime_type = isLeaf ? get_mime_type_from_filename( child_data->name ) : DIRECTORY_MIME_TYPE;
     GdkPixbuf * icon = get_mime_type_icon( mime_type, GTK_ICON_SIZE_MENU, build->w );
-    const int priority = isLeaf ? tr_torrentGetFilePriority( build->tor, child_data->index ) : 0;
-    const gboolean enabled = isLeaf ? tr_torrentGetFileDL( build->tor, child_data->index ) : TRUE;
+    const tr_info * inf = tr_torrentInfo( build->tor );
+    const int priority = isLeaf ? inf->files[ child_data->index ].priority : 0;
+    const gboolean enabled = isLeaf ? !inf->files[ child_data->index ].dnd : TRUE;
 #if GTK_CHECK_VERSION(2,10,0)
     gtk_tree_store_insert_with_values( build->store, &child_iter, build->iter, INT_MAX,
                                        FC_INDEX, child_data->index,

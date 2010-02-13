@@ -19,6 +19,9 @@
 #if defined(HAVE_POSIX_FADVISE) || defined(SYS_DARWIN)
  #include <fcntl.h> /* posix_fadvise() / fcntl() */
 #endif
+#if defined(SYS_DARWIN)
+ #define HAVE_VALLOC
+#endif
 
 #include <openssl/sha.h>
 
@@ -44,6 +47,10 @@ enum
 
 /* #define STOPWATCH */
 
+#ifndef HAVE_VALLOC
+ #define valloc malloc
+#endif
+
 static tr_bool
 verifyTorrent( tr_torrent * tor, tr_bool * stopFlag )
 {
@@ -56,9 +63,10 @@ verifyTorrent( tr_torrent * tor, tr_bool * stopFlag )
     uint32_t piecePos = 0;
     uint32_t pieceBytesRead = 0;
     tr_file_index_t fileIndex = 0;
+    tr_file_index_t prevFileIndex = !fileIndex;
     tr_piece_index_t pieceIndex = 0;
-    const int64_t buflen = tor->info.pieceSize;
-    uint8_t * buffer = tr_new( uint8_t, buflen );
+    const int64_t buflen = 4096;
+    uint8_t * buffer = valloc( buflen );
     const time_t begin = tr_time( );
     time_t end;
 
@@ -79,12 +87,13 @@ verifyTorrent( tr_torrent * tor, tr_bool * stopFlag )
         }
 
         /* if we're starting a new file... */
-        if( !filePos && (fd<0) )
+        if( !filePos && (fd<0) && (fileIndex!=prevFileIndex) )
         {
             char * filename = tr_torrentFindFile( tor, fileIndex );
             fd = filename == NULL ? -1 : tr_open_file_for_scanning( filename );
             /* fprintf( stderr, "opening file #%d (%s) -- %d\n", fileIndex, filename, fd ); */
             tr_free( filename );
+            prevFileIndex = fileIndex;
         }
 
         /* figure out how much we can read this pass */
@@ -95,18 +104,16 @@ verifyTorrent( tr_torrent * tor, tr_bool * stopFlag )
         /* fprintf( stderr, "reading this pass: %d\n", (int)bytesThisPass ); */
 
         /* read a bit */
-        if( (fd>=0) && tr_lseek( fd, filePos, SEEK_SET ) != -1 ) {
-            const int64_t numRead = read( fd, buffer, bytesThisPass );
-            if( numRead > 0 )
-                pieceBytesRead += numRead;
+        if( fd >= 0 ) {
+            const ssize_t numRead = tr_pread( fd, buffer, bytesThisPass, filePos );
             if( numRead == bytesThisPass )
                 SHA1_Update( &sha, buffer, numRead );
+            if( numRead > 0 ) {
+                pieceBytesRead += numRead;
 #if defined HAVE_POSIX_FADVISE && defined POSIX_FADV_DONTNEED
-            posix_fadvise( fd, filePos, bytesThisPass, POSIX_FADV_DONTNEED );
+                posix_fadvise( fd, filePos, bytesThisPass, POSIX_FADV_DONTNEED );
 #endif
-#ifdef SYS_DARWIN
-            fcntl( fd, F_NOCACHE, 1 );
-#endif
+            }
         }
 
         /* move our offsets */
@@ -164,7 +171,7 @@ verifyTorrent( tr_torrent * tor, tr_bool * stopFlag )
     /* cleanup */
     if( fd >= 0 )
         tr_close_file( fd );
-    tr_free( buffer );
+    free( buffer );
 
     /* stopwatch */
     end = tr_time( );

@@ -68,7 +68,10 @@ static const struct tr_option options[] =
     { 'B', "no-blocklist", "Disable peer blocklists", "B", 0, NULL },
     { 'c', "watch-dir", "Directory to watch for new .torrent files", "c", 1, "<directory>" },
     { 'C', "no-watch-dir", "Disable the watch-dir", "C", 0, NULL },
+    { 941, "incomplete-dir", "Where to store new torrents until they're complete", NULL, 1, "<directory>" },
+    { 942, "no-incomplete-dir", "Don't store incomplete torrents in a different location", NULL, 0, NULL },
     { 'd', "dump-settings", "Dump the settings and exit", "d", 0, NULL },
+    { 'e', "logfile", "Dump the log messages to this filename", "e", 1, "<filename>" },
     { 'f', "foreground", "Run in the foreground instead of daemonizing", "f", 0, NULL },
     { 'g', "config-dir", "Where to look for configuration files", "g", 1, "<path>" },
     { 'p', "port", "RPC port (Default: " TR_DEFAULT_RPC_PORT_STR ")", "p", 1, "<port>" },
@@ -79,6 +82,8 @@ static const struct tr_option options[] =
     { 'V', "version", "Show version number and exit", "V", 0, NULL },
     { 'w', "download-dir", "Where to save downloaded data", "w", 1, "<path>" },
     { 800, "paused", "Pause all torrents on startup", NULL, 0, NULL },
+    { 'o', "dht", "Enable distributed hash tables (DHT)", "o", 0, NULL },
+    { 'O', "no-dht", "Disable distributed hash tables (DHT)", "O", 0, NULL },
     { 'P', "peerport", "Port for incoming peers (Default: " TR_DEFAULT_PEER_PORT_STR ")", "P", 1, "<port>" },
     { 'm', "portmap", "Enable portmapping via NAT-PMP or UPnP", "m", 0, NULL },
     { 'M', "no-portmap", "Disable portmapping", "M", 0, NULL },
@@ -90,6 +95,8 @@ static const struct tr_option options[] =
     { 'i', "bind-address-ipv4", "Where to listen for peer connections", "i", 1, "<ipv4 address>" },
     { 'I', "bind-address-ipv6", "Where to listen for peer connections", "I", 1, "<ipv6 address>" },
     { 'r', "rpc-bind-address", "Where to listen for RPC connections", "r", 1, "<ipv4 address>" },
+    { 953, "global-seedratio", "All torrents, unless overridden by a per-torrent setting, should seed until a specific ratio", "gsr", 1, "ratio" },
+    { 954, "no-global-seedratio", "All torrents, unless overridden by a per-torrent setting, should seed regardless of ratio", "GSR", 0, NULL },
     { 0, NULL, NULL, NULL, 0, NULL }
 };
 
@@ -222,50 +229,45 @@ onFileAdded( tr_session * session, const char * dir, const char * file )
 }
 
 static void
-pumpLogMessages( tr_bool foreground )
+printMessage( FILE * logfile, int level, const char * name, const char * message, const char * file, int line )
+{
+    if( logfile != NULL )
+    {
+        char timestr[64];
+        tr_getLogTimeStr( timestr, sizeof( timestr ) );
+        if( name )
+            fprintf( logfile, "[%s] %s %s (%s:%d)\n", timestr, name, message, file, line );
+        else
+            fprintf( logfile, "[%s] %s (%s:%d)\n", timestr, message, file, line );
+    }
+#ifdef HAVE_SYSLOG
+    else /* daemon... write to syslog */
+    {
+        int priority;
+
+        /* figure out the syslog priority */
+        switch( level ) {
+            case TR_MSG_ERR: priority = LOG_ERR; break;
+            case TR_MSG_DBG: priority = LOG_DEBUG; break;
+            default: priority = LOG_INFO; break;
+        }
+
+        if( name )
+            syslog( priority, "%s %s (%s:%d)", name, message, file, line );
+        else
+            syslog( priority, "%s (%s:%d)", message, file, line );
+    }
+#endif
+}
+
+static void
+pumpLogMessages( FILE * logfile )
 {
     const tr_msg_list * l;
     tr_msg_list * list = tr_getQueuedMessages( );
 
     for( l=list; l!=NULL; l=l->next )
-    {
-#ifdef HAVE_SYSLOG
-        if( foreground )
-        {
-            char timestr[64];
-            tr_getLogTimeStr( timestr, sizeof( timestr ) );
-            if( l->name )
-                fprintf( stderr, "[%s] %s %s (%s:%d)\n", timestr, l->name, l->message, l->file, l->line );
-            else
-                fprintf( stderr, "[%s] %s (%s:%d)\n", timestr, l->message, l->file, l->line );
-        }
-        else /* daemon... write to syslog */
-        {
-            int priority;
-
-            /* figure out the syslog priority */
-            switch( l->level ) {
-                case TR_MSG_ERR: priority = LOG_ERR; break;
-                case TR_MSG_DBG: priority = LOG_DEBUG; break;
-                default: priority = LOG_INFO; break;
-            }
-
-            if( l->name )
-                syslog( priority, "%s %s (%s:%d)", l->name, l->message, l->file, l->line );
-            else
-                syslog( priority, "%s (%s:%d)", l->message, l->file, l->line );
-        }
-#else
-        {
-            char timestr[64];
-            tr_getLogTimeStr( timestr, sizeof( timestr ) );
-            if( l->name )
-                fprintf( stderr, "[%s] %s %s (%s:%d)\n", timestr, l->name, l->message, l->file, l->line );
-            else
-                fprintf( stderr, "[%s] %s (%s:%d)\n", timestr, l->message, l->file, l->line );
-        }
-#endif
-    }
+        printMessage( logfile, l->level, l->name, l->message, l->file, l->line );
 
     tr_freeMessageList( list );
 }
@@ -282,6 +284,7 @@ main( int argc, char ** argv )
     tr_bool dumpSettings = FALSE;
     const char * configDir = NULL;
     dtr_watchdir * watchdir = NULL;
+    FILE * logfile = NULL;
 
     signal( SIGINT, gotsig );
     signal( SIGTERM, gotsig );
@@ -293,7 +296,6 @@ main( int argc, char ** argv )
     tr_bencInitDict( &settings, 0 );
     configDir = getConfigDir( argc, (const char**)argv );
     loaded = tr_sessionLoadSettings( &settings, configDir, MY_NAME );
-    tr_bencDictAddBool( &settings, TR_PREFS_KEY_RPC_ENABLED, TRUE );
 
     /* overwrite settings from the comamndline */
     tr_optind = 1;
@@ -311,7 +313,18 @@ main( int argc, char ** argv )
                       break;
             case 'C': tr_bencDictAddBool( &settings, PREF_KEY_DIR_WATCH_ENABLED, FALSE );
                       break;
+	    case 941:
+        	      tr_bencDictAddStr( &settings, TR_PREFS_KEY_INCOMPLETE_DIR, optarg );
+		      tr_bencDictAddBool( &settings, TR_PREFS_KEY_INCOMPLETE_DIR_ENABLED, TRUE );
+		      break;
+	    case 942:
+		      tr_bencDictAddBool( &settings, TR_PREFS_KEY_INCOMPLETE_DIR_ENABLED, FALSE );
+		      break;
             case 'd': dumpSettings = TRUE;
+                      break;
+            case 'e': logfile = fopen( optarg, "a+" );
+                      if( logfile == NULL )
+                          fprintf( stderr, "Couldn't open \"%s\": %s\n", optarg, tr_strerror( errno ) );
                       break;
             case 'f': foreground = TRUE;
                       break;
@@ -320,6 +333,12 @@ main( int argc, char ** argv )
 	    case 'V': /* version */
 		      fprintf(stderr, "Transmission %s\n", LONG_VERSION_STRING);
 		      exit( 0 );
+	    case 'o':
+		      tr_bencDictAddBool( &settings, TR_PREFS_KEY_DHT_ENABLED, TRUE );
+		      break;
+	    case 'O':
+		      tr_bencDictAddBool( &settings, TR_PREFS_KEY_DHT_ENABLED, FALSE );
+		      break;
             case 'p': tr_bencDictAddInt( &settings, TR_PREFS_KEY_RPC_PORT, atoi( optarg ) );
                       break;
             case 't': tr_bencDictAddBool( &settings, TR_PREFS_KEY_RPC_AUTH_REQUIRED, TRUE );
@@ -359,9 +378,25 @@ main( int argc, char ** argv )
             case 'r':
                       tr_bencDictAddStr( &settings, TR_PREFS_KEY_RPC_BIND_ADDRESS, optarg );
                       break;
+	    case 953:
+		      tr_bencDictAddReal( &settings, TR_PREFS_KEY_RATIO, atof(optarg) );
+		      tr_bencDictAddBool( &settings, TR_PREFS_KEY_RATIO_ENABLED, TRUE );
+		      break;
+	    case 954:
+		      tr_bencDictAddBool( &settings, TR_PREFS_KEY_RATIO_ENABLED, FALSE );
+		      break;
             default:  showUsage( );
                       break;
         }
+    }
+
+    if( foreground && !logfile )
+        logfile = stderr;
+
+    if( !loaded )
+    {
+        printMessage( logfile, TR_MSG_ERR, MY_NAME, "Error loading config file -- exiting.", __FILE__, __LINE__ );
+        return -1;
     }
 
     if( dumpSettings )
@@ -374,18 +409,15 @@ main( int argc, char ** argv )
 
     if( !foreground && tr_daemon( TRUE, FALSE ) < 0 )
     {
-        fprintf( stderr, "failed to daemonize: %s\n", strerror( errno ) );
+        char buf[256];
+        tr_snprintf( buf, sizeof( buf ), "Failed to dameonize: %s", tr_strerror( errno ) );
+        printMessage( logfile, TR_MSG_ERR, MY_NAME, buf, __FILE__, __LINE__ );
         exit( 1 );
     }
 
     /* start the session */
     mySession = tr_sessionInit( "daemon", configDir, TRUE, &settings );
-
-    if( loaded )
-        tr_ninf( NULL, "Using settings from \"%s\"", configDir );
-    else
-        tr_nerr( NULL, "Couldn't find settings in \"%s\"; using defaults", configDir );
-
+    tr_ninf( NULL, "Using settings from \"%s\"", configDir );
     tr_sessionSaveSettings( mySession, configDir, &settings );
 
     if( tr_bencDictFindBool( &settings, TR_PREFS_KEY_RPC_AUTH_REQUIRED, &boolVal ) && boolVal )
@@ -425,7 +457,7 @@ main( int argc, char ** argv )
     while( !closing ) {
         tr_wait_msec( 1000 ); /* sleep one second */
         dtr_watchdir_update( watchdir );
-        pumpLogMessages( foreground );
+        pumpLogMessages( logfile );
     }
 
     closelog( );

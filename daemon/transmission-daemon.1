@@ -26,6 +26,7 @@
 .Op Fl er | ep | et
 .Op Fl V
 .Op Fl w Ar download-dir
+.Op Fl e Ar logfile
 .Ek
 .Sh DESCRIPTION
 .Nm
@@ -60,8 +61,19 @@ Encrypt all peer connections.
 Prefer encrypted peer connections.
 .It Fl et Fl -encryption-tolerated
 Prefer unencrypted peer connections.
+.It Fl gsr Fl -global-seedratio Ar ratio
+All torrents, unless overridden by a per-torrent setting, should seed until a specific
+.Ar ratio
+.It Fl GSR Fl -no-global-seedratio
+All torrents, unless overridden by a per-torrent setting, should seed regardless of ratio
 .It Fl h Fl -help
 Print command-line option descriptions.
+.It Fl -incomplete-dir Ar dir
+When adding new torrents, store their contents in
+.Ar directory
+until the torrent is done.
+.It Fl -no-incomplete-dir
+Don't store incomplete torrents in a different directory.
 .It Fl i Fl -bind-address-ipv4
 Listen for IPv4 BitTorrent connections on a specific address. Only one IPv4 listening address is allowed. Default: 0.0.0.0 (All addresses)
 .It Fl I Fl -bind-address-ipv6
@@ -78,6 +90,10 @@ Peer limit per torrent. Useful on embedded systems where the default might be un
 Enable portmapping via NAT-PMP or UPnP
 .It Fl M Fl -no-portmap
 Disable portmapping
+.It Fl o Fl -dht
+Enable distributed hash table (DHT).
+.It Fl O Fl -no-dht
+Disable distribued hash table (DHT).
 .It Fl p Fl -port Ar port
 Port to open and listen for RPC requests on.  Default: 9091
 .It Fl P, -peerport Ar port
@@ -99,6 +115,8 @@ Used for client authentication.
 Show version number and exit
 .It Fl w Fl -download-dir
 Where to store downloaded data.
+.It Fl e Fl -logfile
+Where to store transmission's log messages.
 .El
 .Sh ENVIRONMENT
 .Bl -tag -width Fl
