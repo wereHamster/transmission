@@ -193,8 +193,11 @@ torrentStart( tr_session               * session,
     for( i = 0; i < torrentCount; ++i )
     {
         tr_torrent * tor = torrents[i];
-        tr_torrentStart( tor );
-        notify( session, TR_RPC_TORRENT_STARTED, tor );
+        if( !tor->isRunning )
+        {
+            tr_torrentStart( tor );
+            notify( session, TR_RPC_TORRENT_STARTED, tor );
+        }
     }
     tr_free( torrents );
     return NULL;
@@ -214,8 +217,11 @@ torrentStop( tr_session               * session,
     for( i = 0; i < torrentCount; ++i )
     {
         tr_torrent * tor = torrents[i];
-        tr_torrentStop( tor );
-        notify( session, TR_RPC_TORRENT_STOPPED, tor );
+        if( tor->isRunning )
+        {
+            tr_torrentStop( tor );
+            notify( session, TR_RPC_TORRENT_STOPPED, tor );
+        }
     }
     tr_free( torrents );
     return NULL;
@@ -983,7 +989,7 @@ gotMetadataFromURL( tr_session       * session UNUSED,
     dbgmsg( "torrentAdd: HTTP response code was %ld (%s); response length was %zu bytes",
             response_code, tr_webGetResponseStr( response_code ), response_byte_count );
 
-    if( response_code == 200 )
+    if( response_code==200 || response_code==221 ) /* http or ftp success.. */
     {
         tr_ctorSetMetainfo( data->ctor, response, response_byte_count );
         addTorrentImpl( data->data, data->ctor );

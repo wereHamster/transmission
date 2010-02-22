@@ -173,7 +173,6 @@ typedef struct tr_torrent_peers
     tr_bool                    needsCompletenessCheck;
 
     struct block_request     * requests;
-    int                        requestsSort;
     int                        requestCount;
     int                        requestAlloc;
 
@@ -554,13 +553,6 @@ tr_peerMgrPeerIsSeed( const tr_torrent  * tor,
 *** struct block_request
 **/
 
-enum
-{
-    REQ_UNSORTED,
-    REQ_SORTED_BY_BLOCK,
-    REQ_SORTED_BY_TIME
-};
-
 static int
 compareReqByBlock( const void * va, const void * vb )
 {
@@ -576,45 +568,6 @@ compareReqByBlock( const void * va, const void * vb )
     if( a->peer > b->peer ) return 1;
 
     return 0;
-}
-
-static int
-compareReqByTime( const void * va, const void * vb )
-{
-    const struct block_request * a = va;
-    const struct block_request * b = vb;
-
-    /* primary key: time */
-    if( a->sentAt < b->sentAt ) return -1;
-    if( a->sentAt > b->sentAt ) return 1;
-
-    /* secondary key: peer */
-    if( a->peer < b->peer ) return -1;
-    if( a->peer > b->peer ) return 1;
-
-    return 0;
-}
-
-static void
-requestListSort( Torrent * t, int mode )
-{
-    assert( mode==REQ_SORTED_BY_BLOCK || mode==REQ_SORTED_BY_TIME );
-
-    if( t->requestsSort != mode )
-    {
-        int(*compar)(const void *, const void *);
-
-        t->requestsSort = mode;
-
-        switch( mode ) {
-            case REQ_SORTED_BY_BLOCK: compar = compareReqByBlock; break;
-            case REQ_SORTED_BY_TIME: compar = compareReqByTime; break;
-            default: assert( 0 && "unhandled" );
-        }
-
-        qsort( t->requests, t->requestCount,
-               sizeof( struct block_request ), compar );
-    }
 }
 
 static void
@@ -637,25 +590,16 @@ requestListAdd( Torrent * t, tr_block_index_t block, tr_peer * peer )
     key.sentAt = tr_time( );
 
     /* insert the request to our array... */
-    switch( t->requestsSort )
     {
-        case REQ_UNSORTED:
-        case REQ_SORTED_BY_TIME:
-            t->requests[t->requestCount++] = key;
-            break;
-
-        case REQ_SORTED_BY_BLOCK: {
-            tr_bool exact;
-            const int pos = tr_lowerBound( &key, t->requests, t->requestCount,
-                                           sizeof( struct block_request ),
-                                           compareReqByBlock, &exact );
-            assert( !exact );
-            memmove( t->requests + pos + 1,
-                     t->requests + pos,
-                     sizeof( struct block_request ) * ( t->requestCount++ - pos ) );
-            t->requests[pos] = key;
-            break;
-        }
+        tr_bool exact;
+        const int pos = tr_lowerBound( &key, t->requests, t->requestCount,
+                                       sizeof( struct block_request ),
+                                       compareReqByBlock, &exact );
+        assert( !exact );
+        memmove( t->requests + pos + 1,
+                 t->requests + pos,
+                 sizeof( struct block_request ) * ( t->requestCount++ - pos ) );
+        t->requests[pos] = key;
     }
 
     if( peer != NULL )
@@ -676,8 +620,6 @@ requestListLookup( Torrent * t, tr_block_index_t block, const tr_peer * peer )
     key.block = block;
     key.peer = (tr_peer*) peer;
 
-    requestListSort( t, REQ_SORTED_BY_BLOCK );
-
     return bsearch( &key, t->requests, t->requestCount,
                     sizeof( struct block_request ),
                     compareReqByBlock );
@@ -691,7 +633,6 @@ countBlockRequests( Torrent * t, tr_block_index_t block )
     int i, n, pos;
     struct block_request key;
 
-    requestListSort( t, REQ_SORTED_BY_BLOCK );
     key.block = block;
     key.peer = NULL;
     pos = tr_lowerBound( &key, t->requests, t->requestCount,
@@ -1186,7 +1127,6 @@ gotBadPiece( Torrent * t, tr_piece_index_t pieceIndex )
     tor->downloadedCur -= MIN( tor->downloadedCur, byteCount );
 
     tr_announcerAddBytes( tor, TR_ANN_CORRUPT, byteCount );
-    tr_announcerSubtractBytes( tor, TR_ANN_DOWN, byteCount );
 }
 
 static void
@@ -1235,19 +1175,6 @@ peerSuggestedPiece( Torrent            * t UNUSED,
         }
     }
 #endif
-}
-
-static void
-decrementDownloadedCount( tr_torrent * tor, uint32_t byteCount )
-{
-    tor->downloadedCur -= MIN( tor->downloadedCur, byteCount );
-    tr_announcerSubtractBytes( tor, TR_ANN_DOWN, byteCount );
-}
-
-static void
-clientGotUnwantedBlock( tr_torrent * tor, tr_block_index_t block )
-{
-    decrementDownloadedCount( tor, tr_torBlockCountBytes( tor, block ) );
 }
 
 static void
@@ -1355,15 +1282,8 @@ peerCallbackFunc( void * vpeer, void * vevent, void * vt )
 
             tr_torrentSetActivityDate( tor, now );
 
-            /* only add this to downloadedCur if we got it from a peer --
-             * webseeds shouldn't count against our ratio.  As one tracker
-             * admin put it, "Those pieces are downloaded directly from the
-             * content distributor, not the peers, it is the tracker's job
-             * to manage the swarms, not the web server and does not fit
-             * into the jurisdiction of the tracker." */
-            if( peer && e->wasPieceData ) {
+            if( e->wasPieceData ) {
                 tor->downloadedCur += e->length;
-                tr_announcerAddBytes( tor, TR_ANN_DOWN, e->length );
                 tr_torrentSetDirty( tor );
             }
 
@@ -1398,17 +1318,18 @@ peerCallbackFunc( void * vpeer, void * vevent, void * vt )
             tr_block_index_t block = _tr_block( tor, e->pieceIndex, e->offset );
 
             requestListRemove( t, block, peer );
+            pieceListRemoveRequest( t, block );
 
             if( tr_cpBlockIsComplete( &tor->completion, block ) )
             {
+                /* we already have this block... */
+                const uint32_t n = tr_torBlockCountBytes( tor, block );
+                tor->downloadedCur -= MIN( tor->downloadedCur, n );
                 tordbg( t, "we have this block already..." );
-                clientGotUnwantedBlock( tor, block );
-                pieceListRemoveRequest( t, block );
             }
             else
             {
                 tr_cpBlockAdd( &tor->completion, block );
-                pieceListRemoveRequest( t, block );
                 tr_torrentSetDirty( tor );
 
                 if( tr_cpPieceIsComplete( &tor->completion, e->pieceIndex ) )
@@ -1436,6 +1357,17 @@ peerCallbackFunc( void * vpeer, void * vevent, void * vt )
                         int peerCount;
                         tr_peer ** peers;
                         tr_file_index_t fileIndex;
+
+                        /* only add this to downloadedCur if we got it from a peer --
+                         * webseeds shouldn't count against our ratio.  As one tracker
+                         * admin put it, "Those pieces are downloaded directly from the
+                         * content distributor, not the peers, it is the tracker's job
+                         * to manage the swarms, not the web server and does not fit
+                         * into the jurisdiction of the tracker." */
+                        if( peer != NULL ) {
+                            const uint32_t n = tr_torPieceCountBytes( tor, p );
+                            tr_announcerAddBytes( tor, TR_ANN_DOWN, n );
+                        }
 
                         peerCount = tr_ptrArraySize( &t->peers );
                         peers = (tr_peer**) tr_ptrArrayBase( &t->peers );

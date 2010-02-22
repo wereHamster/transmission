@@ -683,8 +683,10 @@ typedef enum
         
         if ([item isKindOfClass: [NSDictionary class]])
         {
-            NSString * tierString = [NSString stringWithFormat: NSLocalizedString(@"Tier %d", "Inspector -> tracker table"),
-                                        [[item objectForKey: @"Tier"] integerValue]];
+            const NSInteger tier = [[item objectForKey: @"Tier"] integerValue];
+            NSString * tierString = tier == -1 ? NSLocalizedString(@"New Tier", "Inspector -> tracker table")
+                                    : [NSString stringWithFormat: NSLocalizedString(@"Tier %d", "Inspector -> tracker table"), tier];
+            
             if ([fTorrents count] > 1)
                 tierString = [tierString stringByAppendingFormat: @" - %@", [item objectForKey: @"Name"]];
             return tierString;
@@ -710,7 +712,8 @@ typedef enum
 {
     if (tableView == fTrackerTable)
     {
-        if (![[fTrackers objectAtIndex: row] isKindOfClass: [TrackerNode class]] && [tableView editedRow] != row)
+        //check for NSDictionay instead of TrackerNode because of display issue when adding a row
+        if ([[fTrackers objectAtIndex: row] isKindOfClass: [NSDictionary class]])
             return TRACKER_GROUP_SEPARATOR_HEIGHT;
     }
     
@@ -1762,6 +1765,7 @@ typedef enum
     //sort by IP after primary sort
     if (useSecond)
     {
+        #warning when 10.6-only, replate with sortDescriptorWithKey:ascending:selector:
         NSSortDescriptor * secondDescriptor = [[NSSortDescriptor alloc] initWithKey: @"IP" ascending: asc
                                                                         selector: @selector(compareNumeric:)];
         [descriptors addObject: secondDescriptor];
@@ -1782,7 +1786,9 @@ typedef enum
 {
     [[self window] makeKeyWindow];
     
-    [fTrackers addObject: NSLocalizedString(@"New Tier", "inspector -> add tracker")];
+    NSAssert1([fTorrents count] == 1, @"Attempting to add tracker with %d transfers selected", [fTorrents count]);
+    
+    [fTrackers addObject: [NSDictionary dictionaryWithObject: [NSNumber numberWithInteger: -1] forKey: @"Tier"]];
     [fTrackers addObject: @""];
     
     [fTrackerTable setTrackers: fTrackers];
@@ -1793,8 +1799,9 @@ typedef enum
 
 - (void) removeTrackers
 {
-    NSMutableDictionary * removeIdentifiers = [NSMutableDictionary dictionary];
-    
+    NSMutableDictionary * removeIdentifiers = [NSMutableDictionary dictionaryWithCapacity: [fTorrents count]];
+    NSUInteger removeCount = 0;
+       
     NSIndexSet * selectedIndexes = [fTrackerTable selectedRowIndexes];
     BOOL groupSelected = NO;
     for (NSUInteger i = 0; i < [fTrackers count]; ++i)
@@ -1813,6 +1820,7 @@ typedef enum
                 }
                 
                 [removeIndexSet addIndex: [(TrackerNode *)object identifier]];
+                ++removeCount;
             }
         }
         else
@@ -1823,16 +1831,16 @@ typedef enum
         }
     }
     
-    NSAssert([removeIdentifiers count] > 0, @"Trying to remove no trackers.");
+    NSAssert(removeCount > 0, @"Trying to remove no trackers.");
     
     if ([[NSUserDefaults standardUserDefaults] boolForKey: @"WarningRemoveTrackers"])
     {
         NSAlert * alert = [[NSAlert alloc] init];
         
-        if ([removeIdentifiers count] > 1)
+        if (removeCount > 1)
         {
             [alert setMessageText: [NSString stringWithFormat: NSLocalizedString(@"Are you sure you want to remove %d trackers?",
-                                                                "Remove trackers alert -> title"), [removeIdentifiers count]]];
+                                                                "Remove trackers alert -> title"), removeCount]];
             [alert setInformativeText: NSLocalizedString(@"Once removed, Transmission will no longer attempt to contact them."
                                         " This cannot be undone.", "Remove trackers alert -> message")];
         }

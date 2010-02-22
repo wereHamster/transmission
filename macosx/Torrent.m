@@ -27,7 +27,7 @@
 #import "FileListNode.h"
 #import "NSStringAdditions.h"
 #import "TrackerNode.h"
-#import "utils.h" //tr_httpIsValidURL
+#import "utils.h" //tr_new
 
 @interface Torrent (Private)
 
@@ -593,14 +593,14 @@ int trashDataFile(const char * filename)
     int count;
     tr_tracker_stat * stats = tr_torrentTrackers(fHandle, &count);
     
-    NSMutableArray * trackers = [NSMutableArray arrayWithCapacity: (count > 0 ? count + stats[count-1].tier : 0)];
+    NSMutableArray * trackers = [NSMutableArray arrayWithCapacity: (count > 0 ? count + (stats[count-1].tier + 1) : 0)];
     
     int prevTier = -1;
     for (int i=0; i < count; ++i)
     {
         if (stats[i].tier != prevTier)
         {
-            [trackers addObject: [NSDictionary dictionaryWithObjectsAndKeys: [NSNumber numberWithInteger: stats[i].tier], @"Tier",
+            [trackers addObject: [NSDictionary dictionaryWithObjectsAndKeys: [NSNumber numberWithInteger: stats[i].tier + 1], @"Tier",
                                     [self name], @"Name", nil]];
             prevTier = stats[i].tier;
         }
@@ -635,10 +635,7 @@ int trashDataFile(const char * filename)
     const int oldTrackerCount = fInfo->trackerCount;
     tr_tracker_info * trackerStructs = tr_new(tr_tracker_info, oldTrackerCount+1);
     for (NSUInteger i=0; i < oldTrackerCount; ++i)
-    {
         trackerStructs[i] = fInfo->trackers[i];
-        trackerStructs[i].id = i;
-    }
     
     trackerStructs[oldTrackerCount].announce = (char *)[tracker UTF8String];
     trackerStructs[oldTrackerCount].tier = trackerStructs[oldTrackerCount-1].tier + 1;
@@ -659,10 +656,7 @@ int trashDataFile(const char * filename)
     for (NSUInteger i = 0; i < fInfo->trackerCount; i++)
     {
         if (![removeIdentifiers containsIndex: fInfo->trackers[i].id])
-        {
-            trackerStructs[newCount] = fInfo->trackers[i];
-            trackerStructs[newCount].id = newCount++;
-        }
+            trackerStructs[newCount++] = fInfo->trackers[i];
     }
     
     const BOOL success = tr_torrentSetAnnounceList(fHandle, trackerStructs, newCount);
@@ -1340,8 +1334,6 @@ int trashDataFile(const char * filename)
 
 - (NSInteger) checkForFiles: (NSIndexSet *) indexSet
 {
-    NSAssert(indexSet != nil, @"indexSet must not be nil");
-    
     BOOL onState = NO, offState = NO;
     for (NSUInteger index = [indexSet firstIndex]; index != NSNotFound; index = [indexSet indexGreaterThanIndex: index])
     {

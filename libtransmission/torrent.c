@@ -77,7 +77,7 @@ tr_torrentFindFromHashString( tr_session *  session, const char * str )
     tr_torrent * tor = NULL;
 
     while(( tor = tr_torrentNext( session, tor )))
-        if( !strcmp( str, tor->info.hashString ) )
+        if( !strcasecmp( str, tor->info.hashString ) )
             return tor;
 
     return NULL;
@@ -781,12 +781,13 @@ tr_torrentNew( const tr_ctor * ctor, int * setmeError )
         }
         torrentInit( tor, ctor );
     }
-    else if( setmeError )
+    else
     {
         if( r == TR_PARSE_DUPLICATE )
             tr_metainfoFree( &tmpInfo );
 
-        *setmeError = r;
+        if( setmeError )
+            *setmeError = r;
     }
 
     return tor;
@@ -1659,7 +1660,7 @@ tr_torrentRecheckCompleteness( tr_torrent * tor )
 
         fireCompletenessChange( tor, completeness );
 
-        if( recentChange && ( completeness == TR_SEED ) )
+        if( recentChange && tr_torrentIsSeed( tor ) )
         {
             tr_announcerTorrentCompleted( tor );
 
@@ -2085,7 +2086,7 @@ tr_torrentSetAnnounceList( tr_torrent             * tor,
 
     /* look for bad URLs */
     for( i=0; ok && i<trackerCount; ++i )
-        if( !tr_httpIsValidURL( trackers[i].announce ) )
+        if( !tr_urlIsValidTracker( trackers[i].announce ) )
             ok = FALSE;
 
     /* save to the .torrent file */

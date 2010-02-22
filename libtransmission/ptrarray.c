@@ -17,7 +17,7 @@
 #include "ptrarray.h"
 #include "utils.h"
 
-#define GROW 32
+#define FLOOR 32
 
 const tr_ptrArray TR_PTR_ARRAY_INIT = { NULL, 0, 0 };
 
@@ -78,7 +78,7 @@ tr_ptrArrayInsert( tr_ptrArray * t,
 
     if( t->n_items >= t->n_alloc )
     {
-        t->n_alloc = t->n_items + GROW;
+        t->n_alloc = MAX( FLOOR, t->n_alloc * 2 );
         t->items = tr_renew( void*, t->items, t->n_alloc );
     }
 
@@ -109,7 +109,7 @@ tr_ptrArrayErase( tr_ptrArray * t,
 {
     assert( begin >= 0 );
     if( end < 0 ) end = t->n_items;
-    assert( end - begin > 0 );
+    assert( begin < end );
     assert( end <= t->n_items );
 
     memmove( t->items + begin,
@@ -128,7 +128,7 @@ tr_ptrArrayLowerBound( const tr_ptrArray *                t,
                        const void *                       ptr,
                        int                 compare( const void *,
                                                     const void * ),
-                       int *                              exact_match )
+                       tr_bool *                    exact_match )
 {
     int len = t->n_items;
     int first = 0;
@@ -146,7 +146,7 @@ tr_ptrArrayLowerBound( const tr_ptrArray *                t,
         else if( !c )
         {
             if( exact_match )
-                *exact_match = 1;
+                *exact_match = TRUE;
             return middle;
             break;
         }
@@ -157,7 +157,7 @@ tr_ptrArrayLowerBound( const tr_ptrArray *                t,
     }
 
     if( exact_match )
-        *exact_match = 0;
+        *exact_match = FALSE;
 
     return first;
 }
@@ -167,7 +167,7 @@ tr_ptrArrayLowerBound( const tr_ptrArray *                t,
 #else
 static void
 assertSortedAndUnique( const tr_ptrArray * t,
-                        int compare(const void*, const void*) )
+                    int compare(const void*, const void*) )
 {
     int i;
 
@@ -179,7 +179,7 @@ assertSortedAndUnique( const tr_ptrArray * t,
 int
 tr_ptrArrayInsertSorted( tr_ptrArray * t,
                          void *        ptr,
-                          int            compare(const void*, const void*) )
+                         int           compare(const void*, const void*) )
 {
     const int pos = tr_ptrArrayLowerBound( t, ptr, compare, NULL );
     const int ret = tr_ptrArrayInsert( t, ptr, pos );
@@ -191,9 +191,9 @@ tr_ptrArrayInsertSorted( tr_ptrArray * t,
 void*
 tr_ptrArrayFindSorted( tr_ptrArray * t,
                        const void *  ptr,
-                        int            compare(const void*, const void*) )
+                       int           compare(const void*, const void*) )
 {
-    int       match;
+    tr_bool   match;
     const int pos = tr_ptrArrayLowerBound( t, ptr, compare, &match );
 
     return match ? t->items[pos] : NULL;
@@ -201,11 +201,11 @@ tr_ptrArrayFindSorted( tr_ptrArray * t,
 
 void*
 tr_ptrArrayRemoveSorted( tr_ptrArray * t,
-                         const void *        ptr,
-                          int            compare(const void*, const void*) )
+                         const void  * ptr,
+                         int           compare(const void*, const void*) )
 {
     void *    ret = NULL;
-    int       match;
+    tr_bool   match;
     const int pos = tr_ptrArrayLowerBound( t, ptr, compare, &match );
 
     if( match )

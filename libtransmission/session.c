@@ -778,6 +778,8 @@ sessionSetImpl( void * vdata )
         turtle->days = i;
     if( tr_bencDictFindBool( settings, TR_PREFS_KEY_ALT_SPEED_TIME_ENABLED, &boolVal ) )
         turtle->isClockEnabled = boolVal;
+    if( tr_bencDictFindBool( settings, TR_PREFS_KEY_ALT_SPEED_ENABLED, &boolVal ) )
+        turtle->isEnabled = boolVal;
     turtleBootstrap( session, turtle );
 
     data->done = TRUE;
@@ -1178,11 +1180,14 @@ turtleCheckClock( tr_session * session, struct tr_turtle_info * t, tr_bool byUse
 static void
 turtleBootstrap( tr_session * session, struct tr_turtle_info * turtle )
 {
-    tr_bool isEnabled;
-
     turtleFindNextChange( turtle );
-    isEnabled = turtle->isClockEnabled && !turtle->_nextChangeValue;
-    useAltSpeed( session, turtle, isEnabled, FALSE );
+
+    turtle->changedByUser = FALSE;
+
+    if( turtle->isClockEnabled )
+        turtle->isEnabled = !turtle->_nextChangeValue;
+
+    altSpeedToggled( session );
 }
 
 /***

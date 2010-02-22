@@ -207,7 +207,7 @@ dns_cache_lookup( struct tr_web_task * task, const char * host, const char ** re
 static void
 dns_cache_set_fail( struct tr_web_task * task, const char * host )
 {
-    if( task->session->web != NULL )
+    if( ( task->session->web != NULL ) && ( host != NULL ) )
     {
         struct dns_cache_item * item;
         tr_ptrArray * cache = &task->session->web->dns_cache;
@@ -296,7 +296,7 @@ static int
 getTimeoutFromURL( const char * url )
 {
     if( strstr( url, "scrape" ) != NULL ) return 30;
-    if( strstr( url, "announce" ) != NULL ) return 120;
+    if( strstr( url, "announce" ) != NULL ) return 90;
     return 240;
 }
 
@@ -380,6 +380,7 @@ addTask( void * vtask )
         evtimer_set( &task->timer_event, task_timeout_cb, task );
         tr_timerAdd( &task->timer_event, timeout, 0 );
 
+        curl_easy_setopt( e, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4 );
         curl_easy_setopt( e, CURLOPT_SOCKOPTFUNCTION, sockoptfunction );
         curl_easy_setopt( e, CURLOPT_SOCKOPTDATA, task );
         curl_easy_setopt( e, CURLOPT_WRITEDATA, task );
@@ -387,6 +388,8 @@ addTask( void * vtask )
         curl_easy_setopt( e, CURLOPT_DNS_CACHE_TIMEOUT, MIN_DNS_CACHE_TIME );
         curl_easy_setopt( e, CURLOPT_FOLLOWLOCATION, 1L );
         curl_easy_setopt( e, CURLOPT_AUTOREFERER, 1L );
+        curl_easy_setopt( e, CURLOPT_FORBID_REUSE, 1L );
+        curl_easy_setopt( e, CURLOPT_MAXREDIRS, -1L );
         curl_easy_setopt( e, CURLOPT_PRIVATE, task );
         curl_easy_setopt( e, CURLOPT_SSL_VERIFYHOST, 0L );
         curl_easy_setopt( e, CURLOPT_SSL_VERIFYPEER, 0L );
@@ -460,7 +463,7 @@ doDNS( void * vtask )
 
     assert( task->resolved_host == NULL );
 
-    if( !tr_httpParseURL( task->url, -1, &host, &port, NULL ) )
+    if( !tr_urlParse( task->url, -1, NULL, &host, &port, NULL ) )
     {
         task->port = port;
         task->host = host;
