@@ -346,19 +346,12 @@ evsignal_dealloc(struct event_base *base)
 			_evsignal_restore_handler(base, i);
 	}
 
-	if (base->sig.ev_signal_pair[0] != -1) {
-		EVUTIL_CLOSESOCKET(base->sig.ev_signal_pair[0]);
-		base->sig.ev_signal_pair[0] = -1;
-	}
-	if (base->sig.ev_signal_pair[1] != -1) {
-		EVUTIL_CLOSESOCKET(base->sig.ev_signal_pair[1]);
-		base->sig.ev_signal_pair[1] = -1;
-	}
+	EVUTIL_CLOSESOCKET(base->sig.ev_signal_pair[0]);
+	base->sig.ev_signal_pair[0] = -1;
+	EVUTIL_CLOSESOCKET(base->sig.ev_signal_pair[1]);
+	base->sig.ev_signal_pair[1] = -1;
 	base->sig.sh_old_max = 0;
 
-	/* per index frees are handled in evsig_del() */
-	if (base->sig.sh_old) {
-		free(base->sig.sh_old);
-		base->sig.sh_old = NULL;
-	}
+	/* per index frees are handled in evsignal_del() */
+	free(base->sig.sh_old);
 }
