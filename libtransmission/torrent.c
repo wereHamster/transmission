@@ -834,7 +834,8 @@ tr_torrentChangeMyPort( tr_torrent * tor )
 {
     assert( tr_isTorrent( tor  ) );
 
-    tr_announcerChangeMyPort( tor );
+    if( tor->isRunning )
+        tr_announcerChangeMyPort( tor );
 }
 
 static inline void
@@ -2541,6 +2542,13 @@ setLocation( void * vdata )
                 tr_torrentStart( tor );
             }
         }
+    }
+
+    if( !err && do_move )
+    {
+        tr_free( tor->incompleteDir );
+        tor->incompleteDir = NULL;
+        tor->currentDir = tor->downloadDir;
     }
 
     if( data->setme_state )
