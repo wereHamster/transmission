@@ -253,7 +253,7 @@ tr_netOpenPeerSocket( tr_session        * session,
     const tr_address      * source_addr;
     socklen_t               sourcelen;
     struct sockaddr_storage source_sock;
-    tr_port                 source_port = 0;
+    tr_port                 source_port = 0, source_port_max;
 
     assert( tr_isAddress( addr ) );
 
@@ -280,7 +280,8 @@ tr_netOpenPeerSocket( tr_session        * session,
     {
         int optval = 1;
         setsockopt( s, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval) );
-        source_port = htons( tr_sessionGetPeerPort( session ) );
+        source_port = tr_sessionGetPeerPort( session );
+        source_port_max = MIN( (int)source_port + 50, UINT16_MAX );
     }
     
     addrlen = setup_sockaddr( addr, port, &sock );
@@ -288,9 +289,17 @@ tr_netOpenPeerSocket( tr_session        * session,
     /* set source address */
     source_addr = tr_sessionGetPublicAddress( session, addr->type );
     assert( source_addr );
-    sourcelen = setup_sockaddr( source_addr, source_port, &source_sock );
+
+try_again:
+    sourcelen = setup_sockaddr( source_addr, htons( source_port ), &source_sock );
     if( bind( s, ( struct sockaddr * ) &source_sock, sourcelen ) )
     {
+        if( tr_sessionShouldBindLocalPort( session ) && errno == EADDRINUSE )
+        {
+            if( source_port++ < source_port_max )
+                goto try_again;
+        }
+
         tr_err( _( "Couldn't set source address %s on %d: %s" ),
                 tr_ntop_non_ts( source_addr ), s, tr_strerror( errno ) );
         return -errno;
