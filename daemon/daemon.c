@@ -27,6 +27,10 @@
 
 #include <event.h>
 
+#ifdef USE_STOMP
+#include <stomp.h>
+#endif
+
 #include <libtransmission/transmission.h>
 #include <libtransmission/bencode.h>
 #include <libtransmission/tr-getopt.h>
@@ -98,6 +102,9 @@ static const struct tr_option options[] =
     { 'r', "rpc-bind-address", "Where to listen for RPC connections", "r", 1, "<ipv4 address>" },
     { 953, "global-seedratio", "All torrents, unless overridden by a per-torrent setting, should seed until a specific ratio", "gsr", 1, "ratio" },
     { 954, "no-global-seedratio", "All torrents, unless overridden by a per-torrent setting, should seed regardless of ratio", "GSR", 0, NULL },
+#ifdef USE_STOMP
+    { 960, "stomp", "Stomp queue to send messages to", "STOMP", 1, "<queue>" },
+#endif
     { 0, NULL, NULL, NULL, 0, NULL }
 };
 
@@ -275,6 +282,77 @@ pumpLogMessages( FILE * logfile )
     tr_freeMessageList( list );
 }
 
+#ifdef USE_STOMP
+
+struct stomp_callback_data {
+    apr_pool_t *pool;
+    stomp_connection *conn;
+    char *queue;
+};
+
+static void eatStompResponse(stomp_connection *conn, apr_pool_t *pool)
+{
+      stomp_frame *frame;
+      stomp_read(conn, &frame, pool);
+}
+
+
+static void
+stompCompletenessCallback(tr_torrent * torrent, tr_completeness completeness, void * user_data)
+{
+    struct stomp_callback_data *data = user_data;
+    struct tr_info *info = tr_torrentInfo(torrent);
+    stomp_frame frame;
+    apr_status_t rc;
+
+    if (completeness != TR_SEED)
+        return;
+
+    frame.command = "SEND";
+
+    frame.headers = apr_hash_make(data->pool);
+    apr_hash_set(frame.headers, "destination", APR_HASH_KEY_STRING, data->queue);
+    apr_hash_set(frame.headers, "hash", APR_HASH_KEY_STRING, info->hashString);
+
+    frame.body = "COMPLETED";
+    frame.body_length = -1;
+
+    rc = stomp_write(data->conn, &frame, data->pool);
+}
+
+static tr_rpc_callback_status
+stompRPCCallback(tr_session * session, tr_rpc_callback_type type, struct tr_torrent * tor, void * user_data )
+{
+    static char *rpcTypeMap[] = { "ADDED", "STARTED", "STOPPED", "REMOVED", "CHANGED", "MOVED" };
+    struct stomp_callback_data *data = user_data;
+    stomp_frame frame;
+    apr_status_t rc;
+
+    if (type >= sizeof(rpcTypeMap) / sizeof(rpcTypeMap[0]))
+        return;
+
+    if (type == TR_RPC_TORRENT_ADDED)
+        tr_torrentSetCompletenessCallback( tor, stompCompletenessCallback, data );
+
+    frame.command = "SEND";
+
+    frame.headers = apr_hash_make(data->pool);
+    apr_hash_set(frame.headers, "destination", APR_HASH_KEY_STRING, data->queue);
+    if (tor) {
+        struct tr_info * info = tr_torrentInfo( tor );
+        apr_hash_set(frame.headers, "hash", APR_HASH_KEY_STRING, info->hashString);
+    }
+
+    frame.body = rpcTypeMap[type];
+    frame.body_length = -1;
+
+    rc = stomp_write(data->conn, &frame, data->pool);
+
+    return TR_RPC_OK;
+}
+
+#endif
+
 int
 main( int argc, char ** argv )
 {
@@ -288,6 +366,14 @@ main( int argc, char ** argv )
     const char * configDir = NULL;
     dtr_watchdir * watchdir = NULL;
     FILE * logfile = NULL;
+
+#ifdef USE_STOMP
+    apr_status_t rc;
+    stomp_frame frame;
+
+    struct stomp_callback_data stompCallbackData;
+    stompCallbackData.queue = "/queue/transmission";
+#endif
 
     signal( SIGINT, gotsig );
     signal( SIGTERM, gotsig );
@@ -388,6 +474,11 @@ main( int argc, char ** argv )
 	    case 954:
 		      tr_bencDictAddBool( &settings, TR_PREFS_KEY_RATIO_ENABLED, FALSE );
 		      break;
+#ifdef USE_STOMP
+	    case 960:
+		      stompCallbackData.queue = strdup(optarg);
+		      break;
+#endif
             default:  showUsage( );
                       break;
         }
@@ -423,6 +514,21 @@ main( int argc, char ** argv )
     tr_ninf( NULL, "Using settings from \"%s\"", configDir );
     tr_sessionSaveSettings( mySession, configDir, &settings );
 
+#ifdef USE_STOMP
+    rc = apr_initialize();
+    rc = apr_pool_create(&stompCallbackData.pool, NULL);
+    rc = stomp_connect(&stompCallbackData.conn, "127.0.0.1", 61613, stompCallbackData.pool);
+
+    frame.command = "CONNECT";
+    frame.headers = apr_hash_make(stompCallbackData.pool);
+    frame.body = NULL;
+    frame.body_length = -1;
+    rc = stomp_write(stompCallbackData.conn, &frame, stompCallbackData.pool);
+    eatStompResponse(stompCallbackData.conn, stompCallbackData.pool);
+
+    tr_sessionSetRPCCallback( mySession, stompRPCCallback, &stompCallbackData );
+#endif
+
     if( tr_bencDictFindBool( &settings, TR_PREFS_KEY_RPC_AUTH_REQUIRED, &boolVal ) && boolVal )
         tr_ninf( MY_NAME, "requiring authentication" );
 
@@ -452,6 +558,14 @@ main( int argc, char ** argv )
         tr_ctorFree( ctor );
     }
 
+#ifdef USE_STOMP
+    {
+        tr_torrent * tor = NULL;
+        while( tor = tr_torrentNext( mySession, tor ) )
+            tr_torrentSetCompletenessCallback( tor, stompCompletenessCallback, &stompCallbackData );
+    }
+#endif
+
 #ifdef HAVE_SYSLOG
     if( !foreground )
         openlog( MY_NAME, LOG_CONS, LOG_DAEMON );
@@ -480,5 +594,11 @@ main( int argc, char ** argv )
 
     /* cleanup */
     tr_bencFree( &settings );
+
+#ifdef USE_STOMP
+    rc = stomp_disconnect(&stompCallbackData.conn);
+    apr_terminate();
+#endif
+
     return 0;
 }

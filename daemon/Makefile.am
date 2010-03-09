@@ -5,7 +5,8 @@ AM_CFLAGS = \
     @OPENSSL_CFLAGS@ \
     @LIBCURL_CFLAGS@ \
     @ZLIB_CFLAGS@ \
-    @PTHREAD_CFLAGS@
+    @PTHREAD_CFLAGS@ \
+    @STOMP_CFLAGS@
 
 AM_LDFLAGS = \
     @ZLIB_LDFLAGS@
@@ -28,7 +29,8 @@ LDADD = \
     @OPENSSL_LIBS@ \
     @INTLLIBS@ \
     @ZLIB_LIBS@ \
-    @PTHREAD_LIBS@
+    @PTHREAD_LIBS@ \
+    @STOMP_LIBS@
 
 noinst_HEADERS = \
     watch.h

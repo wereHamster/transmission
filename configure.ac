@@ -370,6 +370,21 @@ if test "x$build_gtk" = "xyes" -a  "x$enable_nls" = "xno" ; then
     AC_MSG_ERROR("The gtk client cannot be built without nls support.  Try adding either --enable-nls or --disable-gtk" )
 fi
 
+AC_ARG_ENABLE([stomp],
+              AS_HELP_STRING([--enable-stomp],[enable stomp support]),,
+              [use_stomp=yes])
+
+if test "x$use_stomp" = "xyes" && which apr-1-config >/dev/null; then
+    STOMP_CFLAGS="-I\$(top_builddir)/third-party/stomp `apr-1-config --cflags --includes`"
+    AC_SUBST(STOMP_CFLAGS)
+    STOMP_LIBS="\$(top_builddir)/third-party/stomp/libstomp.a `apr-1-config --link-libtool --libs`"
+    AC_SUBST(STOMP_LIBS)
+
+    AC_DEFINE([USE_STOMP], 1)
+else
+    use_stomp=no
+fi
+
 dnl This section is only used for internationalization.
 dnl If you don't need translations and this section gives you trouble --
 dnl such as if you're building for a headless system --
@@ -481,6 +496,7 @@ AC_CONFIG_FILES([Makefile
                  third-party/miniupnp/Makefile
                  third-party/libnatpmp/Makefile
                  third-party/dht/Makefile
+                 third-party/stomp/Makefile
                  macosx/Makefile
                  gtk/Makefile
                  gtk/icons/Makefile
@@ -516,6 +532,7 @@ Configuration:
       optional libappindicator for Ubuntu-style system tray:   ${use_libappindicator}
 
    Build Daemon:                                               ${build_daemon}
+      optional stomp support:                                  ${use_stomp}
 
    Build Mac client:                                           ${build_mac}
 
