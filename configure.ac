@@ -3,8 +3,8 @@ dnl STATUS: "X" for prerelease beta builds,
 dnl         "Z" for unsupported trunk builds,
 dnl         "0" for stable, supported releases
 dnl these should be the only two lines you need to change
-m4_define([user_agent_prefix],[1.91+])
-m4_define([peer_id_prefix],[-TR191Z-])
+m4_define([user_agent_prefix],[1.92+])
+m4_define([peer_id_prefix],[-TR192Z-])
 
 AC_INIT([transmission],
         [user_agent_prefix],
@@ -42,7 +42,7 @@ AM_CONDITIONAL(TR_UNSTABLE, test "x$supported_build" = "xno")
 ##   MANDATORY for everything
 ##
 ##
-CURL_MINIMUM=7.16.3
+CURL_MINIMUM=7.15.4
 AC_SUBST(CURL_MINIMUM)
 LIBEVENT_MINIMUM=1.4.5
 AC_SUBST(LIBEVENT_MINIUM)

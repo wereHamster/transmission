@@ -1065,6 +1065,14 @@ enum
     PEER_COL_UPLOAD_REQUEST_COUNT_STRING,
     PEER_COL_DOWNLOAD_REQUEST_COUNT_INT,
     PEER_COL_DOWNLOAD_REQUEST_COUNT_STRING,
+    PEER_COL_BLOCKS_DOWNLOADED_COUNT_INT,
+    PEER_COL_BLOCKS_DOWNLOADED_COUNT_STRING,
+    PEER_COL_BLOCKS_UPLOADED_COUNT_INT,
+    PEER_COL_BLOCKS_UPLOADED_COUNT_STRING,
+    PEER_COL_REQS_CANCELLED_BY_CLIENT_COUNT_INT,
+    PEER_COL_REQS_CANCELLED_BY_CLIENT_COUNT_STRING,
+    PEER_COL_REQS_CANCELLED_BY_PEER_COUNT_INT,
+    PEER_COL_REQS_CANCELLED_BY_PEER_COUNT_STRING,
     PEER_COL_ENCRYPTION_STOCK_ID,
     PEER_COL_STATUS,
     N_PEER_COLS
@@ -1086,6 +1094,14 @@ getPeerColumnName( int column )
         case PEER_COL_UPLOAD_REQUEST_COUNT_STRING: return _( "Up Reqs" );
         case PEER_COL_DOWNLOAD_REQUEST_COUNT_INT:
         case PEER_COL_DOWNLOAD_REQUEST_COUNT_STRING: return _( "Dn Reqs" );
+        case PEER_COL_BLOCKS_DOWNLOADED_COUNT_INT:
+        case PEER_COL_BLOCKS_DOWNLOADED_COUNT_STRING: return _( "Dn Blocks" );
+        case PEER_COL_BLOCKS_UPLOADED_COUNT_INT:
+        case PEER_COL_BLOCKS_UPLOADED_COUNT_STRING: return _( "Up Blocks" );
+        case PEER_COL_REQS_CANCELLED_BY_CLIENT_COUNT_INT:
+        case PEER_COL_REQS_CANCELLED_BY_CLIENT_COUNT_STRING: return _( "We Cancelled" );
+        case PEER_COL_REQS_CANCELLED_BY_PEER_COUNT_INT:
+        case PEER_COL_REQS_CANCELLED_BY_PEER_COUNT_STRING: return _( "They Cancelled" );
         case PEER_COL_STATUS: return _( "Status" );
         default: return "";
     }
@@ -1109,6 +1125,14 @@ peer_store_new( void )
                                G_TYPE_STRING,   /* upload request count string */
                                G_TYPE_INT,      /* download request count int */
                                G_TYPE_STRING,   /* download request count string */
+                               G_TYPE_INT,      /* # blocks downloaded int */
+                               G_TYPE_STRING,   /* # blocks downloaded string */
+                               G_TYPE_INT,      /* # blocks uploaded int */
+                               G_TYPE_STRING,   /* # blocks uploaded string */
+                               G_TYPE_INT,      /* # blocks cancelled by client int */
+                               G_TYPE_STRING,   /* # blocks cancelled by client string */
+                               G_TYPE_INT,      /* # blocks cancelled by peer int */
+                               G_TYPE_STRING,   /* # blocks cancelled by peer string */
                                G_TYPE_STRING,   /* encryption stock id */
                                G_TYPE_STRING);  /* flagString */
 }
@@ -1150,10 +1174,14 @@ refreshPeerRow( GtkListStore        * store,
                 GtkTreeIter         * iter,
                 const tr_peer_stat  * peer )
 {
-    char up_speed[128];
-    char down_speed[128];
-    char up_count[128];
-    char down_count[128];
+    char up_speed[64];
+    char down_speed[64];
+    char up_count[64];
+    char down_count[64];
+    char blocks_to_peer[64];
+    char blocks_to_client[64];
+    char cancelled_by_peer[64];
+    char cancelled_by_client[64];
 
     if( peer->rateToPeer > 0.01 )
         tr_strlspeed( up_speed, peer->rateToPeer, sizeof( up_speed ) );
@@ -1175,6 +1203,26 @@ refreshPeerRow( GtkListStore        * store,
     else
         *up_count = '\0';
 
+    if( peer->blocksToPeer > 0 )
+        g_snprintf( blocks_to_peer, sizeof( blocks_to_peer ), "%"PRIu32, peer->blocksToPeer );
+    else
+        *blocks_to_peer = '\0';
+
+    if( peer->blocksToClient > 0 )
+        g_snprintf( blocks_to_client, sizeof( blocks_to_client ), "%"PRIu32, peer->blocksToClient );
+    else
+        *blocks_to_client = '\0';
+
+    if( peer->cancelsToPeer > 0 )
+        g_snprintf( cancelled_by_client, sizeof( cancelled_by_client ), "%"PRIu32, peer->cancelsToPeer );
+    else
+        *cancelled_by_client = '\0';
+
+    if( peer->cancelsToClient > 0 )
+        g_snprintf( cancelled_by_peer, sizeof( cancelled_by_peer ), "%"PRIu32, peer->cancelsToClient );
+    else
+        *cancelled_by_peer = '\0';
+
     gtk_list_store_set( store, iter,
                         PEER_COL_PROGRESS, (int)( 100.0 * peer->progress ),
                         PEER_COL_UPLOAD_REQUEST_COUNT_INT, peer->pendingReqsToClient,
@@ -1187,6 +1235,14 @@ refreshPeerRow( GtkListStore        * store,
                         PEER_COL_UPLOAD_RATE_STRING, up_speed,
                         PEER_COL_STATUS, peer->flagStr,
                         PEER_COL_WAS_UPDATED, TRUE,
+                        PEER_COL_BLOCKS_DOWNLOADED_COUNT_INT, (int)peer->blocksToClient,
+                        PEER_COL_BLOCKS_DOWNLOADED_COUNT_STRING, blocks_to_client,
+                        PEER_COL_BLOCKS_UPLOADED_COUNT_INT, (int)peer->blocksToPeer,
+                        PEER_COL_BLOCKS_UPLOADED_COUNT_STRING, blocks_to_peer,
+                        PEER_COL_REQS_CANCELLED_BY_CLIENT_COUNT_INT, (int)peer->cancelsToPeer,
+                        PEER_COL_REQS_CANCELLED_BY_CLIENT_COUNT_STRING, cancelled_by_client,
+                        PEER_COL_REQS_CANCELLED_BY_PEER_COUNT_INT, (int)peer->cancelsToClient,
+                        PEER_COL_REQS_CANCELLED_BY_PEER_COUNT_STRING, cancelled_by_peer,
                         -1 );
 }
 
@@ -1447,6 +1503,10 @@ setPeerViewColumns( GtkTreeView * peer_view )
     if( more ) view_columns[n++] = PEER_COL_UPLOAD_REQUEST_COUNT_STRING;
     view_columns[n++] = PEER_COL_DOWNLOAD_RATE_STRING;
     if( more ) view_columns[n++] = PEER_COL_DOWNLOAD_REQUEST_COUNT_STRING;
+    if( more ) view_columns[n++] = PEER_COL_BLOCKS_DOWNLOADED_COUNT_STRING;
+    if( more ) view_columns[n++] = PEER_COL_BLOCKS_UPLOADED_COUNT_STRING;
+    if( more ) view_columns[n++] = PEER_COL_REQS_CANCELLED_BY_CLIENT_COUNT_STRING;
+    if( more ) view_columns[n++] = PEER_COL_REQS_CANCELLED_BY_PEER_COUNT_STRING;
     view_columns[n++] = PEER_COL_PROGRESS;
     view_columns[n++] = PEER_COL_STATUS;
     view_columns[n++] = PEER_COL_ADDRESS;
@@ -1495,16 +1555,37 @@ setPeerViewColumns( GtkTreeView * peer_view )
                 gtk_tree_view_column_set_fixed_width( c, 20 );
                 break;
 
+            case PEER_COL_DOWNLOAD_REQUEST_COUNT_STRING:
+                r = gtk_cell_renderer_text_new( );
+                c = gtk_tree_view_column_new_with_attributes( t, r, "text", col, NULL );
+                sort_col = PEER_COL_DOWNLOAD_REQUEST_COUNT_INT;
+                break;
             case PEER_COL_UPLOAD_REQUEST_COUNT_STRING:
                 r = gtk_cell_renderer_text_new( );
                 c = gtk_tree_view_column_new_with_attributes( t, r, "text", col, NULL );
                 sort_col = PEER_COL_UPLOAD_REQUEST_COUNT_INT;
                 break;
 
-            case PEER_COL_DOWNLOAD_REQUEST_COUNT_STRING:
+            case PEER_COL_BLOCKS_DOWNLOADED_COUNT_STRING:
                 r = gtk_cell_renderer_text_new( );
                 c = gtk_tree_view_column_new_with_attributes( t, r, "text", col, NULL );
-                sort_col = PEER_COL_DOWNLOAD_REQUEST_COUNT_INT;
+                sort_col = PEER_COL_BLOCKS_DOWNLOADED_COUNT_INT;
+                break;
+            case PEER_COL_BLOCKS_UPLOADED_COUNT_STRING:
+                r = gtk_cell_renderer_text_new( );
+                c = gtk_tree_view_column_new_with_attributes( t, r, "text", col, NULL );
+                sort_col = PEER_COL_BLOCKS_UPLOADED_COUNT_INT;
+                break;
+           
+            case PEER_COL_REQS_CANCELLED_BY_CLIENT_COUNT_STRING:
+                r = gtk_cell_renderer_text_new( );
+                c = gtk_tree_view_column_new_with_attributes( t, r, "text", col, NULL );
+                sort_col = PEER_COL_REQS_CANCELLED_BY_CLIENT_COUNT_INT;
+                break;
+            case PEER_COL_REQS_CANCELLED_BY_PEER_COUNT_STRING:
+                r = gtk_cell_renderer_text_new( );
+                c = gtk_tree_view_column_new_with_attributes( t, r, "text", col, NULL );
+                sort_col = PEER_COL_REQS_CANCELLED_BY_PEER_COUNT_INT;
                 break;
 
             case PEER_COL_DOWNLOAD_RATE_STRING:
@@ -1512,7 +1593,6 @@ setPeerViewColumns( GtkTreeView * peer_view )
                 c = gtk_tree_view_column_new_with_attributes( t, r, "text", col, NULL );
                 sort_col = PEER_COL_DOWNLOAD_RATE_DOUBLE;
                 break;
-
             case PEER_COL_UPLOAD_RATE_STRING:
                 r = gtk_cell_renderer_text_new( );
                 c = gtk_tree_view_column_new_with_attributes( t, r, "text", col, NULL );
@@ -1819,6 +1899,27 @@ trackerVisibleFunc( GtkTreeModel * model, GtkTreeIter * iter, gpointer data )
      return !isBackup;
 }
 
+static void
+populate_tracker_buffer( GtkTextBuffer * buffer, const tr_torrent * tor )
+{
+    int i;
+    int tier = 0;
+    GString * gstr = g_string_new( NULL );
+    const tr_info * inf = tr_torrentInfo( tor );
+    for( i=0; i<inf->trackerCount; ++i ) {
+        const tr_tracker_info * t = &inf->trackers[i];
+        if( tier != t->tier ) {
+            tier = t->tier;
+            g_string_append_c( gstr, '\n' );
+        }
+        g_string_append_printf( gstr, "%s\n", t->announce );
+    }
+    if( gstr->len > 0 )
+        g_string_truncate( gstr, gstr->len-1 );
+    gtk_text_buffer_set_text( buffer, gstr->str, -1 );
+    g_string_free( gstr, TRUE );
+}
+
 #define TORRENT_PTR_KEY "torrent-pointer"
 
 static void
@@ -1866,22 +1967,8 @@ refreshTracker( struct DetailsImpl * di, tr_torrent ** torrents, int n )
 
     if( ( di->tracker_buffer == NULL ) && ( n == 1 ) )
     {
-        int tier = 0;
-        GString * gstr = g_string_new( NULL );
-        const tr_info * inf = tr_torrentInfo( torrents[0] );
-        for( i=0; i<inf->trackerCount; ++i ) {
-            const tr_tracker_info * t = &inf->trackers[i];
-            if( tier != t->tier ) {
-                tier = t->tier;
-                g_string_append_c( gstr, '\n' );
-            }
-            g_string_append_printf( gstr, "%s\n", t->announce );
-        }
-        if( gstr->len > 0 )
-            g_string_truncate( gstr, gstr->len-1 );
         di->tracker_buffer = gtk_text_buffer_new( NULL );
-        gtk_text_buffer_set_text( di->tracker_buffer, gstr->str, -1 );
-        g_string_free( gstr, TRUE );
+        populate_tracker_buffer( di->tracker_buffer, torrents[0] );
     }
 
     /* add any missing rows (FIXME: doesn't handle edited trackers) */
@@ -2016,6 +2103,12 @@ onEditTrackersResponse( GtkDialog * dialog, int response, gpointer data )
         g_free( trackers );
         g_strfreev( tracker_strings );
         g_free( tracker_text );
+    }
+
+    if( response == GTK_RESPONSE_CANCEL )
+    {
+        tr_torrent * tor = g_object_get_data( G_OBJECT( dialog ), TORRENT_PTR_KEY );
+        populate_tracker_buffer( di->tracker_buffer, tor );
     }
 
     if( do_destroy )
