@@ -41,12 +41,24 @@
 
 - (id) init
 {
-    self = [super initWithNibName: @"InfoPeersView" bundle: nil];
+    if ((self = [super initWithNibName: @"InfoPeersView" bundle: nil]))
+    {
+        [self setTitle: NSLocalizedString(@"Peers", "Inspector view -> title")];
+    }
+    
     return self;
 }
 
 - (void) awakeFromNib
 {
+    const CGFloat height = [[NSUserDefaults standardUserDefaults] floatForKey: @"InspectorContentHeightPeers"];
+    if (height != 0.0)
+    {
+        NSRect viewRect = [[self view] frame];
+        viewRect.size.height = height;
+        [[self view] setFrame: viewRect];
+    }
+    
     //set table header text
     [[[fPeerTable tableColumnWithIdentifier: @"IP"] headerCell] setStringValue: NSLocalizedString(@"IP Address",
                                                                         "inspector -> peer table -> header")];
@@ -221,7 +233,12 @@
     }
 }
 
-- (void) clearPeers
+- (void) saveViewSize
+{
+    [[NSUserDefaults standardUserDefaults] setFloat: NSHeight([[self view] frame]) forKey: @"InspectorContentHeightPeers"];
+}
+
+- (void) clearView
 {
     //if in the middle of animating, just stop and resize immediately
     if (fWebSeedTableAnimation)

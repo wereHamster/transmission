@@ -1576,7 +1576,7 @@ setPeerViewColumns( GtkTreeView * peer_view )
                 c = gtk_tree_view_column_new_with_attributes( t, r, "text", col, NULL );
                 sort_col = PEER_COL_BLOCKS_UPLOADED_COUNT_INT;
                 break;
-           
+
             case PEER_COL_REQS_CANCELLED_BY_CLIENT_COUNT_STRING:
                 r = gtk_cell_renderer_text_new( );
                 c = gtk_tree_view_column_new_with_attributes( t, r, "text", col, NULL );
@@ -2097,6 +2097,7 @@ onEditTrackersResponse( GtkDialog * dialog, int response, gpointer data )
         {
             di->trackers = NULL;
             di->tracker_buffer = NULL;
+            tr_core_torrent_changed( di->core, tr_torrentId( tor ) );
         }
 
         /* cleanup */

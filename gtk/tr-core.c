@@ -455,11 +455,11 @@ static void
 tr_core_apply_defaults( tr_ctor * ctor )
 {
     if( tr_ctorGetPaused( ctor, TR_FORCE, NULL ) )
-        tr_ctorSetPaused( ctor, TR_FORCE, !pref_flag_get( PREF_KEY_START ) );
+        tr_ctorSetPaused( ctor, TR_FORCE, !pref_flag_get( TR_PREFS_KEY_START ) );
 
     if( tr_ctorGetDeleteSource( ctor, NULL ) )
         tr_ctorSetDeleteSource( ctor,
-                               pref_flag_get( PREF_KEY_TRASH_ORIGINAL ) );
+                               pref_flag_get( TR_PREFS_KEY_TRASH_ORIGINAL ) );
 
     if( tr_ctorGetPeerLimit( ctor, TR_FORCE, NULL ) )
         tr_ctorSetPeerLimit( ctor, TR_FORCE,
@@ -948,7 +948,7 @@ add_ctor( TrCore * core, tr_ctor * ctor, gboolean doPrompt, gboolean doNotify )
 void
 tr_core_add_ctor( TrCore * core, tr_ctor * ctor )
 {
-    const gboolean doStart = pref_flag_get( PREF_KEY_START );
+    const gboolean doStart = pref_flag_get( TR_PREFS_KEY_START );
     const gboolean doPrompt = pref_flag_get( PREF_KEY_OPTIONS_PROMPT );
     tr_core_apply_defaults( ctor );
     add_ctor( core, ctor, doStart, doPrompt );
@@ -1136,7 +1136,7 @@ tr_core_add_list( TrCore       * core,
                   pref_flag_t    prompt,
                   gboolean       doNotify )
 {
-    const gboolean doStart = pref_flag_eval( start, PREF_KEY_START );
+    const gboolean doStart = pref_flag_eval( start, TR_PREFS_KEY_START );
     const gboolean doPrompt = pref_flag_eval( prompt, PREF_KEY_OPTIONS_PROMPT );
     GSList * l;
 
@@ -1666,3 +1666,29 @@ tr_core_exec( TrCore * core, const tr_benc * top )
     tr_core_exec_json( core, json );
     tr_free( json );
 }
+
+/***
+****
+***/
+
+void
+tr_core_torrent_changed( TrCore * core, int id )
+{
+    GtkTreeIter iter;
+    GtkTreeModel * model = tr_core_model( core );
+
+    if( gtk_tree_model_get_iter_first( model, &iter ) ) do
+    {
+        tr_torrent * tor;
+        gtk_tree_model_get( model, &iter, MC_TORRENT_RAW, &tor, -1 );
+        if( tr_torrentId( tor ) == id )
+        {
+            GtkTreePath * path = gtk_tree_model_get_path( model, &iter );
+            gtk_tree_model_row_changed( model, path, &iter );
+            gtk_tree_path_free( path );
+            break;
+        }
+    }
+    while( gtk_tree_model_iter_next( model, &iter ) );
+}
+

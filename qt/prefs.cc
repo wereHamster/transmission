@@ -38,12 +38,10 @@ Prefs::PrefItem Prefs::myItems[] =
     { DIR_WATCH_ENABLED, "watch-dir-enabled", QVariant::Bool },
     { SHOW_TRAY_ICON, "show-notification-area-icon", QVariant::Bool },
     { SHOW_DESKTOP_NOTIFICATION, "show-desktop-notification", QVariant::Bool },
-    { START, "start-added-torrents", QVariant::Bool },
-    { TRASH_ORIGINAL, "trash-original-torrent-files", QVariant::Bool },
     { ASKQUIT, "prompt-before-exit", QVariant::Bool },
     { SORT_MODE, "sort-mode", TrTypes::SortModeType },
     { SORT_REVERSED, "sort-reversed", QVariant::Bool },
-    { MINIMAL_VIEW, "minimal-view", QVariant::Bool },
+    { COMPACT_VIEW, "compact-view", QVariant::Bool },
     { FILTERBAR, "show-filterbar", QVariant::Bool },
     { STATUSBAR, "show-statusbar", QVariant::Bool },
     { STATUSBAR_STATS, "statusbar-stats", QVariant::String },
@@ -89,6 +87,8 @@ Prefs::PrefItem Prefs::myItems[] =
     { PEER_PORT_RANDOM_LOW, TR_PREFS_KEY_PEER_PORT_RANDOM_LOW, QVariant::Int },
     { PEER_PORT_RANDOM_HIGH, TR_PREFS_KEY_PEER_PORT_RANDOM_HIGH, QVariant::Int },
     { SOCKET_TOS, TR_PREFS_KEY_PEER_SOCKET_TOS, QVariant::Int },
+    { START, TR_PREFS_KEY_START, QVariant::Bool },
+    { TRASH_ORIGINAL, TR_PREFS_KEY_TRASH_ORIGINAL, QVariant::Bool },
     { PEX_ENABLED, TR_PREFS_KEY_PEX_ENABLED, QVariant::Bool },
     { DHT_ENABLED, TR_PREFS_KEY_DHT_ENABLED, QVariant::Bool },
     { PORT_FORWARDING, TR_PREFS_KEY_PORT_FORWARDING, QVariant::Bool },
@@ -256,9 +256,7 @@ Prefs :: initDefaults( tr_benc * d )
     tr_bencDictAddInt( d, keyStr(ASKQUIT), true );
     tr_bencDictAddStr( d, keyStr(SORT_MODE), "sort-by-name" );
     tr_bencDictAddInt( d, keyStr(SORT_REVERSED), false );
-    tr_bencDictAddInt( d, keyStr(MINIMAL_VIEW), false );
-    tr_bencDictAddInt( d, keyStr(START), true );
-    tr_bencDictAddInt( d, keyStr(TRASH_ORIGINAL), false );
+    tr_bencDictAddInt( d, keyStr(COMPACT_VIEW), false );
     tr_bencDictAddStr( d, keyStr(SESSION_REMOTE_HOST), "localhost" );
     tr_bencDictAddInt( d, keyStr(SESSION_REMOTE_PORT), atoi(TR_DEFAULT_RPC_PORT_STR) );
     tr_bencDictAddBool( d, keyStr(SESSION_IS_REMOTE), false );

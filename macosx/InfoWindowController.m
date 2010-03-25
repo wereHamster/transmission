@@ -23,6 +23,7 @@
  *****************************************************************************/
 
 #import "InfoWindowController.h"
+#import "InfoViewController.h"
 #import "InfoGeneralViewController.h"
 #import "InfoActivityViewController.h"
 #import "InfoTrackersViewController.h"
@@ -60,8 +61,6 @@ typedef enum
 - (void) resetInfo;
 - (void) resetInfoForTorrent: (NSNotification *) notification;
 
-- (NSView *) tabViewForTag: (NSInteger) tag;
-
 @end
 
 @implementation InfoWindowController
@@ -79,7 +78,6 @@ typedef enum
     
     const CGFloat windowHeight = NSHeight([window frame]);
     
-    #warning check if this is still needed
     [window setFrameAutosaveName: @"InspectorWindow"];
     [window setFrameUsingName: @"InspectorWindow"];
     
@@ -89,14 +87,6 @@ typedef enum
     [window setFrame: windowRect display: NO];
     
     [window setBecomesKeyOnlyIfNeeded: YES];
-    
-    //set tab images
-    [[fTabMatrix cellWithTag: TAB_GENERAL_TAG] setIcon: [NSImage imageNamed: @"InfoGeneral.png"]];
-    [[fTabMatrix cellWithTag: TAB_ACTIVITY_TAG] setIcon: [NSImage imageNamed: @"InfoActivity.png"]];
-    [[fTabMatrix cellWithTag: TAB_TRACKERS_TAG] setIcon: [NSImage imageNamed: @"InfoTracker.png"]];
-    [[fTabMatrix cellWithTag: TAB_PEERS_TAG] setIcon: [NSImage imageNamed: @"InfoPeers.png"]];
-    [[fTabMatrix cellWithTag: TAB_FILE_TAG] setIcon: [NSImage imageNamed: @"InfoFiles.png"]];
-    [[fTabMatrix cellWithTag: TAB_OPTIONS_TAG] setIcon: [NSImage imageNamed: @"InfoOptions.png"]];
     
     //set tab tooltips
     [fTabMatrix setToolTip: NSLocalizedString(@"General Info", "Inspector -> tab") forCell: [fTabMatrix cellWithTag: TAB_GENERAL_TAG]];
@@ -142,24 +132,17 @@ typedef enum
 
 - (void) dealloc
 {
-    //save resizeable view height
-    NSString * resizeSaveKey = nil;
-    switch (fCurrentTabTag)
-    {
-        case TAB_TRACKERS_TAG:
-            resizeSaveKey = @"InspectorContentHeightTracker";
-            break;
-        case TAB_PEERS_TAG:
-            resizeSaveKey = @"InspectorContentHeightPeers";
-            break;
-        case TAB_FILE_TAG:
-            resizeSaveKey = @"InspectorContentHeightFiles";
-            break;
-    }
-    if (resizeSaveKey)
-        [[NSUserDefaults standardUserDefaults] setFloat: [[self tabViewForTag: fCurrentTabTag] frame].size.height forKey: resizeSaveKey];
-    
     [[NSNotificationCenter defaultCenter] removeObserver: self];
+    
+    if ([fViewController respondsToSelector: @selector(saveViewSize)])
+        [fViewController saveViewSize];
+    
+    [fGeneralViewController dealloc];
+    [fActivityViewController dealloc];
+    [fTrackersViewController dealloc];
+    [fPeersViewController dealloc];
+    [fFileViewController dealloc];
+    [fOptionsViewController dealloc];
     
     [fTorrents release];
     
@@ -175,32 +158,6 @@ typedef enum
     fTorrents = [torrents retain];
     
     [self resetInfo];
-}
-
-#warning simplify?
-- (void) updateInfoStats
-{
-    switch ([fTabMatrix selectedTag])
-    {
-        case TAB_GENERAL_TAG:
-            [fGeneralViewController updateInfo];
-            break;
-        case TAB_ACTIVITY_TAG:
-            [fActivityViewController updateInfo];
-            break;
-        case TAB_TRACKERS_TAG:
-            [fTrackersViewController updateInfo];
-            break;
-        case TAB_PEERS_TAG:
-            [fPeersViewController updateInfo];
-            break;
-        case TAB_FILE_TAG:
-            [fFileViewController updateInfo];
-            break;
-        case TAB_OPTIONS_TAG:
-            [fOptionsViewController updateInfo];
-            break;
-    }
 }
 
 - (NSRect) windowWillUseStandardFrame: (NSWindow *) window defaultFrame: (NSRect) defaultFrame
@@ -234,49 +191,26 @@ typedef enum
     
     //take care of old view
     CGFloat oldHeight = 0;
-    NSString * oldResizeSaveKey = nil;
     if (oldTabTag != INVALID)
     {
         //deselect old tab item
         [(InfoTabButtonCell *)[fTabMatrix cellWithTag: oldTabTag] setSelectedTab: NO];
         
-        switch (oldTabTag)
-        {
-            case TAB_ACTIVITY_TAG:
-                [fActivityViewController clearPiecesView];
-                break;
-            
-            case TAB_TRACKERS_TAG:
-                [fTrackersViewController clearTrackers];
-                
-                oldResizeSaveKey = @"InspectorContentHeightTracker";
-                break;
-            
-            case TAB_PEERS_TAG:
-                [fPeersViewController clearPeers];
-                
-                oldResizeSaveKey = @"InspectorContentHeightPeers";
-                break;
-            
-            case TAB_FILE_TAG:
-                oldResizeSaveKey = @"InspectorContentHeightFiles";
-                break;
-        }
+        if ([fViewController respondsToSelector: @selector(saveViewSize)])
+            [fViewController saveViewSize];
         
-        NSView * oldView = [self tabViewForTag: oldTabTag];
-        oldHeight = [oldView frame].size.height;
-        if (oldResizeSaveKey)
-            [[NSUserDefaults standardUserDefaults] setFloat: oldHeight forKey: oldResizeSaveKey];
+        if ([fViewController respondsToSelector: @selector(clearView)])
+            [fViewController clearView];
+        
+        NSView * oldView = [fViewController view];
+        oldHeight = NSHeight([oldView frame]);
         
         //remove old view
-        [oldView setHidden: YES];
         [oldView removeFromSuperview];
     }
     
     //set new tab item
-    #warning get titles from view controller?
-    NSString * resizeSaveKey = nil;
-    NSString * identifier, * title;
+    NSString * identifier;
     switch (fCurrentTabTag)
     {
         case TAB_GENERAL_TAG:
@@ -286,8 +220,8 @@ typedef enum
                 [fGeneralViewController setInfoForTorrents: fTorrents];
             }
             
+            fViewController = fGeneralViewController;
             identifier = TAB_INFO_IDENT;
-            title = NSLocalizedString(@"General Info", "Inspector -> title");
             break;
         case TAB_ACTIVITY_TAG:
             if (!fActivityViewController)
@@ -296,8 +230,8 @@ typedef enum
                 [fActivityViewController setInfoForTorrents: fTorrents];
             }
             
+            fViewController = fActivityViewController;
             identifier = TAB_ACTIVITY_IDENT;
-            title = NSLocalizedString(@"Activity", "Inspector -> title");
             break;
         case TAB_TRACKERS_TAG:
             if (!fTrackersViewController)
@@ -306,9 +240,8 @@ typedef enum
                 [fTrackersViewController setInfoForTorrents: fTorrents];
             }
             
+            fViewController = fTrackersViewController;
             identifier = TAB_TRACKER_IDENT;
-            title = NSLocalizedString(@"Trackers", "Inspector -> title");
-            resizeSaveKey = @"InspectorContentHeightTracker";
             break;
         case TAB_PEERS_TAG:
             if (!fPeersViewController)
@@ -317,9 +250,8 @@ typedef enum
                 [fPeersViewController setInfoForTorrents: fTorrents];
             }
             
+            fViewController = fPeersViewController;
             identifier = TAB_PEERS_IDENT;
-            title = NSLocalizedString(@"Peers", "Inspector -> title");
-            resizeSaveKey = @"InspectorContentHeightPeers";
             break;
         case TAB_FILE_TAG:
             if (!fFileViewController)
@@ -328,9 +260,8 @@ typedef enum
                 [fFileViewController setInfoForTorrents: fTorrents];
             }
             
+            fViewController = fFileViewController;
             identifier = TAB_FILES_IDENT;
-            title = NSLocalizedString(@"Files", "Inspector -> title");
-            resizeSaveKey = @"InspectorContentHeightFiles";
             break;
         case TAB_OPTIONS_TAG:
             if (!fOptionsViewController)
@@ -339,8 +270,8 @@ typedef enum
                 [fOptionsViewController setInfoForTorrents: fTorrents];
             }
             
+            fViewController = fOptionsViewController;
             identifier = TAB_OPTIONS_IDENT;
-            title = NSLocalizedString(@"Options", "Inspector -> title");
             break;
         default:
             NSAssert1(NO, @"Unknown info tab selected: %d", fCurrentTabTag);
@@ -351,49 +282,38 @@ typedef enum
     
     NSWindow * window = [self window];
     
-    [window setTitle: [NSString stringWithFormat: @"%@ - %@", title, NSLocalizedString(@"Torrent Inspector", "Inspector -> title")]];
+    [window setTitle: [NSString stringWithFormat: @"%@ - %@", [fViewController title],
+                        NSLocalizedString(@"Torrent Inspector", "Inspector -> title")]];
     
     //selected tab item
     [(InfoTabButtonCell *)[fTabMatrix selectedCell] setSelectedTab: YES];
     
-    NSView * view = [self tabViewForTag: fCurrentTabTag];
+    NSView * view = [fViewController view];
     
-    [self updateInfoStats];
+    [fViewController updateInfo];
     
     NSRect windowRect = [window frame], viewRect = [view frame];
     
-    if (resizeSaveKey)
-    {
-        CGFloat height = [[NSUserDefaults standardUserDefaults] floatForKey: resizeSaveKey];
-        if (height != 0.0)
-            viewRect.size.height = MAX(height, TAB_MIN_HEIGHT);
-    }
-    
-    CGFloat difference = (viewRect.size.height - oldHeight) * [window userSpaceScaleFactor];
+    CGFloat difference = (NSHeight(viewRect) - oldHeight) * [window userSpaceScaleFactor];
     windowRect.origin.y -= difference;
     windowRect.size.height += difference;
     
-    if (resizeSaveKey)
+    if ([fViewController respondsToSelector: @selector(saveViewSize)]) //a little bit hacky, but avoids requiring an extra method
     {
-        if (!oldResizeSaveKey)
-        {
-            [window setMinSize: NSMakeSize([window minSize].width, windowRect.size.height - viewRect.size.height + TAB_MIN_HEIGHT)];
-            [window setMaxSize: NSMakeSize(FLT_MAX, FLT_MAX)];
-        }
+        [window setMinSize: NSMakeSize([window minSize].width, NSHeight(windowRect) - NSHeight(viewRect) + TAB_MIN_HEIGHT)];
+        [window setMaxSize: NSMakeSize(FLT_MAX, FLT_MAX)];
     }
     else
     {
-        [window setMinSize: NSMakeSize([window minSize].width, windowRect.size.height)];
-        [window setMaxSize: NSMakeSize(FLT_MAX, windowRect.size.height)];
+        [window setMinSize: NSMakeSize([window minSize].width, NSHeight(windowRect))];
+        [window setMaxSize: NSMakeSize(FLT_MAX, NSHeight(windowRect))];
     }
     
-    viewRect.size.width = windowRect.size.width;
+    viewRect.size.width = NSWidth(windowRect);
     [view setFrame: viewRect];
     
     [window setFrame: windowRect display: YES animate: oldTabTag != INVALID];
     [[window contentView] addSubview: view];
-    
-    [view setHidden: NO];
     
     if ([NSApp isOnSnowLeopardOrBetter] && (fCurrentTabTag == TAB_FILE_TAG || oldTabTag == TAB_FILE_TAG)
         && ([QLPreviewPanelSL sharedPreviewPanelExists] && [[QLPreviewPanelSL sharedPreviewPanel] isVisible]))
@@ -418,6 +338,11 @@ typedef enum
     
     [fTabMatrix selectCellWithTag: tag];
     [self setTab: nil];
+}
+
+- (void) updateInfoStats
+{
+    [fViewController updateInfo];
 }
 
 - (void) updateOptions
@@ -567,36 +492,13 @@ typedef enum
     [fFileViewController setInfoForTorrents: fTorrents];
     [fOptionsViewController setInfoForTorrents: fTorrents];
     
-    [self updateInfoStats];
+    [fViewController updateInfo];
 }
 
 - (void) resetInfoForTorrent: (NSNotification *) notification
 {
     if (fTorrents && [fTorrents containsObject: [notification object]])
         [self resetInfo];
-}
-
-#warning should we use the view controllers directly
-- (NSView *) tabViewForTag: (NSInteger) tag
-{
-    switch (tag)
-    {
-        case TAB_GENERAL_TAG:
-            return [fGeneralViewController view];
-        case TAB_ACTIVITY_TAG:
-            return [fActivityViewController view];
-        case TAB_TRACKERS_TAG:
-            return [fTrackersViewController view];
-        case TAB_PEERS_TAG:
-            return [fPeersViewController view];
-        case TAB_FILE_TAG:
-            return [fFileViewController view];
-        case TAB_OPTIONS_TAG:
-            return [fOptionsViewController view];
-        default:
-            NSAssert1(NO, @"Unknown tab view for tag: %d", tag);
-            return nil;
-    }
 }
 
 @end

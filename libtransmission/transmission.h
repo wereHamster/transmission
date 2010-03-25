@@ -205,6 +205,8 @@ const char* tr_getDefaultDownloadDir( void );
 #define TR_PREFS_KEY_USPEED                     "speed-limit-up"
 #define TR_PREFS_KEY_UMASK                      "umask"
 #define TR_PREFS_KEY_UPLOAD_SLOTS_PER_TORRENT   "upload-slots-per-torrent"
+#define TR_PREFS_KEY_START                      "start-added-torrents"
+#define TR_PREFS_KEY_TRASH_ORIGINAL             "trash-original-torrent-files"
 
 
 /**
@@ -554,7 +556,7 @@ void          tr_sessionSetProxyPassword( tr_session * session,
 ***
 **/
 
-/** @brief Used by tr_sessionGetStats() and tr_sessionGetCumulativeStats() to give bandwidth statistics */ 
+/** @brief Used by tr_sessionGetStats() and tr_sessionGetCumulativeStats() to give bandwidth statistics */
 typedef struct tr_session_stats
 {
     float       ratio;        /* TR_RATIO_INF, TR_RATIO_NA, or total up/down */
@@ -726,6 +728,11 @@ uint16_t   tr_sessionGetPeerLimitPerTorrent( const tr_session * );
 tr_priority_t   tr_torrentGetPriority( const tr_torrent * );
 void            tr_torrentSetPriority( tr_torrent *, tr_priority_t );
 
+void       tr_sessionSetPaused        ( tr_session *, tr_bool isPaused );
+tr_bool    tr_sessionGetPaused        ( const tr_session * );
+
+void       tr_sessionSetDeleteSource  ( tr_session *, tr_bool deleteSource );
+tr_bool    tr_sessionGetDeleteSource  ( const tr_session * );
 
 /**
  *  Load all the torrents in tr_getTorrentDir().
@@ -1043,7 +1050,7 @@ enum
 
 /**
  * @brief Tell transmsision where to find this torrent's local data.
- * 
+ *
  * if move_from_previous_location is `true', the torrent's incompleteDir
  * will be clobberred s.t. additional files being added will be saved
  * to the torrent's downloadDir.
@@ -1491,7 +1498,7 @@ typedef struct
 
     /* which tier this tracker is in */
     int tier;
-    
+
     /* used to match to a tr_tracker_info */
     uint32_t id;
 }

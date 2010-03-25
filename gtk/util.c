@@ -88,11 +88,21 @@ gtr_lockfile( const char * filename )
 ****
 ***/
 
+const char*
+gtr_get_unicode_string( int i )
+{
+    switch( i ) {
+        case GTR_UNICODE_UP:   return "\xE2\x86\x91";
+        case GTR_UNICODE_DOWN: return "\xE2\x86\x93";
+        case GTR_UNICODE_INF:  return "\xE2\x88\x9E";
+        default:               return "err";
+    }
+}
 
 char*
 tr_strlratio( char * buf, double ratio, size_t buflen )
 {
-    return tr_strratio( buf, buflen, ratio, "\xE2\x88\x9E" );
+    return tr_strratio( buf, buflen, ratio, gtr_get_unicode_string( GTR_UNICODE_INF ) );
 }
 
 #define KILOBYTE_FACTOR 1024.0
@@ -663,7 +673,7 @@ gtr_priority_combo_set_value( GtkWidget * w, tr_priority_t value )
         }
     }
 }
- 
+
 tr_priority_t
 gtr_priority_combo_get_value( GtkWidget * w )
 {
@@ -836,7 +846,7 @@ gtr_unrecognized_url_dialog( GtkWidget * parent, const char * url )
     if( gtr_is_magnet_link( url ) && ( strstr( url, xt ) == NULL ) )
     {
         g_string_append_printf( gstr, "\n \n" );
-        g_string_append_printf( gstr, _( "This magnet link appears to be intended for something other than BitTorrent.  BitTorrent magnet links have a section containing \"%s\"." ), xt ); 
+        g_string_append_printf( gstr, _( "This magnet link appears to be intended for something other than BitTorrent.  BitTorrent magnet links have a section containing \"%s\"." ), xt );
     }
 
     gtk_message_dialog_format_secondary_text( GTK_MESSAGE_DIALOG( w ), "%s", gstr->str );

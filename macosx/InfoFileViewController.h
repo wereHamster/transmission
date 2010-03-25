@@ -23,10 +23,11 @@
  *****************************************************************************/
 
 #import <Cocoa/Cocoa.h>
+#import "InfoViewController.h"
 
 @class FileOutlineController;
 
-@interface InfoFileViewController : NSViewController
+@interface InfoFileViewController : NSViewController <InfoViewController>
 {
     NSArray * fTorrents;
     
@@ -39,6 +40,8 @@
 
 - (void) setInfoForTorrents: (NSArray *) torrents;
 - (void) updateInfo;
+
+- (void) saveViewSize;
 
 - (void) setFileFilterText: (id) sender;
 

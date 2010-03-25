@@ -114,6 +114,10 @@ static tr_option opts[] =
     { 's', "start",                 "Start the current torrent(s)", "s",  0, NULL },
     { 'S', "stop",                  "Stop the current torrent(s)", "S",  0, NULL },
     { 't', "torrent",               "Set the current torrent(s)", "t",  1, "<torrent>" },
+    { 990, "start-paused",          "Start added torrents paused", NULL, 0, NULL },
+    { 991, "no-start-paused",       "Start added torrents unpaused", NULL, 0, NULL },
+    { 992, "trash-torrent",         "Delete torrents after adding", NULL, 0, NULL },
+    { 993, "no-trash-torrent",      "Do not delete torrents after adding", NULL, 0, NULL },
     { 980, "torrent-downlimit",     "Set the maximum download speed for the current torrent(s) in KB/s", "td",  1, "<speed>" },
     { 981, "no-torrent-downlimit",  "Don't limit the download speed for the current torrent(s)", "TD",  0, NULL },
     { 982, "torrent-uplimit",       "Set the maximum upload speed for the current torrent(s) in KB/s", "tu",  1, "<speed>" },
@@ -797,6 +801,26 @@ readargs( int argc, const char ** argv )
                 tr_bencDictAddBool( args, "honorsSessionLimits", FALSE );
                 break;
 
+            case 990:
+                tr_bencDictAddStr( &top, "method", "session-set" );
+                tr_bencDictAddBool( args, TR_PREFS_KEY_START, FALSE );
+                break;
+
+            case 991:
+                tr_bencDictAddStr( &top, "method", "session-set" );
+                tr_bencDictAddBool( args, TR_PREFS_KEY_START, TRUE );
+                break;
+
+            case 992:
+                tr_bencDictAddStr( &top, "method", "session-set" );
+                tr_bencDictAddBool( args, TR_PREFS_KEY_TRASH_ORIGINAL, TRUE );
+                break;
+
+            case 993:
+                tr_bencDictAddStr( &top, "method", "session-set" );
+                tr_bencDictAddBool( args, TR_PREFS_KEY_TRASH_ORIGINAL, FALSE );
+                break;
+
             case TR_OPT_ERR:
                 fprintf( stderr, "invalid option\n" );
                 showUsage( );
@@ -1138,6 +1162,13 @@ printSession( tr_benc * top )
                 }
             }
         }
+        printf( "\n" );
+
+        printf( "MISC\n" );
+        if( tr_bencDictFindBool( args, TR_PREFS_KEY_START, &boolVal ) )
+            printf( "  Autostart added torrents: %s\n", ( boolVal ? "Yes" : "No" ) );
+        if( tr_bencDictFindBool( args, TR_PREFS_KEY_TRASH_ORIGINAL, &boolVal ) )
+            printf( "  Delete automatically added torrents: %s\n", ( boolVal ? "Yes" : "No" ) );
     }
 }
 
@@ -1258,7 +1289,7 @@ printDetails( tr_benc * top )
             if( tr_bencDictFindInt( t, "seedRatioMode", &i))
             {
                 switch( i ) {
-                    case TR_RATIOLIMIT_GLOBAL: 
+                    case TR_RATIOLIMIT_GLOBAL:
                         printf( "  Ratio Limit: Default\n" );
                         break;
                     case TR_RATIOLIMIT_SINGLE:
@@ -1840,7 +1871,7 @@ tr_curl_easy_init( struct evbuffer * writebuf )
     curl_easy_setopt( curl, CURLOPT_POST, 1 );
     curl_easy_setopt( curl, CURLOPT_NETRC, CURL_NETRC_OPTIONAL );
     curl_easy_setopt( curl, CURLOPT_HTTPAUTH, CURLAUTH_ANY );
-    curl_easy_setopt( curl, CURLOPT_TIMEOUT, 60L );
+    curl_easy_setopt( curl, CURLOPT_TIMEOUT, 300L );
     curl_easy_setopt( curl, CURLOPT_VERBOSE, debug );
     curl_easy_setopt( curl, CURLOPT_ENCODING, "" ); /* "" tells curl to fill in the blanks with what it was compiled to support */
     if( netrc )

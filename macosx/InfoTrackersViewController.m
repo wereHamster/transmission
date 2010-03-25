@@ -34,6 +34,7 @@
 #define TRACKER_ADD_TAG 0
 #define TRACKER_REMOVE_TAG 1
 
+
 @interface InfoTrackersViewController (Private)
 
 - (void) setupInfo;
@@ -49,10 +50,23 @@
 {
     if ((self = [super initWithNibName: @"InfoTrackersView" bundle: nil]))
     {
+        [self setTitle: NSLocalizedString(@"Trackers", "Inspector view -> title")];
+        
         fTrackerCell = [[TrackerCell alloc] init];
     }
     
     return self;
+}
+
+- (void) awakeFromNib
+{
+    const CGFloat height = [[NSUserDefaults standardUserDefaults] floatForKey: @"InspectorContentHeightTracker"];
+    if (height != 0.0)
+    {
+        NSRect viewRect = [[self view] frame];
+        viewRect.size.height = height;
+        [[self view] setFrame: viewRect];
+    }
 }
 
 - (void) dealloc
@@ -122,7 +136,12 @@
     }
 }
 
-- (void) clearTrackers
+- (void) saveViewSize
+{
+    [[NSUserDefaults standardUserDefaults] setFloat: NSHeight([[self view] frame]) forKey: @"InspectorContentHeightTracker"];
+}
+
+- (void) clearView
 {
     [fTrackers release];
     fTrackers = nil;
