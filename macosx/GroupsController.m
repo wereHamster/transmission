@@ -251,23 +251,14 @@ GroupsController * fGroupsInstance = nil;
 - (void) addNewGroup
 {
     //find the lowest index
-    NSInteger index;
-    for (index = 0; index < [fGroups count]; index++)
-    {
-        BOOL found = NO;
-        for (NSDictionary * dict in fGroups)
-            if ([[dict objectForKey: @"Index"] integerValue] == index)
-            {
-                found = YES;
-                break;
-            }
-        
-        if (!found)
-            break;
-    }
+    NSMutableIndexSet * indexSet = [NSMutableIndexSet indexSetWithIndexesInRange: NSMakeRange(0, [fGroups count]+1)]; //candidates
+    for (NSDictionary * dict in fGroups)
+        [indexSet removeIndex: [[dict objectForKey: @"Index"] integerValue]];
+    
+    const NSInteger index = [indexSet firstIndex];
     
     [fGroups addObject: [NSMutableDictionary dictionaryWithObjectsAndKeys: [NSNumber numberWithInteger: index], @"Index",
-                            [NSColor cyanColor], @"Color", @"", @"Name", nil]];
+                            [NSColor colorWithCalibratedRed: 0.0 green: 0.65 blue: 1.0 alpha: 1.0], @"Color", @"", @"Name", nil]];
     
     [[NSNotificationCenter defaultCenter] postNotificationName: @"UpdateGroups" object: self];
     [self saveGroups];

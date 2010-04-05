@@ -283,12 +283,14 @@ int trashDataFile(const char * filename)
 - (void) startTransfer
 {
     fWaitToStart = NO;
-    fFinishedSeeding = NO;
     
     if (![self isActive] && [self alertForRemainingDiskSpace])
     {
         tr_torrentStart(fHandle);
         [self update];
+        
+        //capture, specifically, ratio setting changing to unlimited
+        [[NSNotificationCenter defaultCenter] postNotificationName: @"UpdateOptions" object: nil];
     }
 }
 
@@ -821,6 +823,11 @@ int trashDataFile(const char * filename)
     return [self progress] >= 1.0;
 }
 
+- (BOOL) isFinishedSeeding
+{
+    return fStat->finished;
+}
+
 - (BOOL) isError
 {
     return fStat->error == TR_STAT_LOCAL_ERROR;
@@ -986,8 +993,8 @@ int trashDataFile(const char * filename)
         switch (fStat->error)
         {
             case TR_STAT_LOCAL_ERROR: string = NSLocalizedString(@"Error", "Torrent -> status string"); break;
-            case TR_STAT_TRACKER_ERROR: string = NSLocalizedString(@"Tracker returned an error", "Torrent -> status string"); break;
-            case TR_STAT_TRACKER_WARNING: string = NSLocalizedString(@"Tracker returned a warning", "Torrent -> status string"); break;
+            case TR_STAT_TRACKER_ERROR: string = NSLocalizedString(@"Tracker returned error", "Torrent -> status string"); break;
+            case TR_STAT_TRACKER_WARNING: string = NSLocalizedString(@"Tracker returned warning", "Torrent -> status string"); break;
             default: NSAssert(NO, @"unknown error state");
         }
         
@@ -1006,7 +1013,7 @@ int trashDataFile(const char * filename)
                             ? [NSLocalizedString(@"Waiting to download", "Torrent -> status string") stringByAppendingEllipsis]
                             : [NSLocalizedString(@"Waiting to seed", "Torrent -> status string") stringByAppendingEllipsis];
                 }
-                else if (fFinishedSeeding)
+                else if ([self isFinishedSeeding])
                     string = NSLocalizedString(@"Seeding complete", "Torrent -> status string");
                 else
                     string = NSLocalizedString(@"Paused", "Torrent -> status string");
@@ -1085,7 +1092,7 @@ int trashDataFile(const char * filename)
                         ? [NSLocalizedString(@"Waiting to download", "Torrent -> status string") stringByAppendingEllipsis]
                         : [NSLocalizedString(@"Waiting to seed", "Torrent -> status string") stringByAppendingEllipsis];
             }
-            else if (fFinishedSeeding)
+            else if ([self isFinishedSeeding])
                 string = NSLocalizedString(@"Seeding complete", "Torrent -> status string");
             else
                 string = NSLocalizedString(@"Paused", "Torrent -> status string");
@@ -1589,8 +1596,6 @@ int trashDataFile(const char * filename)
     tr_torrentSetMetadataCallback(fHandle, metadataCallback, self);
     
     fHashString = [[NSString alloc] initWithUTF8String: fInfo->hashString];
-	
-    fFinishedSeeding = NO;
     
     fWaitToStart = waitToStart && [waitToStart boolValue];
     fResumeOnWake = NO;
@@ -1739,8 +1744,6 @@ int trashDataFile(const char * filename)
     fStat = tr_torrentStat(fHandle);
     
     [[NSNotificationCenter defaultCenter] postNotificationName: @"TorrentStoppedForRatio" object: self];
-    
-    fFinishedSeeding = YES;
 }
 
 - (void) metadataRetrieved
