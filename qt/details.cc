@@ -245,15 +245,29 @@ Details :: refresh( )
     if( torrents.empty( ) )
         string = none;
     else {
-        string = torrents[0]->activityString( );
-        foreach( const Torrent* t, torrents ) {
-            if( string != t->activityString( ) ) {
-                string = mixed;
-                break;
-            }
+        bool isMixed = false;
+        bool allPaused = true;
+        bool allFinished = true;
+        const tr_torrent_activity activity = torrents[0]->getActivity( );
+        foreach( const Torrent * t, torrents ) {
+            if( activity != t->getActivity( ) )
+                isMixed = true;
+            if( activity != TR_STATUS_STOPPED )
+                allPaused = allFinished = false;
+            if( !t->isFinished( ) )
+                allFinished = false;
         }
+        if( isMixed )
+            string = mixed;
+        else if( allFinished )
+            string = tr( "Finished" );
+        else if( allPaused )
+            string = tr( "Paused" );
+        else
+            string = torrents[0]->activityString( );
     }
     myStateLabel->setText( string );
+    const QString stateString = string;
 
     // myHaveLabel
     double sizeWhenDone = 0;
@@ -340,7 +354,7 @@ Details :: refresh( )
                 allPaused = false;
         }
         if( allPaused )
-            string = tr( "Stopped" );
+            string = stateString; // paused || finished
         else if( baseline.isNull( ) )
             string = mixed;
         else

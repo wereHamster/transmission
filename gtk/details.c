@@ -531,15 +531,16 @@ options_page_new( struct DetailsImpl * d )
 *****
 ****/
 
-static const char * activityString( int activity )
+static const char *
+activityString( int activity, tr_bool finished )
 {
     switch( activity )
     {
-        case TR_STATUS_CHECK_WAIT: return _( "Waiting to verify local data" ); break;
-        case TR_STATUS_CHECK:      return _( "Verifying local data" ); break;
-        case TR_STATUS_DOWNLOAD:   return _( "Downloading" ); break;
-        case TR_STATUS_SEED:       return _( "Seeding" ); break;
-        case TR_STATUS_STOPPED:    return _( "Paused" ); break;
+        case TR_STATUS_CHECK_WAIT: return _( "Waiting to verify local data" );
+        case TR_STATUS_CHECK:      return _( "Verifying local data" );
+        case TR_STATUS_DOWNLOAD:   return _( "Downloading" );
+        case TR_STATUS_SEED:       return _( "Seeding" );
+        case TR_STATUS_STOPPED:    return finished ? _( "Finished" ) : _( "Paused" );
     }
 
     return "";
@@ -583,6 +584,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
     const char * str;
     const char * none = _( "None" );
     const char * mixed = _( "Mixed" );
+    const char * stateString;
     char buf[512];
     double available = 0;
     double sizeWhenDone = 0;
@@ -671,33 +673,35 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
     gtr_label_set_text( GTK_LABEL( di->destination_lb ), str );
 
     /* state_lb */
-    if( n <= 0 )
+    if( n < 1 )
         str = none;
     else {
-        const int baseline = stats[0]->activity;
-        for( i=1; i<n; ++i )
-            if( baseline != (int)stats[i]->activity )
+        const tr_torrent_activity activity = stats[0]->activity;
+        tr_bool allFinished = stats[0]->finished;
+        for( i=1; i<n; ++i ) {
+            if( activity != stats[i]->activity )
                 break;
-        if( i==n )
-            str = activityString( baseline );
-        else
-            str = mixed;
+            if( !stats[i]->finished )
+                allFinished = FALSE;
+        }
+        str = i<n ? mixed : activityString( activity, allFinished );
     }
+    stateString = str;
     gtr_label_set_text( GTK_LABEL( di->state_lb ), str );
 
 
     /* date started */
-    if( n <= 0 )
+    if( n < 1 )
         str = none;
     else {
         const time_t baseline = stats[0]->startDate;
         for( i=1; i<n; ++i )
             if( baseline != stats[i]->startDate )
                 break;
-        if( i!=n )
+        if( i != n )
             str = mixed;
         else if( ( baseline<=0 ) || ( stats[0]->activity == TR_STATUS_STOPPED ) )
-            str = activityString( TR_STATUS_STOPPED );
+            str = stateString;
         else
             str = tr_strltime( buf, time(NULL)-baseline, sizeof( buf ) );
     }
