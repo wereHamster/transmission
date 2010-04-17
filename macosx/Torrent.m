@@ -286,6 +286,7 @@ int trashDataFile(const char * filename)
     
     if (![self isActive] && [self alertForRemainingDiskSpace])
     {
+        tr_ninf( fInfo->name, "restarting via startTransfer" );
         tr_torrentStart(fHandle);
         [self update];
         
@@ -316,7 +317,10 @@ int trashDataFile(const char * filename)
 - (void) wakeUp
 {
     if (fResumeOnWake)
+    {
+        tr_ninf( fInfo->name, "restarting because of wakeUp" );
         tr_torrentStart(fHandle);
+    }
 }
 
 - (void) manualAnnounce
@@ -378,7 +382,7 @@ int trashDataFile(const char * filename)
 
 - (CGFloat) progressStopRatio
 {
-    return fStat->percentRatio;
+    return fStat->seedRatioPercentDone;
 }
 
 - (BOOL) usesSpeedLimit: (BOOL) upload
