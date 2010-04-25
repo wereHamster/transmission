@@ -52,6 +52,8 @@
 #import "NSStringAdditions.h"
 #import "ExpandedPathToPathTransformer.h"
 #import "ExpandedPathToIconTransformer.h"
+
+#import "transmission.h"
 #import "bencode.h"
 #import "utils.h"
 
@@ -288,6 +290,12 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_DSPEED_ENABLED, [fDefaults boolForKey: @"CheckDownload"]);
         tr_bencDictAddInt(&settings, TR_PREFS_KEY_USPEED, [fDefaults integerForKey: @"UploadLimit"]);
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_USPEED_ENABLED, [fDefaults boolForKey: @"CheckUpload"]);
+        
+        //hidden prefs
+        if ([fDefaults objectForKey: @"BindAddressIPv4"])
+            tr_bencDictAddStr(&settings, TR_PREFS_KEY_BIND_ADDRESS_IPV4, [[fDefaults stringForKey: @"BindAddressIPv4"] UTF8String]);
+        if ([fDefaults objectForKey: @"BindAddressIPv6"])
+            tr_bencDictAddStr(&settings, TR_PREFS_KEY_BIND_ADDRESS_IPV6, [[fDefaults stringForKey: @"BindAddressIPv6"] UTF8String]);
         
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_BLOCKLIST_ENABLED, [fDefaults boolForKey: @"Blocklist"]);
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_DHT_ENABLED, [fDefaults boolForKey: @"DHTGlobal"]);
@@ -973,17 +981,17 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         return;
     }
     
-    Torrent * torrent;
-    if (!(torrent = [[Torrent alloc] initWithMagnetAddress: address location: nil lib: fLib]))
-    {
-        [self invalidOpenMagnetAlert: address];
-        return;
-    }
-    
     //determine download location
     NSString * location = nil;
     if ([fDefaults boolForKey: @"DownloadLocationConstant"])
         location = [[fDefaults stringForKey: @"DownloadFolder"] stringByExpandingTildeInPath];
+    
+    Torrent * torrent;
+    if (!(torrent = [[Torrent alloc] initWithMagnetAddress: address location: location lib: fLib]))
+    {
+        [self invalidOpenMagnetAlert: address];
+        return;
+    }
     
     //change the location if the group calls for it (this has to wait until after the torrent is created)
     if ([[GroupsController groups] usesCustomDownloadLocationForIndex: [torrent groupValue]])

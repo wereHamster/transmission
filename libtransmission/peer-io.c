@@ -75,7 +75,6 @@ struct tr_datatype
 {
     tr_bool  isPieceData;
     size_t   length;
-    struct __tr_list head;
 };
 
 /***
@@ -87,7 +86,8 @@ didWriteWrapper( tr_peerIo * io, size_t bytes_transferred )
 {
      while( bytes_transferred && tr_isPeerIo( io ) )
      {
-        struct tr_datatype * next = __tr_list_entry( io->outbuf_datatypes.next, struct tr_datatype, head );
+        struct tr_datatype * next = io->outbuf_datatypes->data;
+
         const size_t payload = MIN( next->length, bytes_transferred );
         const size_t overhead = guessPacketOverhead( payload );
 
@@ -104,7 +104,7 @@ didWriteWrapper( tr_peerIo * io, size_t bytes_transferred )
             bytes_transferred -= payload;
             next->length -= payload;
             if( !next->length ) {
-                __tr_list_remove( io->outbuf_datatypes.next );
+                tr_list_pop_front( &io->outbuf_datatypes );
                 tr_free( next );
             }
         }
@@ -356,6 +356,19 @@ event_write_cb( int fd, short event UNUSED, void * vio )
 ***
 **/
 
+static void
+maybeSetCongestionAlgorithm( int socket, const char * algorithm )
+{
+    if( algorithm && *algorithm )
+    {
+        const int rc = tr_netSetCongestionControl( socket, algorithm );
+
+        if( rc < 0 )
+            tr_ninf( "Net", "Can't set congestion control algorithm '%s': %s",
+                     algorithm, tr_strerror( errno ));
+    }
+}
+
 static tr_peerIo*
 tr_peerIoNew( tr_session       * session,
               tr_bandwidth     * parent,
@@ -374,9 +387,11 @@ tr_peerIoNew( tr_session       * session,
     assert( tr_isBool( isSeed ) );
     assert( tr_amInEventThread( session ) );
 
-    if( socket >= 0 )
+    if( socket >= 0 ) {
         tr_netSetTOS( socket, session->peerSocketTOS );
-
+        maybeSetCongestionAlgorithm( socket, session->peer_congestion_algorithm );
+    }
+    
     io = tr_new0( tr_peerIo, 1 );
     io->magicNumber = MAGIC_NUMBER;
     io->refCount = 1;
@@ -397,8 +412,6 @@ tr_peerIoNew( tr_session       * session,
 
     event_set( &io->event_read, io->socket, EV_READ, event_read_cb, io );
     event_set( &io->event_write, io->socket, EV_WRITE, event_write_cb, io );
-
-    __tr_list_init( &io->outbuf_datatypes );
 
     return io;
 }
@@ -448,6 +461,7 @@ event_enable( tr_peerIo * io, short event )
     assert( tr_amInEventThread( io->session ) );
     assert( io->session != NULL );
     assert( io->session->events != NULL );
+    assert( io->socket >= 0 );
     assert( event_initialized( &io->event_read ) );
     assert( event_initialized( &io->event_write ) );
 
@@ -513,13 +527,6 @@ tr_peerIoSetEnabled( tr_peerIo    * io,
 ***/
 
 static void
-trDatatypeFree( void * data )
-{
-    struct tr_datatype * dt = __tr_list_entry( data, struct tr_datatype, head );
-    tr_free(dt);
-}
-
-static void
 io_dtor( void * vio )
 {
     tr_peerIo * io = vio;
@@ -535,7 +542,7 @@ io_dtor( void * vio )
     evbuffer_free( io->inbuf );
     tr_netClose( io->session, io->socket );
     tr_cryptoFree( io->crypto );
-    __tr_list_destroy( &io->outbuf_datatypes, trDatatypeFree );
+    tr_list_free( &io->outbuf_datatypes, tr_free );
 
     memset( io, ~0, sizeof( tr_peerIo ) );
     tr_free( io );
@@ -641,11 +648,12 @@ tr_peerIoReconnect( tr_peerIo * io )
     io->socket = tr_netOpenPeerSocket( session, &io->addr, io->port, io->isSeed );
     event_set( &io->event_read, io->socket, EV_READ, event_read_cb, io );
     event_set( &io->event_write, io->socket, EV_WRITE, event_write_cb, io );
-    event_enable( io, pendingEvents );
 
     if( io->socket >= 0 )
     {
+        event_enable( io, pendingEvents );
         tr_netSetTOS( io->socket, session->peerSocketTOS );
+        maybeSetCongestionAlgorithm( io->socket, session->peer_congestion_algorithm );
         return 0;
     }
 
@@ -800,9 +808,7 @@ tr_peerIoWrite( tr_peerIo   * io,
     datatype = tr_new( struct tr_datatype, 1 );
     datatype->isPieceData = isPieceData != 0;
     datatype->length = byteCount;
-
-    __tr_list_init( &datatype->head );
-    __tr_list_append( &io->outbuf_datatypes, &datatype->head );
+    tr_list_append( &io->outbuf_datatypes, datatype );
 
     switch( io->encryptionMode )
     {
@@ -981,15 +987,17 @@ int
 tr_peerIoFlushOutgoingProtocolMsgs( tr_peerIo * io )
 {
     size_t byteCount = 0;
-    struct __tr_list * walk;
-    struct __tr_list * fencepost = &io->outbuf_datatypes;
+    tr_list * it;
 
     /* count up how many bytes are used by non-piece-data messages
        at the front of our outbound queue */
-    for( walk=fencepost->next; walk!=fencepost; walk=walk->next ) {
-        struct tr_datatype * d = __tr_list_entry( walk, struct tr_datatype, head );
+    for( it=io->outbuf_datatypes; it!=NULL; it=it->next )
+    {
+        struct tr_datatype * d = it->data;
+
         if( d->isPieceData )
             break;
+
         byteCount += d->length;
     }
 

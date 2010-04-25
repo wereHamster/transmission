@@ -26,6 +26,8 @@
 #import "NSStringAdditions.h"
 #import "PiecesView.h"
 #import "Torrent.h"
+
+#include "transmission.h" // required by utils.h
 #include "utils.h" //tr_getRatio()
 
 #define PIECES_CONTROL_PROGRESS 0
@@ -67,9 +69,7 @@
 
 - (void) setInfoForTorrents: (NSArray *) torrents
 {
-    if (fTorrents && [fTorrents isEqualToArray: torrents])
-        return;
-    
+    //don't check if it's the same in case the metadata changed
     [fTorrents release];
     fTorrents = [torrents retain];
     

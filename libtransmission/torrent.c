@@ -354,27 +354,28 @@ onTrackerResponse( void * tracker UNUSED,
                    void * vevent,
                    void * user_data )
 {
-    tr_torrent *       tor = user_data;
+    tr_torrent * tor = user_data;
     tr_tracker_event * event = vevent;
 
     switch( event->messageType )
     {
         case TR_TRACKER_PEERS:
         {
-            size_t   i, n;
+            size_t i, n;
+            const int seedProbability = event->seedProbability;
+            const tr_bool allAreSeeds = seedProbability == 100;
             tr_pex * pex = tr_peerMgrArrayToPex( event->compact,
                                                  event->compactLen, &n );
-             if( event->allAreSeeds )
+             if( allAreSeeds )
                 tr_tordbg( tor, "Got %d seeds from tracker", (int)n );
             else
                 tr_tordbg( tor, "Got %d peers from tracker", (int)n );
 
             for( i = 0; i < n; ++i )
-            {
-                if( event->allAreSeeds )
-                    pex[i].flags |= ADDED_F_SEED_FLAG;
-                tr_peerMgrAddPex( tor, TR_PEER_FROM_TRACKER, pex + i );
-            }
+                tr_peerMgrAddPex( tor, TR_PEER_FROM_TRACKER, pex+i, seedProbability );
+
+            if( allAreSeeds && tr_torrentIsPrivate( tor ) )
+                tr_peerMgrMarkAllAsSeeds( tor );
 
             tr_free( pex );
             break;
@@ -690,10 +691,6 @@ torrentInit( tr_torrent * tor, const tr_ctor * ctor )
     assert( !tor->downloadedCur );
     assert( !tor->uploadedCur );
 
-    tr_ctorInitTorrentPriorities( ctor, tor );
-
-    tr_ctorInitTorrentWanted( ctor, tor );
-
     tr_torrentUncheck( tor );
 
     tr_torrentSetAddedDate( tor, tr_time( ) ); /* this is a default value to be
@@ -702,6 +699,9 @@ torrentInit( tr_torrent * tor, const tr_ctor * ctor )
     torrentInitFromInfo( tor );
     loaded = tr_torrentLoadResume( tor, ~0, ctor );
     tor->completeness = tr_cpGetStatus( &tor->completion );
+
+    tr_ctorInitTorrentPriorities( ctor, tor );
+    tr_ctorInitTorrentWanted( ctor, tor );
 
     refreshCurrentDir( tor );
 
@@ -1576,6 +1576,8 @@ closeTorrent( void * vtor )
     d = tr_bencListAddDict( &tor->session->removedTorrents, 2 );
     tr_bencDictAddInt( d, "id", tor->uniqueId );
     tr_bencDictAddInt( d, "date", tr_time( ) );
+
+    tr_torinf( tor, _( "Removing torrent" ) );
 
     stopTorrent( tor );
 

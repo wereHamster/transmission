@@ -14,7 +14,17 @@
 #define GTR_UTIL_H
 
 #include <sys/types.h>
+#include <glib.h>
 #include <gtk/gtk.h>
+
+/* portability wrapper around g_warn_if_fail() for older versions of glib */
+#ifdef g_warn_if_fail
+ #define gtr_warn_if_fail(expr) g_warn_if_fail(expr)
+#else
+ #define gtr_warn_if_fail(expr) do { if G_LIKELY (expr) ; else \
+                                       g_log (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING, "%s:%d func(): %s: invariant failed: %s", \
+                                              __FILE__, __LINE__, G_STRFUNC, #expr ); } while(0)
+#endif
 
 /* macro to shut up "unused parameter" warnings */
 #ifndef UNUSED
@@ -51,6 +61,9 @@ char* gtr_localtime2( char * buf, time_t time, size_t buflen );
 /***
 ****
 ***/
+
+/* http://www.legaltorrents.com/some/announce/url --> legaltorrents.com */
+char* gtr_get_host_from_url( const char * url );
 
 gboolean gtr_is_supported_url( const char * str );
 
@@ -117,7 +130,7 @@ void gtr_toolbar_set_orientation( GtkToolbar * tb, GtkOrientation orientation );
 void gtr_widget_set_tooltip_text( GtkWidget * w, const char * tip );
 
 /* backwards-compatible wrapper around g_object_ref_sink() */
-gpointer tr_object_ref_sink( gpointer object );
+gpointer gtr_object_ref_sink( gpointer object );
 
 /***
 ****
@@ -162,6 +175,6 @@ gboolean on_tree_view_button_released( GtkWidget      * view,
 
 
 /* move a file to the trashcan if GIO is available; otherwise, delete it */
-int tr_file_trash_or_remove( const char * filename );
+int gtr_file_trash_or_remove( const char * filename );
 
 #endif /* GTR_UTIL_H */
