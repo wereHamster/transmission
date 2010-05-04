@@ -11,11 +11,12 @@
  */
 
 #include <assert.h>
-#include <ctype.h> /* isdigit */
+#include <ctype.h> /* isdigit() */
 #include <errno.h>
-#include <math.h> /* fabs */
+#include <limits.h> /* PATH_MAX */
+#include <math.h> /* fabs() */
 #include <stdio.h>
-#include <stdlib.h>
+#include <stdlib.h> /* realpath() */
 #include <string.h>
 
 #include <sys/types.h> /* stat() */
@@ -23,7 +24,7 @@
 #include <locale.h>
 #include <unistd.h> /* stat(), close() */
 
-#include <event.h> /* evbuffer */
+#include <event.h> /* struct evbuffer */
 
 #include "ConvertUTF.h"
 
@@ -1358,7 +1359,6 @@ jsonStringFunc( const tr_benc * val, void * vdata )
     {
         switch( *it )
         {
-            case '/': evbuffer_add( data->out, "\\/", 2 ); break;
             case '\b': evbuffer_add( data->out, "\\b", 2 ); break;
             case '\f': evbuffer_add( data->out, "\\f", 2 ); break;
             case '\n': evbuffer_add( data->out, "\\n", 2 ); break;
@@ -1621,6 +1621,12 @@ tr_bencToFile( const tr_benc * top, tr_fmt_mode mode, const char * filename )
     char * tmp;
     int fd;
     int err = 0;
+    char buf[PATH_MAX];
+
+    /* follow symlinks to find the "real" file, to make sure the temporary
+     * we build with mkstemp() is created on the right partition */
+    if( realpath( filename, buf ) != NULL )
+        filename = buf;
 
     /* if the file already exists, try to move it out of the way & keep it as a backup */
     tmp = tr_strdup_printf( "%s.tmp.XXXXXX", filename );

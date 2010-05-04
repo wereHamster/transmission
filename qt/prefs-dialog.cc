@@ -267,12 +267,12 @@ PrefsDialog :: createSpeedTab( )
     HIG * hig = new HIG( this );
     hig->addSectionTitle( tr( "Speed Limits" ) );
 
-        l = checkBoxNew( tr( "Limit &download speed (KB/s):" ), Prefs::DSPEED_ENABLED );
+        l = checkBoxNew( tr( "Limit &download speed (KiB/s):" ), Prefs::DSPEED_ENABLED );
         r = spinBoxNew( Prefs::DSPEED, 0, INT_MAX, 5 );
         hig->addRow( l, r );
         enableBuddyWhenChecked( qobject_cast<QCheckBox*>(l), r );
 
-        l = checkBoxNew( tr( "Limit &upload speed (KB/s):" ), Prefs::USPEED_ENABLED );
+        l = checkBoxNew( tr( "Limit &upload speed (KiB/s):" ), Prefs::USPEED_ENABLED );
         r = spinBoxNew( Prefs::USPEED, 0, INT_MAX, 5 );
         hig->addRow( l, r );
         enableBuddyWhenChecked( qobject_cast<QCheckBox*>(l), r );
@@ -293,11 +293,11 @@ PrefsDialog :: createSpeedTab( )
         QString s = tr( "<small>Override normal speed limits manually or at scheduled times</small>" );
         hig->addWideControl( new QLabel( s ) );
 
-        s = tr( "Limit d&ownload speed (KB/s):" );
+        s = tr( "Limit d&ownload speed (KiB/s):" );
         r = spinBoxNew( Prefs :: ALT_SPEED_LIMIT_DOWN, 0, INT_MAX, 5 );
         hig->addRow( s, r );
 
-        s = tr( "Limit u&pload speed (KB/s):" );
+        s = tr( "Limit u&pload speed (KiB/s):" );
         r = spinBoxNew( Prefs :: ALT_SPEED_LIMIT_UP, 0, INT_MAX, 5 );
         hig->addRow( s, r );
 
@@ -451,7 +451,7 @@ PrefsDialog :: createPrivacyTab( )
     hig->addSectionTitle( tr( "Blocklist" ) );
     QHBoxLayout * h = new QHBoxLayout( );
     QIcon i( style()->standardIcon( QStyle::StandardPixmap( QStyle::SP_BrowserReload ) ) );
-    QPushButton * w = new QPushButton( i, tr( "&Update blocklist" ) );
+    QWidget * w = new QPushButton( i, tr( "&Update blocklist" ) );
     connect( w, SIGNAL(clicked(bool)), this, SLOT(onUpdateBlocklistClicked()));
     myBlockWidgets << w;
     QWidget * l = checkBoxNew( "", Prefs::BLOCKLIST_ENABLED );
@@ -473,8 +473,12 @@ PrefsDialog :: createPrivacyTab( )
     hig->addSectionDivider( );
     hig->addSectionTitle( tr( "Privacy" ) );
     hig->addRow( tr( "&Encryption mode:" ), box );
-    hig->addWideControl( checkBoxNew( tr( "Use PE&X to find more peers" ), Prefs::PEX_ENABLED ) );
-    hig->addWideControl( checkBoxNew( tr( "Use &DHT to find more peers" ), Prefs::DHT_ENABLED ) );
+    hig->addWideControl( w = checkBoxNew( tr( "Use PE&X to find more peers" ), Prefs::PEX_ENABLED ) );
+    w->setToolTip( tr( "PEX is a tool for exchanging peer lists with the peers you're connected to." ) );
+    hig->addWideControl( w = checkBoxNew( tr( "Use &DHT to find more peers" ), Prefs::DHT_ENABLED ) );
+    w->setToolTip( tr( "DHT is a tool for finding peers without a tracker." ) );
+    hig->addWideControl( w = checkBoxNew( tr( "Use &LDS to find local peers" ), Prefs::LDS_ENABLED ) );
+    w->setToolTip( tr( "LDS is a tool for finding peers on your local network." ) );
 
     hig->finish( );
     updateBlocklistCheckBox( );

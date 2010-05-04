@@ -339,9 +339,8 @@ refreshActions( struct cbdata * data )
     }
 
     {
-        tr_session * session = tr_core_session( data->core );
-        const int active = tr_sessionGetActiveTorrentCount( session );
-        const int total = tr_sessionCountTorrents( session );
+        const int total = tr_core_get_torrent_count( data->core );
+        const int active = tr_core_get_active_torrent_count( data->core );
         action_sensitize( "pause-all-torrents", active != 0 );
         action_sensitize( "start-all-torrents", active != total );
     }
@@ -729,7 +728,7 @@ appsetup( TrWindow *      wind,
                                                 GTK_MESSAGE_INFO,
                                                 GTK_BUTTONS_NONE,
                                                 "%s",
-            _( "Transmission is a file sharing program.  When you run a torrent, its data will be made available to others by means of upload.  And of course, any content you share is your sole responsibility.\n\nYou probably knew this, so we won't tell you again." ) );
+             _( "Transmission is a file-sharing program.  When you run a torrent, its data will be made available to others by means of upload.  You and you alone are fully responsible for exercising proper judgement and abiding by your local laws." ) );
         gtk_dialog_add_button( GTK_DIALOG( w ), GTK_STOCK_QUIT, GTK_RESPONSE_REJECT );
         gtk_dialog_add_button( GTK_DIALOG( w ), _( "I _Accept" ), GTK_RESPONSE_ACCEPT );
         gtk_dialog_set_default_response( GTK_DIALOG( w ), GTK_RESPONSE_ACCEPT );
@@ -1221,6 +1220,10 @@ prefschanged( TrCore * core UNUSED,
     else if( !strcmp( key, TR_PREFS_KEY_DHT_ENABLED ) )
     {
         tr_sessionSetDHTEnabled( tr, pref_flag_get( key ) );
+    }
+    else if( !strcmp( key, TR_PREFS_KEY_LDS_ENABLED ) )
+    {
+        tr_sessionSetLDSEnabled( tr, pref_flag_get( key ) );
     }
     else if( !strcmp( key, TR_PREFS_KEY_RPC_PORT ) )
     {

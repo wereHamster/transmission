@@ -1508,6 +1508,7 @@ getDefaultShelfLife( uint8_t from )
         case TR_PEER_FROM_DHT      : return 60 * 60 * 3;
         case TR_PEER_FROM_PEX      : return 60 * 60 * 2;
         case TR_PEER_FROM_RESUME   : return 60 * 60;
+        case TR_PEER_FROM_LDS      : return 10 * 60;
         default                    : return 60 * 60;
     }
 }
@@ -3343,13 +3344,15 @@ getPeerCandidates( tr_session * session, int * candidateCount )
     struct peer_candidate * walk;
     const time_t now = tr_time( );
     const uint64_t now_msec = tr_date( );
+    /* leave 5% of connection slots for incoming connections -- ticket #2609 */
+    const int maxCandidates = tr_sessionGetPeerLimit( session ) * 0.95;
 
     /* don't start any new handshakes if we're full up */
     n = 0;
     tor= NULL;
     while(( tor = tr_torrentNext( session, tor )))
         n += tr_ptrArraySize( &tor->torrentPeers->peers );
-    if( tr_sessionGetPeerLimit( session ) <= n ) {
+    if( maxCandidates <= n ) {
         *candidateCount = 0;
         return NULL;
     }

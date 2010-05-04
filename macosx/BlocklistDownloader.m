@@ -28,7 +28,7 @@
 #import "PrefsController.h"
 
 #define LIST_URL @"http://update.transmissionbt.com/level1.gz"
-#define DESTINATION [NSTemporaryDirectory() stringByAppendingPathComponent: @"level1.gz"]
+#define FILE_NAME @"level1.gz"
 
 @interface BlocklistDownloader (Private)
 
@@ -79,6 +79,7 @@ BlocklistDownloader * fDownloader = nil;
 - (void) dealloc
 {
     [fDownload release];
+    [fDestination release];
     [super dealloc];
 }
 
@@ -92,6 +93,11 @@ BlocklistDownloader * fDownloader = nil;
     
     fDownloader = nil;
     [self release];
+}
+
+- (void) download: (NSURLDownload *) download didCreateDestination: (NSString *) path
+{
+    fDestination = [path retain];
 }
 
 - (void) download: (NSURLDownload *) download didReceiveResponse: (NSURLResponse *) response
@@ -112,6 +118,10 @@ BlocklistDownloader * fDownloader = nil;
 
 - (void) download: (NSURLDownload *) download didFailWithError: (NSError *) error
 {
+    #warning remove
+    NSLog(@"%@", [error localizedDescription]);
+    NSLog(@"%@", [error localizedFailureReason]);
+    NSLog(@"%@", [error localizedRecoverySuggestion]);
     [fViewController setFailed: [error localizedDescription]];
     
     [[BlocklistScheduler scheduler] updateSchedule];
@@ -139,7 +149,7 @@ BlocklistDownloader * fDownloader = nil;
     NSURLRequest * request = [NSURLRequest requestWithURL: [NSURL URLWithString: LIST_URL]];
     
     fDownload = [[NSURLDownload alloc] initWithRequest: request delegate: self];
-    [fDownload setDestination: DESTINATION allowOverwrite: YES];
+    [fDownload setDestination: [NSTemporaryDirectory() stringByAppendingPathComponent: FILE_NAME] allowOverwrite: YES];
 }
 
 - (void) finishDownloadSuccess
@@ -149,10 +159,11 @@ BlocklistDownloader * fDownloader = nil;
     [fViewController setStatusProcessing];
     
     //process data
-    tr_blocklistSetContent([PrefsController handle], [DESTINATION UTF8String]);
+    NSAssert(fDestination != nil, @"the blocklist file destination has not been specified");
+    tr_blocklistSetContent([PrefsController handle], [fDestination UTF8String]);
     
     //delete downloaded file
-    [[NSFileManager defaultManager] removeItemAtPath: DESTINATION error: NULL];
+    [[NSFileManager defaultManager] removeItemAtPath: fDestination error: NULL];
     
     [fViewController setFinished];
     
