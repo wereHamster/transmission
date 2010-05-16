@@ -1144,12 +1144,10 @@ onAddTorrent( TrCore *  core,
 }
 
 static void
-prefschanged( TrCore * core UNUSED,
-              const char *  key,
-              gpointer      data )
+prefschanged( TrCore * core UNUSED, const char * key, gpointer data )
 {
-    struct cbdata  * cbdata = data;
-    tr_session     * tr     = tr_core_session( cbdata->core );
+    struct cbdata * cbdata = data;
+    tr_session * tr = tr_core_session( cbdata->core );
 
     if( !strcmp( key, TR_PREFS_KEY_ENCRYPTION ) )
     {
@@ -1221,9 +1219,9 @@ prefschanged( TrCore * core UNUSED,
     {
         tr_sessionSetDHTEnabled( tr, pref_flag_get( key ) );
     }
-    else if( !strcmp( key, TR_PREFS_KEY_LDS_ENABLED ) )
+    else if( !strcmp( key, TR_PREFS_KEY_LPD_ENABLED ) )
     {
-        tr_sessionSetLDSEnabled( tr, pref_flag_get( key ) );
+        tr_sessionSetLPDEnabled( tr, pref_flag_get( key ) );
     }
     else if( !strcmp( key, TR_PREFS_KEY_RPC_PORT ) )
     {
@@ -1322,6 +1320,14 @@ prefschanged( TrCore * core UNUSED,
     else if( !strcmp( key, TR_PREFS_KEY_INCOMPLETE_DIR_ENABLED ) )
     {
         tr_sessionSetIncompleteDirEnabled( tr, pref_flag_get( key ) );
+    }
+    else if( !strcmp( key, TR_PREFS_KEY_SCRIPT_TORRENT_DONE_ENABLED ) )
+    {
+        tr_sessionSetTorrentDoneScriptEnabled( tr, pref_flag_get( key ) );
+    }
+    else if( !strcmp( key, TR_PREFS_KEY_SCRIPT_TORRENT_DONE_FILENAME ) )
+    {
+        tr_sessionSetTorrentDoneScript( tr, pref_string_get( key ) );
     }
     else if( !strcmp( key, TR_PREFS_KEY_START) )
     {

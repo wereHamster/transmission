@@ -26,10 +26,15 @@
 #endif
 
 #ifdef WIN32
- #include <windows.h>
- #define MAX_PATH_LENGTH  MAX_PATH
+ #include <windows.h> /* MAX_PATH */
+ #define TR_PATH_MAX MAX_PATH
 #else
- #define MAX_PATH_LENGTH  4096
+ #include <limits.h> /* PATH_MAX */
+ #ifdef PATH_MAX
+  #define TR_PATH_MAX PATH_MAX
+ #else
+  #define TR_PATH_MAX 4096
+ #endif
 #endif
 
 /**

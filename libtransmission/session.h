@@ -84,10 +84,11 @@ struct tr_session
     tr_bool                      isPortRandom;
     tr_bool                      isPexEnabled;
     tr_bool                      isDHTEnabled;
-    tr_bool                      isLDSEnabled;
+    tr_bool                      isLPDEnabled;
     tr_bool                      isBlocklistEnabled;
     tr_bool                      isProxyEnabled;
     tr_bool                      isProxyAuthEnabled;
+    tr_bool                      isTorrentDoneScriptEnabled;
     tr_bool                      isClosed;
     tr_bool                      useLazyBitfield;
     tr_bool                      isIncompleteFileNamingEnabled;
@@ -129,6 +130,8 @@ struct tr_session
 
     int                          torrentCount;
     tr_torrent *                 torrentList;
+
+    char *                       torrentDoneScript;
 
     char *                       tag;
     char *                       configDir;
@@ -180,7 +183,7 @@ struct tr_session
 
 tr_bool      tr_sessionAllowsDHT( const tr_session * session );
 
-tr_bool      tr_sessionAllowsLDS( const tr_session * session );
+tr_bool      tr_sessionAllowsLPD( const tr_session * session );
 
 const char * tr_sessionFindTorrentFile( const tr_session * session,
                                         const char *       hashString );

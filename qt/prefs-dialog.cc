@@ -477,8 +477,8 @@ PrefsDialog :: createPrivacyTab( )
     w->setToolTip( tr( "PEX is a tool for exchanging peer lists with the peers you're connected to." ) );
     hig->addWideControl( w = checkBoxNew( tr( "Use &DHT to find more peers" ), Prefs::DHT_ENABLED ) );
     w->setToolTip( tr( "DHT is a tool for finding peers without a tracker." ) );
-    hig->addWideControl( w = checkBoxNew( tr( "Use &LDS to find local peers" ), Prefs::LDS_ENABLED ) );
-    w->setToolTip( tr( "LDS is a tool for finding peers on your local network." ) );
+    hig->addWideControl( w = checkBoxNew( tr( "Use &Local Peer Discovery to find more peers" ), Prefs::LPD_ENABLED ) );
+    w->setToolTip( tr( "LPD is a tool for finding peers on your local network." ) );
 
     hig->finish( );
     updateBlocklistCheckBox( );
@@ -488,6 +488,26 @@ PrefsDialog :: createPrivacyTab( )
 /***
 ****
 ***/
+
+void
+PrefsDialog :: onScriptClicked( void )
+{
+    const QString title = tr( "Select \"Torrent Done\" Script" );
+    const QString path = myPrefs.getString( Prefs::SCRIPT_TORRENT_DONE_FILENAME );
+    QFileDialog * d = new QFileDialog( this, title, path );
+    d->setFileMode( QFileDialog::ExistingFiles );
+    connect( d, SIGNAL(filesSelected(const QStringList&)),
+             this, SLOT(onScriptSelected(const QStringList&)) );
+    d->show( );
+}
+
+void
+PrefsDialog :: onScriptSelected( const QStringList& list )
+{
+    if( list.size() == 1 )
+        myPrefs.set( Prefs::Prefs::SCRIPT_TORRENT_DONE_FILENAME, list.first( ) );
+}
+
 
 void
 PrefsDialog :: onIncompleteClicked( void )
@@ -554,6 +574,8 @@ PrefsDialog :: createTorrentsTab( )
     const QFileIconProvider iconProvider;
     const QIcon folderIcon = iconProvider.icon( QFileIconProvider::Folder );
     const QPixmap folderPixmap = folderIcon.pixmap( iconSize );
+    const QIcon fileIcon = iconProvider.icon( QFileIconProvider::File );
+    const QPixmap filePixmap = fileIcon.pixmap( iconSize );
 
     QWidget *l, *r;
     HIG * hig = new HIG( this );
@@ -572,12 +594,21 @@ PrefsDialog :: createTorrentsTab( )
         hig->addWideControl( checkBoxNew( tr( "Mo&ve .torrent file to the trash" ), Prefs::TRASH_ORIGINAL ) );
         hig->addWideControl( checkBoxNew( tr( "Append \".&part\" to incomplete files' names" ), Prefs::RENAME_PARTIAL_FILES ) );
 
-        myIncompleteCheckbox = checkBoxNew( tr( "Keep &incomplete files in:" ), Prefs::INCOMPLETE_DIR_ENABLED );
+        l = myIncompleteCheckbox = checkBoxNew( tr( "Keep &incomplete files in:" ), Prefs::INCOMPLETE_DIR_ENABLED );
         b = myIncompleteButton = new QPushButton;
         b->setIcon( folderPixmap );
         b->setStyleSheet( "text-align: left; padding-left: 5; padding-right: 5" );
         connect( b, SIGNAL(clicked(bool)), this, SLOT(onIncompleteClicked(void)) );
         hig->addRow( myIncompleteCheckbox, b );
+        enableBuddyWhenChecked( qobject_cast<QCheckBox*>(l), b );
+
+        l = myTorrentDoneScriptCheckbox = checkBoxNew( tr( "Call scrip&t when torrent is completed" ), Prefs::SCRIPT_TORRENT_DONE_ENABLED );
+        b = myTorrentDoneScriptFilename = new QPushButton;
+        b->setIcon( filePixmap );
+        b->setStyleSheet( "text-align: left; padding-left: 5; padding-right: 5" );
+        connect( b, SIGNAL(clicked(bool)), this, SLOT(onScriptClicked(void)) );
+        hig->addRow( myTorrentDoneScriptCheckbox, b );
+        enableBuddyWhenChecked( qobject_cast<QCheckBox*>(l), b );
 
         b = myDestinationButton = new QPushButton;
         b->setIcon( folderPixmap );
@@ -620,10 +651,10 @@ PrefsDialog :: PrefsDialog( Session& session, Prefs& prefs, QWidget * parent ):
     myLayout->addWidget( t );
 
     QDialogButtonBox * buttons = new QDialogButtonBox( QDialogButtonBox::Close, Qt::Horizontal, this );
-    connect( buttons, SIGNAL(rejected()), this, SLOT(hide()) ); // "close" triggers rejected
+    connect( buttons, SIGNAL(rejected()), this, SLOT(close()) ); // "close" triggers rejected
     myLayout->addWidget( buttons );
+    QWidget::setAttribute( Qt::WA_DeleteOnClose, true );
 
-    connect( &myPrefs, SIGNAL(changed(int)), this, SLOT(updatePref(int)));
     connect( &mySession, SIGNAL(sessionUpdated()), this, SLOT(sessionUpdated()));
 
     QList<int> keys;

@@ -42,7 +42,7 @@
 #include "stats.h"
 #include "torrent.h"
 #include "tr-dht.h"
-#include "tr-lds.h"
+#include "tr-lpd.h"
 #include "trevent.h"
 #include "utils.h"
 #include "verify.h"
@@ -245,7 +245,7 @@ tr_sessionGetDefaultSettings( const char * configDir UNUSED, tr_benc * d )
     tr_bencDictReserve( d, 35 );
     tr_bencDictAddBool( d, TR_PREFS_KEY_BLOCKLIST_ENABLED,        FALSE );
     tr_bencDictAddBool( d, TR_PREFS_KEY_DHT_ENABLED,              TRUE );
-    tr_bencDictAddBool( d, TR_PREFS_KEY_LDS_ENABLED,              FALSE );
+    tr_bencDictAddBool( d, TR_PREFS_KEY_LPD_ENABLED,              FALSE );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_DOWNLOAD_DIR,             tr_getDefaultDownloadDir( ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_DSPEED,                   100 );
     tr_bencDictAddBool( d, TR_PREFS_KEY_DSPEED_ENABLED,           FALSE );
@@ -283,6 +283,8 @@ tr_sessionGetDefaultSettings( const char * configDir UNUSED, tr_benc * d )
     tr_bencDictAddStr ( d, TR_PREFS_KEY_RPC_WHITELIST,            TR_DEFAULT_RPC_WHITELIST );
     tr_bencDictAddBool( d, TR_PREFS_KEY_RPC_WHITELIST_ENABLED,    TRUE );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_RPC_PORT,                 atoi( TR_DEFAULT_RPC_PORT_STR ) );
+    tr_bencDictAddStr ( d, TR_PREFS_KEY_SCRIPT_TORRENT_DONE_FILENAME, "" );
+    tr_bencDictAddBool( d, TR_PREFS_KEY_SCRIPT_TORRENT_DONE_ENABLED, FALSE );
     tr_bencDictAddBool( d, TR_PREFS_KEY_ALT_SPEED_ENABLED,        FALSE );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_ALT_SPEED_UP,             50 ); /* half the regular */
     tr_bencDictAddInt ( d, TR_PREFS_KEY_ALT_SPEED_DOWN,           50 ); /* half the regular */
@@ -308,7 +310,7 @@ tr_sessionGetSettings( tr_session * s, struct tr_benc * d )
     tr_bencDictReserve( d, 30 );
     tr_bencDictAddBool( d, TR_PREFS_KEY_BLOCKLIST_ENABLED,        tr_blocklistIsEnabled( s ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_DHT_ENABLED,              s->isDHTEnabled );
-    tr_bencDictAddBool( d, TR_PREFS_KEY_LDS_ENABLED,              s->isLDSEnabled );
+    tr_bencDictAddBool( d, TR_PREFS_KEY_LPD_ENABLED,              s->isLPDEnabled );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_DOWNLOAD_DIR,             s->downloadDir );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_DSPEED,                   tr_sessionGetSpeedLimit( s, TR_DOWN ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_DSPEED_ENABLED,           tr_sessionIsSpeedLimited( s, TR_DOWN ) );
@@ -348,6 +350,8 @@ tr_sessionGetSettings( tr_session * s, struct tr_benc * d )
     tr_bencDictAddStr ( d, TR_PREFS_KEY_RPC_USERNAME,             tr_sessionGetRPCUsername( s ) );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_RPC_WHITELIST,            tr_sessionGetRPCWhitelist( s ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_RPC_WHITELIST_ENABLED,    tr_sessionGetRPCWhitelistEnabled( s ) );
+    tr_bencDictAddBool( d, TR_PREFS_KEY_SCRIPT_TORRENT_DONE_ENABLED, tr_sessionIsTorrentDoneScriptEnabled( s ) );
+    tr_bencDictAddStr ( d, TR_PREFS_KEY_SCRIPT_TORRENT_DONE_FILENAME, tr_sessionGetTorrentDoneScript( s ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_ALT_SPEED_ENABLED,        tr_sessionUsesAltSpeed( s ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_ALT_SPEED_UP,             tr_sessionGetAltSpeed( s, TR_UP ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_ALT_SPEED_DOWN,           tr_sessionGetAltSpeed( s, TR_DOWN ) );
@@ -628,13 +632,10 @@ tr_sessionInitImpl( void * vdata )
         tr_dhtInit( session, &session->public_ipv4->addr );
     }
 
-    if( session->isLDSEnabled )
-    {
-        if( tr_ldsInit( session, &session->public_ipv4->addr ) )
-            tr_ninf( "LDS", "Local Peer Discovery active" );
-    }
-    else
-        tr_ndbg( "LDS", "Local Peer Discovery disabled" );
+    if( !session->isLPDEnabled )
+        tr_ndbg( "LPD", _( "Local Peer Discovery disabled" ) );
+    else if( tr_lpdInit( session, &session->public_ipv4->addr ) )
+        tr_ninf( "LPD", _( "Local Peer Discovery active" ) );
 
     /* cleanup */
     tr_bencFree( &settings );
@@ -678,8 +679,8 @@ sessionSetImpl( void * vdata )
         tr_sessionSetPexEnabled( session, boolVal );
     if( tr_bencDictFindBool( settings, TR_PREFS_KEY_DHT_ENABLED, &boolVal ) )
         tr_sessionSetDHTEnabled( session, boolVal );
-    if( tr_bencDictFindBool( settings, TR_PREFS_KEY_LDS_ENABLED, &boolVal ) )
-        tr_sessionSetLDSEnabled( session, boolVal );
+    if( tr_bencDictFindBool( settings, TR_PREFS_KEY_LPD_ENABLED, &boolVal ) )
+        tr_sessionSetLPDEnabled( session, boolVal );
     if( tr_bencDictFindInt( settings, TR_PREFS_KEY_ENCRYPTION, &i ) )
         tr_sessionSetEncryption( session, i );
     if( tr_bencDictFindInt( settings, TR_PREFS_KEY_PEER_SOCKET_TOS, &i ) )
@@ -804,6 +805,15 @@ sessionSetImpl( void * vdata )
     if( tr_bencDictFindBool( settings, TR_PREFS_KEY_ALT_SPEED_ENABLED, &boolVal ) )
         turtle->isEnabled = boolVal;
     turtleBootstrap( session, turtle );
+
+    /**
+    ***  Scripts
+    **/
+
+    if( tr_bencDictFindBool( settings, TR_PREFS_KEY_SCRIPT_TORRENT_DONE_ENABLED, &boolVal ) )
+        tr_sessionSetTorrentDoneScriptEnabled( session, boolVal );
+    if( tr_bencDictFindStr( settings, TR_PREFS_KEY_SCRIPT_TORRENT_DONE_FILENAME, &str ) )
+        tr_sessionSetTorrentDoneScript( session, str );
 
     data->done = TRUE;
 }
@@ -1564,8 +1574,8 @@ sessionCloseImpl( void * vsession )
 
     free_incoming_peer_port( session );
 
-    if( session->isLDSEnabled )
-        tr_ldsUninit( session );
+    if( session->isLPDEnabled )
+        tr_lpdUninit( session );
 
     if( session->isDHTEnabled )
         tr_dhtUninit( session );
@@ -1672,6 +1682,7 @@ tr_sessionClose( tr_session * session )
         tr_bencFree( session->metainfoLookup );
         tr_free( session->metainfoLookup );
     }
+    tr_free( session->torrentDoneScript );
     tr_free( session->buffer );
     tr_free( session->tag );
     tr_free( session->configDir );
@@ -1802,26 +1813,26 @@ tr_sessionSetDHTEnabled( tr_session * session, tr_bool enabled )
 }
 
 void
-tr_sessionSetLDSEnabled( tr_session * session,
+tr_sessionSetLPDEnabled( tr_session * session,
                          tr_bool      enabled )
 {
     assert( tr_isSession( session ) );
 
-    session->isLDSEnabled = ( enabled != 0 );
+    session->isLPDEnabled = ( enabled != 0 );
 }
 
 tr_bool
-tr_sessionIsLDSEnabled( const tr_session * session )
+tr_sessionIsLPDEnabled( const tr_session * session )
 {
     assert( tr_isSession( session ) );
 
-    return session->isLDSEnabled;
+    return session->isLPDEnabled;
 }
 
 tr_bool
-tr_sessionAllowsLDS( const tr_session * session )
+tr_sessionAllowsLPD( const tr_session * session )
 {
-    return tr_sessionIsLDSEnabled( session );
+    return tr_sessionIsLPDEnabled( session );
 }
 
 /***
@@ -2432,5 +2443,46 @@ tr_sessionSetProxyPassword( tr_session * session,
     {
         tr_free( session->proxyPassword );
         session->proxyPassword = tr_strdup( password );
+    }
+}
+
+/****
+*****
+****/
+
+tr_bool
+tr_sessionIsTorrentDoneScriptEnabled( const tr_session * session )
+{
+    assert( tr_isSession( session ) );
+
+    return session->isTorrentDoneScriptEnabled;
+}
+
+void
+tr_sessionSetTorrentDoneScriptEnabled( tr_session * session, tr_bool isEnabled )
+{
+    assert( tr_isSession( session ) );
+    assert( tr_isBool( isEnabled ) );
+
+    session->isTorrentDoneScriptEnabled = isEnabled;
+}
+
+const char *
+tr_sessionGetTorrentDoneScript( const tr_session * session )
+{
+    assert( tr_isSession( session ) );
+
+    return session->torrentDoneScript;
+}
+
+void
+tr_sessionSetTorrentDoneScript( tr_session * session, const char * scriptFilename )
+{
+    assert( tr_isSession( session ) );
+
+    if( session->torrentDoneScript != scriptFilename )
+    {
+        tr_free( session->torrentDoneScript );
+        session->torrentDoneScript = tr_strdup( scriptFilename );
     }
 }
