@@ -77,12 +77,22 @@ Utils :: ratioToString( double ratio )
         buf = tr( "None" );
     else if( (int)ratio == TR_RATIO_INF )
         buf = QString::fromUtf8( "\xE2\x88\x9E" );
-    else if( ratio < 10.0 )
-        buf.sprintf( "%'.2f", ratio );
-    else if( ratio < 100.0 )
-        buf.sprintf( "%'.1f", ratio );
     else
-        buf.sprintf( "%'.0f", ratio );
+    {
+        QStringList temp;
+
+        temp = QString().sprintf( "%f", ratio ).split( "." );
+        if( ratio < 100.0 )
+        {
+            if( ratio < 10.0 )
+                temp[1].truncate( 2 );
+            else
+                temp[1].truncate( 1 );
+            buf = temp.join( "." );
+        }
+        else
+            buf = QString( temp[0] );
+    }
 
     return buf;
 
@@ -175,23 +185,29 @@ Utils :: guessMimeIcon( const QString& filename )
         suffixes[DISK] << "iso";
 
         fileIcons[DOCUMENT] = QtIconLoader :: icon( "text-x-generic", fallback );
-        suffixes[DOCUMENT] << "txt" << "doc" << "pdf" << "rtf" << "htm" << "html";
+        suffixes[DOCUMENT] << "abw" << "csv" << "doc" << "dvi" << "htm" << "html" << "ini" << "log"
+                           << "odp" << "ods" << "odt" << "pdf" << "ppt" << "ps" << "rtf" << "tex"
+                           << "txt" << "xml";
 
         fileIcons[PICTURE]  = QtIconLoader :: icon( "image-x-generic", fallback );
-        suffixes[PICTURE] << "jpg" << "jpeg" << "png" << "gif" << "tiff" << "pcx";
+        suffixes[PICTURE] << "bmp" << "gif" << "jpg" << "jpeg" << "pcx" << "png" << "psd" << "raw"
+                          << "tga" << "tiff";
 
         fileIcons[VIDEO] = QtIconLoader :: icon( "video-x-generic", fallback );
-        suffixes[VIDEO] << "avi" << "mpeg" << "mp4" << "mkv" << "mov";
+        suffixes[VIDEO] << "3gp" << "asf" << "avi" << "mov" << "mpeg" << "mpg" << "mp4" << "mkv"
+                        << "mov" << "ogm" << "ogv" << "qt" << "rm" << "wmv";
 
         fileIcons[ARCHIVE]  = QtIconLoader :: icon( "package-x-generic", fallback );
-        suffixes[ARCHIVE] << "rar" << "zip" << "sft" << "tar" << "7z" << "cbz";
+        suffixes[ARCHIVE] << "7z" << "ace" << "bz2" << "cbz" << "gz" << "gzip" << "lzma" << "rar"
+                          << "sft" << "tar" << "zip";
 
         fileIcons[AUDIO] = QtIconLoader :: icon( "audio-x-generic", fallback );
-        suffixes[AUDIO] << "aiff" << "au" << "m3u" << "mp2" << "wav" << "mp3" << "ape" << "mid"
-                        << "aac" << "ogg" << "ra" << "ram" << "flac" << "mpc" << "shn";
+        suffixes[AUDIO] << "aac" << "ac3" << "aiff" << "ape" << "au" << "flac" << "m3u" << "m4a"
+                        << "mid" << "midi" << "mp2" << "mp3" << "mpc" << "nsf" << "oga" << "ogg"
+                        << "ra" << "ram" << "shn" << "voc" << "wav" << "wma";
 
         fileIcons[APP] = QtIconLoader :: icon( "application-x-executable", fallback );
-        suffixes[APP] << "exe";
+        suffixes[APP] << "bat" << "cmd" << "com" << "exe";
     }
 
     QString suffix( QFileInfo( filename ).suffix( ).toLower( ) );

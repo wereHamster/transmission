@@ -213,22 +213,6 @@ category_filter_model_update( GtkTreeStore * store )
     /* skip separator */
     gtk_tree_model_iter_next( model, &top );
 
-    /* update the "public" subtree */
-    gtk_tree_model_iter_next( model, &top );
-    gtk_tree_model_iter_children( model, &iter, &top );
-    category_model_update_count( store, &iter, public );
-    gtk_tree_model_iter_next( model, &iter );
-    category_model_update_count( store, &iter, private );
-
-    /* update the "priority" subtree */
-    gtk_tree_model_iter_next( model, &top );
-    gtk_tree_model_iter_children( model, &iter, &top );
-    category_model_update_count( store, &iter, high );
-    gtk_tree_model_iter_next( model, &iter );
-    category_model_update_count( store, &iter, normal );
-    gtk_tree_model_iter_next( model, &iter );
-    category_model_update_count( store, &iter, low );
-
     /* update the "hosts" subtree */
     gtk_tree_model_iter_next( model, &top );
     for( i=store_pos=0, n=hosts->len ; ; )
@@ -293,6 +277,22 @@ category_filter_model_update( GtkTreeStore * store )
         }
     }
 
+    /* update the "public" subtree */
+    gtk_tree_model_iter_next( model, &top );
+    gtk_tree_model_iter_children( model, &iter, &top );
+    category_model_update_count( store, &iter, public );
+    gtk_tree_model_iter_next( model, &iter );
+    category_model_update_count( store, &iter, private );
+
+    /* update the "priority" subtree */
+    gtk_tree_model_iter_next( model, &top );
+    gtk_tree_model_iter_children( model, &iter, &top );
+    category_model_update_count( store, &iter, high );
+    gtk_tree_model_iter_next( model, &iter );
+    category_model_update_count( store, &iter, normal );
+    gtk_tree_model_iter_next( model, &iter );
+    category_model_update_count( store, &iter, low );
+
     /* cleanup */
     g_ptr_array_foreach( hosts, (GFunc)g_free, NULL );
     g_ptr_array_free( hosts, TRUE );
@@ -318,6 +318,12 @@ category_filter_model_new( GtkTreeModel * tmodel )
         -1 );
     gtk_tree_store_insert_with_values( store, NULL, NULL, -1,
         CAT_FILTER_COL_TYPE, CAT_FILTER_TYPE_SEPARATOR,
+        -1 );
+
+    gtk_tree_store_insert_with_values( store, &iter, NULL, -1,
+        CAT_FILTER_COL_NAME, _( "Trackers" ),
+        CAT_FILTER_COL_COUNT, invisible_number,
+        CAT_FILTER_COL_TYPE, CAT_FILTER_TYPE_PARENT,
         -1 );
 
     gtk_tree_store_insert_with_values( store, &iter, NULL, -1,
@@ -350,12 +356,6 @@ category_filter_model_new( GtkTreeModel * tmodel )
     gtk_tree_store_insert_with_values( store, NULL, &iter, -1,
         CAT_FILTER_COL_NAME, _( "Low" ),
         CAT_FILTER_COL_TYPE, CAT_FILTER_TYPE_PRI_LOW,
-        -1 );
-
-    gtk_tree_store_insert_with_values( store, &iter, NULL, -1,
-        CAT_FILTER_COL_NAME, _( "Trackers" ),
-        CAT_FILTER_COL_COUNT, invisible_number,
-        CAT_FILTER_COL_TYPE, CAT_FILTER_TYPE_PARENT,
         -1 );
 
     g_object_set_data( G_OBJECT( store ), TORRENT_MODEL_KEY, tmodel );
@@ -493,7 +493,6 @@ category_combo_box_new( GtkTreeModel * tmodel )
                                     "pixbuf", CAT_FILTER_COL_PIXBUF,
                                     NULL );
 
-
     r = gtk_cell_renderer_text_new( );
     gtk_cell_layout_pack_start( GTK_CELL_LAYOUT( c ), r, FALSE );
     gtk_cell_layout_set_attributes( GTK_CELL_LAYOUT( c ), r,
@@ -601,6 +600,7 @@ enum
     ACTIVITY_FILTER_COL_NAME,
     ACTIVITY_FILTER_COL_COUNT,
     ACTIVITY_FILTER_COL_TYPE,
+    ACTIVITY_FILTER_COL_STOCK_ID,
     ACTIVITY_FILTER_N_COLS
 };
 
@@ -712,32 +712,55 @@ activity_filter_model_new( GtkTreeModel * tmodel )
     struct {
         int type;
         const char * name;
+        const char * stock_id;
     } types[] = {
-        { ACTIVITY_FILTER_ALL, N_( "All" ) },
-        { ACTIVITY_FILTER_SEPARATOR, NULL },
-        { ACTIVITY_FILTER_DOWNLOADING, N_( "Downloading" ) },
-        { ACTIVITY_FILTER_SEEDING, N_( "Seeding" ) },
-        { ACTIVITY_FILTER_ACTIVE, N_( "Active" ) },
-        { ACTIVITY_FILTER_PAUSED, N_( "Paused" ) },
-        { ACTIVITY_FILTER_QUEUED, N_( "Queued" ) },
-        { ACTIVITY_FILTER_VERIFYING, N_( "Verifying" ) },
-        { ACTIVITY_FILTER_ERROR, N_( "Error" ) }
+        { ACTIVITY_FILTER_ALL, N_( "All" ), NULL },
+        { ACTIVITY_FILTER_SEPARATOR, NULL, NULL },
+        { ACTIVITY_FILTER_ACTIVE, N_( "Active" ), GTK_STOCK_EXECUTE },
+        { ACTIVITY_FILTER_DOWNLOADING, N_( "Downloading" ), GTK_STOCK_GO_DOWN },
+        { ACTIVITY_FILTER_SEEDING, N_( "Seeding" ), GTK_STOCK_GO_UP },
+        { ACTIVITY_FILTER_PAUSED, N_( "Paused" ), GTK_STOCK_MEDIA_PAUSE },
+        { ACTIVITY_FILTER_QUEUED, N_( "Queued" ), NULL },
+        { ACTIVITY_FILTER_VERIFYING, N_( "Verifying" ), GTK_STOCK_REFRESH },
+        { ACTIVITY_FILTER_ERROR, N_( "Error" ), GTK_STOCK_DIALOG_ERROR }
     };
-    GtkListStore * store;
-
-    store = gtk_list_store_new( ACTIVITY_FILTER_N_COLS,
-                                G_TYPE_STRING,
-                                G_TYPE_INT,
-                                G_TYPE_INT );
+    GtkListStore * store = gtk_list_store_new( ACTIVITY_FILTER_N_COLS,
+                                               G_TYPE_STRING,
+                                               G_TYPE_INT,
+                                               G_TYPE_INT,
+                                               G_TYPE_STRING );
     for( i=0, n=G_N_ELEMENTS(types); i<n; ++i )
         gtk_list_store_insert_with_values( store, NULL, -1,
             ACTIVITY_FILTER_COL_NAME, _( types[i].name ),
             ACTIVITY_FILTER_COL_TYPE, types[i].type,
+            ACTIVITY_FILTER_COL_STOCK_ID, types[i].stock_id,
             -1 );
 
     g_object_set_data( G_OBJECT( store ), TORRENT_MODEL_KEY, tmodel );
     activity_filter_model_update( store );
     return GTK_TREE_MODEL( store );
+}
+
+static void
+render_activity_pixbuf_func( GtkCellLayout    * cell_layout UNUSED,
+                             GtkCellRenderer  * cell_renderer,
+                             GtkTreeModel     * tree_model,
+                             GtkTreeIter      * iter,
+                             gpointer           data UNUSED )
+{
+    int type;
+    int width;
+    int ypad;
+    const gboolean leaf = !gtk_tree_model_iter_has_child( tree_model, iter );
+
+    gtk_tree_model_get( tree_model, iter, ACTIVITY_FILTER_COL_TYPE, &type, -1 );
+    width = type == ACTIVITY_FILTER_ALL ? 0 : 20;
+    ypad = type == ACTIVITY_FILTER_ALL ? 0 : 2;
+
+    g_object_set( cell_renderer, "width", width,
+                                 "sensitive", leaf,
+                                 "ypad", ypad,
+                                 NULL );
 }
 
 static void
@@ -782,6 +805,14 @@ activity_combo_box_new( GtkTreeModel * tmodel )
     gtk_combo_box_set_row_separator_func( GTK_COMBO_BOX( c ),
                                        activity_is_it_a_separator, NULL, NULL );
     gtk_combo_box_set_active( GTK_COMBO_BOX( c ), 0 );
+
+    r = gtk_cell_renderer_pixbuf_new( );
+    gtk_cell_layout_pack_start( GTK_CELL_LAYOUT( c ), r, FALSE );
+    gtk_cell_layout_set_attributes( GTK_CELL_LAYOUT( c ), r,
+                                    "stock-id", ACTIVITY_FILTER_COL_STOCK_ID,
+                                    NULL );
+    gtk_cell_layout_set_cell_data_func( GTK_CELL_LAYOUT( c ), r,
+                                        render_activity_pixbuf_func, NULL, NULL );
 
     r = gtk_cell_renderer_text_new( );
     gtk_cell_layout_pack_start( GTK_CELL_LAYOUT( c ), r, TRUE );
@@ -988,9 +1019,9 @@ gtr_filter_bar_new( tr_session * session, GtkTreeModel * tmodel, GtkTreeModel **
 
     h = gtk_hbox_new( FALSE, GUI_PAD_SMALL );
 
-    /* add the category combobox */
-    str = _( "_Category:" );
-    w = category;
+    /* add the activity combobox */
+    str = _( "_Show:" );
+    w = activity;
     l = gtk_label_new( NULL );
     gtk_label_set_markup_with_mnemonic( GTK_LABEL( l ), str );
     gtk_label_set_mnemonic_widget( GTK_LABEL( l ), w );
@@ -1002,13 +1033,8 @@ gtr_filter_bar_new( tr_session * session, GtkTreeModel * tmodel, GtkTreeModel **
     gtk_widget_set_size_request( w, 0u, GUI_PAD_BIG );
     gtk_box_pack_start( GTK_BOX( h ), w, FALSE, FALSE, 0 );
 
-    /* add the activity combobox */
-    str = _( "_Activity:" );
-    w = activity;
-    l = gtk_label_new( NULL );
-    gtk_label_set_markup_with_mnemonic( GTK_LABEL( l ), str );
-    gtk_label_set_mnemonic_widget( GTK_LABEL( l ), w );
-    gtk_box_pack_start( GTK_BOX( h ), l, FALSE, FALSE, 0 );
+    /* add the category combobox */
+    w = category;
     gtk_box_pack_start( GTK_BOX( h ), w, TRUE, TRUE, 0 );
 
     /* add a spacer */

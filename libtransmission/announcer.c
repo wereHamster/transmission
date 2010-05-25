@@ -581,7 +581,7 @@ getTier( tr_announcer * announcer, int torrentId, int tierId )
 ****  PUBLISH
 ***/
 
-static const tr_tracker_event emptyEvent = { 0, NULL, NULL, 0, 0 };
+static const tr_tracker_event emptyEvent = { 0, NULL, NULL, NULL, 0, 0 };
 
 static void
 publishMessage( tr_tier * tier, const char * msg, int type )
@@ -592,6 +592,7 @@ publishMessage( tr_tier * tier, const char * msg, int type )
         tr_tracker_event event = emptyEvent;
         event.messageType = type;
         event.text = msg;
+        event.tracker = tier->currentTracker ? tier->currentTracker->announce : NULL;
         tr_publisherPublish( &tiers->publisher, tier, &event );
     }
 }
@@ -617,13 +618,25 @@ publishWarning( tr_tier * tier, const char * msg )
 }
 
 static int
+getSeedProbability( int seeds, int leechers )
+{
+    if( !seeds )
+        return 0;
+
+    if( seeds>=0 && leechers>=0 )
+        return (int)((100.0*seeds)/(seeds+leechers));
+
+    return -1; /* unknown */
+}
+
+static int
 publishNewPeers( tr_tier * tier, int seeds, int leechers,
                  const void * compact, int compactLen )
 {
     tr_tracker_event e = emptyEvent;
 
     e.messageType = TR_TRACKER_PEERS;
-    e.seedProbability = seeds+leechers ? (int)((100.0*seeds)/(seeds+leechers)) : -1;
+    e.seedProbability = getSeedProbability( seeds, leechers );
     e.compact = compact;
     e.compactLen = compactLen;
 
@@ -784,7 +797,6 @@ static tr_bool
 announceURLIsSupported( const char * announce )
 {
     return ( announce != NULL )
-        && ( strstr( announce, "tracker.thepiratebay.org" ) == NULL ) /* dead */
         && ( ( strstr( announce, "http://" ) == announce ) ||
              ( strstr( announce, "https://" ) == announce ) );
 }

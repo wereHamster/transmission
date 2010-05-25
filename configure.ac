@@ -202,30 +202,23 @@ AC_CHECK_LIB([rt],
              [libevent_extra_libs="-lrt"],
              [libevent_extra_libs=""])
 
-dnl build our copy of libevent whether we use it or not,
-dnl because "make dist" needs its Makefiles to exist, and
-dnl AM_CONDITIONAL + AC_CONFIG_SUBDIRS don't seem to play nice
-AC_CONFIG_SUBDIRS([third-party/libevent])
-libevent_source=bundled
-AC_CHECK_LIB([event],[evutil_vsnprintf],
-             [libevent_found=yes],
-             [libevent_found=no],
-             [$libevent_extra_libs])
-AC_CHECK_HEADER([event-config.h],
-                [libevent_headers_found=yes],
-                [libevent_headers_found=no])
-libevent_source=bundled
-if test "x$libevent_found" = "xyes" ; then
-    if test "x$libevent_headers_found" = "xyes"; then
-        libevent_source=system
-    fi
+
+dnl libevent
+dnl if the user specified LIBEVENT_LIBS or
+if test -n "$LIBEVENT_LIBS"; then
+    user_specified_libevent=yes
+elif test -n "$LIBEVENT_CFLAGS"; then
+    user_specified_libevent=yes
 fi
-if test "x$libevent_source" = "xbundled"; then
-    AC_MSG_WARN([using our own libevent from third-party/libevent/])
-    AC_MSG_WARN([if you are cross-compiling this is probably NOT what you want.])
-    LIBEVENT_CFLAGS="-I\$(top_srcdir)/third-party/libevent -I\$(top_builddir)/third-party/libevent"
-    LIBEVENT_LIBS="\$(top_builddir)/third-party/libevent/libevent.la"
+if test "x$user_specified_libevent" == "xyes"; then
+    AC_MSG_NOTICE([Using user-specified LIBEVENT_LIBS and LIBEVENT_CFLAGS])
 else
+    AC_CHECK_LIB([event],[evutil_vsnprintf],
+                 [],
+                 [AC_MSG_ERROR(libevent not found!)],
+                 [$libevent_extra_libs])
+    AC_CHECK_HEADER([event-config.h],[],
+                    [AC_MSG_ERROR(event-config.h not found!)])
     LIBEVENT_CFLAGS=""
     LIBEVENT_LIBS="-levent $libevent_extra_libs"
 fi
@@ -513,22 +506,19 @@ Configuration:
 
    Source code location:                              ${srcdir}
    Compiler:                                          ${CXX}
-   System or bundled libevent:                        ${libevent_source}
 
    Build Command-Line client:                         ${build_cli}
 
    Build GTK+ client:                                 ${build_gtk}
 
-      dbus support:                                   ${use_dbus_glib}
-      gio for watchdir support:                       ${use_gio}
-      libnotify for 'download completed' popups:      ${use_libnotify}
-      libcanberra for 'download completed' sounds:    ${use_canberra}
-      gconf2 to tell GNOME we handle magnet links:    ${use_gconf2}
-      libappindicator for Ubuntu-style system tray:   ${use_libappindicator}
+     Optional dependencies for GTK+ client:
 
-      THESE ARE ALL OPTIONAL. If you're a packager
-      or user who doesn't want these dependencies,
-      use the ones you want and skip all the rest.
+      * dbus support:                                 ${use_dbus_glib}
+      * gio for watchdir support:                     ${use_gio}
+      * libnotify for 'download completed' popups:    ${use_libnotify}
+      * libcanberra for 'download completed' sounds:  ${use_canberra}
+      * gconf2 to register as a magnet link handler:  ${use_gconf2}
+      * libappindicator for an Ubuntu-style tray:     ${use_libappindicator}
 
    Build Daemon:                                      ${build_daemon}
 
