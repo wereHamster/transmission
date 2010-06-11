@@ -640,6 +640,21 @@
 		A25E74470AF5089E006F11AE /* ExpandedPathToIconTransformer.h */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.h; name = ExpandedPathToIconTransformer.h; path = macosx/ExpandedPathToIconTransformer.h; sourceTree = "<group>"; };
 		A25FCDDD0A37695F002BCBBE /* ToolbarPauseSelectedTemplate.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = ToolbarPauseSelectedTemplate.png; path = macosx/Images/ToolbarPauseSelectedTemplate.png; sourceTree = "<group>"; };
 		A25FCDDE0A37695F002BCBBE /* ToolbarResumeSelectedTemplate.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = ToolbarResumeSelectedTemplate.png; path = macosx/Images/ToolbarResumeSelectedTemplate.png; sourceTree = "<group>"; };
+		A2613F8C11B3359100472893 /* pt */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt; path = macosx/pt.lproj/AddMagnetWindow.xib; sourceTree = "<group>"; };
+		A2613F8D11B3359100472893 /* pt */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt; path = macosx/pt.lproj/InfoActivityView.xib; sourceTree = "<group>"; };
+		A2613F8E11B3359100472893 /* pt */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt; path = macosx/pt.lproj/InfoGeneralView.xib; sourceTree = "<group>"; };
+		A2613F8F11B3359100472893 /* pt */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt; path = macosx/pt.lproj/InfoOptionsView.xib; sourceTree = "<group>"; };
+		A2613F9111B3383200472893 /* pt_PT */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt_PT; path = macosx/pt_PT.lproj/AddMagnetWindow.xib; sourceTree = "<group>"; };
+		A2613F9211B3383200472893 /* pt_PT */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt_PT; path = macosx/pt_PT.lproj/AddWindow.xib; sourceTree = "<group>"; };
+		A2613F9311B3383200472893 /* pt_PT */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt_PT; path = macosx/pt_PT.lproj/Creator.xib; sourceTree = "<group>"; };
+		A2613F9411B3383200472893 /* pt_PT */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt_PT; path = macosx/pt_PT.lproj/GroupRules.xib; sourceTree = "<group>"; };
+		A2613F9511B3383200472893 /* pt_PT */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt_PT; path = macosx/pt_PT.lproj/InfoActivityView.xib; sourceTree = "<group>"; };
+		A2613F9611B3383200472893 /* pt_PT */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt_PT; path = macosx/pt_PT.lproj/InfoGeneralView.xib; sourceTree = "<group>"; };
+		A2613F9711B3383200472893 /* pt_PT */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt_PT; path = macosx/pt_PT.lproj/InfoOptionsView.xib; sourceTree = "<group>"; };
+		A2613F9811B3383200472893 /* pt_PT */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = pt_PT; path = macosx/pt_PT.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A2613F9911B3383200472893 /* pt_PT */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = pt_PT; path = macosx/pt_PT.lproj/Localizable.strings; sourceTree = "<group>"; };
+		A2613F9A11B3383200472893 /* pt_PT */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt_PT; path = macosx/pt_PT.lproj/MainMenu.xib; sourceTree = "<group>"; };
+		A2613F9B11B3383200472893 /* pt_PT */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = pt_PT; path = macosx/pt_PT.lproj/PrefsWindow.xib; sourceTree = "<group>"; };
 		A26146E00DD4A0160060F033 /* GroupsNoneTemplate.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = GroupsNoneTemplate.png; path = macosx/Images/GroupsNoneTemplate.png; sourceTree = "<group>"; };
 		A261A8250C6A0D68003BAFDA /* Error.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = Error.png; path = macosx/Images/Error.png; sourceTree = "<group>"; };
 		A261F1DB0A69A1610002815A /* Growl.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Growl.framework; path = macosx/Growl.framework; sourceTree = "<group>"; };
@@ -748,6 +763,10 @@
 		A2AF1C370A3D0F6200F1575D /* FileOutlineView.m */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.objc; name = FileOutlineView.m; path = macosx/FileOutlineView.m; sourceTree = "<group>"; };
 		A2B3FB450E5901E700FF78FB /* cli.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = cli.c; path = cli/cli.c; sourceTree = "<group>"; };
 		A2B5BB7A0D9C7C2300FCB650 /* es */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = es; path = macosx/es.lproj/AddWindow.xib; sourceTree = "<group>"; };
+		A2B9F90311BD10BE003FC8CA /* fr */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = fr; path = macosx/fr.lproj/AddMagnetWindow.xib; sourceTree = "<group>"; };
+		A2B9F90411BD10BE003FC8CA /* fr */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = fr; path = macosx/fr.lproj/InfoActivityView.xib; sourceTree = "<group>"; };
+		A2B9F90511BD10BE003FC8CA /* fr */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = fr; path = macosx/fr.lproj/InfoGeneralView.xib; sourceTree = "<group>"; };
+		A2B9F90611BD10BE003FC8CA /* fr */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = fr; path = macosx/fr.lproj/InfoOptionsView.xib; sourceTree = "<group>"; };
 		A2BB67780D5BA74600AB0618 /* ToolbarOpenWebTemplate.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = ToolbarOpenWebTemplate.png; path = macosx/Images/ToolbarOpenWebTemplate.png; sourceTree = "<group>"; };
 		A2BC19840CA9AF5A00DD302A /* CompleteCheck.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = CompleteCheck.png; path = macosx/Images/CompleteCheck.png; sourceTree = "<group>"; };
 		A2BC19DF0CA9D82300DD302A /* evutil.h */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.h; name = evutil.h; path = "third-party/libevent/evutil.h"; sourceTree = "<group>"; };
@@ -1827,6 +1846,7 @@
 				pt,
 				de,
 				zh_CN,
+				pt_PT,
 			);
 			mainGroup = 29B97314FDCFA39411CA2CEA /* Transmission */;
 			projectDirPath = "";
@@ -2259,6 +2279,7 @@
 				A251A65E0F9E8FDA004F5973 /* pt */,
 				A28393FD10D54A79005C0240 /* de */,
 				A2DC1E4810E6731000DFB18C /* zh_CN */,
+				A2613F9811B3383200472893 /* pt_PT */,
 			);
 			name = InfoPlist.strings;
 			sourceTree = "<group>";
@@ -2271,6 +2292,9 @@
 				A220EED211AB3F9B0022B4BE /* it */,
 				A220EEDA11AE95CE0022B4BE /* es */,
 				A220EEEF11B070A50022B4BE /* ru */,
+				A2613F8D11B3359100472893 /* pt */,
+				A2613F9511B3383200472893 /* pt_PT */,
+				A2B9F90411BD10BE003FC8CA /* fr */,
 			);
 			name = InfoActivityView.xib;
 			sourceTree = "<group>";
@@ -2283,6 +2307,9 @@
 				A220EED311AB3F9B0022B4BE /* it */,
 				A220EEDB11AE95CE0022B4BE /* es */,
 				A220EEF011B070A50022B4BE /* ru */,
+				A2613F8E11B3359100472893 /* pt */,
+				A2613F9611B3383200472893 /* pt_PT */,
+				A2B9F90511BD10BE003FC8CA /* fr */,
 			);
 			name = InfoGeneralView.xib;
 			sourceTree = "<group>";
@@ -2295,6 +2322,9 @@
 				A220EED411AB3F9B0022B4BE /* it */,
 				A220EEDC11AE95CE0022B4BE /* es */,
 				A220EEF111B070A50022B4BE /* ru */,
+				A2613F8F11B3359100472893 /* pt */,
+				A2613F9711B3383200472893 /* pt_PT */,
+				A2B9F90611BD10BE003FC8CA /* fr */,
 			);
 			name = InfoOptionsView.xib;
 			sourceTree = "<group>";
@@ -2312,6 +2342,7 @@
 				A22CF7D10FA6A19B0009BD3E /* ru */,
 				A28393FC10D54A66005C0240 /* de */,
 				A2DC1E4710E6731000DFB18C /* zh_CN */,
+				A2613F9411B3383200472893 /* pt_PT */,
 			);
 			name = GroupRules.xib;
 			sourceTree = "<group>";
@@ -2324,6 +2355,9 @@
 				A220EED011AB3F8F0022B4BE /* it */,
 				A220EED911AE95CE0022B4BE /* es */,
 				A220EEEE11B070A40022B4BE /* ru */,
+				A2613F8C11B3359100472893 /* pt */,
+				A2613F9111B3383200472893 /* pt_PT */,
+				A2B9F90311BD10BE003FC8CA /* fr */,
 			);
 			name = AddMagnetWindow.xib;
 			sourceTree = "<group>";
@@ -2341,6 +2375,7 @@
 				A251A6620F9E8FED004F5973 /* pt */,
 				A28393FF10D54A96005C0240 /* de */,
 				A2DC1E4A10E6731000DFB18C /* zh_CN */,
+				A2613F9911B3383200472893 /* pt_PT */,
 			);
 			name = Localizable.strings;
 			sourceTree = "<group>";
@@ -2358,6 +2393,7 @@
 				A251A65D0F9E8FD5004F5973 /* pt */,
 				A283940110D54AA7005C0240 /* de */,
 				A2DC1E4C10E6731000DFB18C /* zh_CN */,
+				A2613F9B11B3383200472893 /* pt_PT */,
 			);
 			name = PrefsWindow.xib;
 			sourceTree = "<group>";
@@ -2375,6 +2411,7 @@
 				A251A65C0F9E8FD5004F5973 /* pt */,
 				A283940010D54A9D005C0240 /* de */,
 				A2DC1E4B10E6731000DFB18C /* zh_CN */,
+				A2613F9A11B3383200472893 /* pt_PT */,
 			);
 			name = MainMenu.xib;
 			sourceTree = "<group>";
@@ -2392,6 +2429,7 @@
 				A251A6590F9E8FBF004F5973 /* pt */,
 				A28393F910D54A35005C0240 /* de */,
 				A2DC1E4510E6731000DFB18C /* zh_CN */,
+				A2613F9211B3383200472893 /* pt_PT */,
 			);
 			name = AddWindow.xib;
 			sourceTree = "<group>";
@@ -2409,6 +2447,7 @@
 				A251A65A0F9E8FCA004F5973 /* pt */,
 				A28393FA10D54A4B005C0240 /* de */,
 				A2DC1E4610E6731000DFB18C /* zh_CN */,
+				A2613F9311B3383200472893 /* pt_PT */,
 			);
 			name = Creator.xib;
 			sourceTree = "<group>";

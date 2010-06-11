@@ -1723,6 +1723,12 @@ tr_torrentRecheckCompleteness( tr_torrent * tor )
 
         if( tr_torrentIsSeed( tor ) )
         {
+            if( recentChange )
+            {
+                tr_announcerTorrentCompleted( tor );
+                tor->doneDate = tor->anyDate = tr_time( );
+            }
+
             tr_torrentCheckSeedRatio( tor );
 
             if( tor->currentDir == tor->incompleteDir )
@@ -1733,13 +1739,6 @@ tr_torrentRecheckCompleteness( tr_torrent * tor )
         }
 
         fireCompletenessChange( tor, completeness );
-
-        if( recentChange && tr_torrentIsSeed( tor ) )
-        {
-            tr_announcerTorrentCompleted( tor );
-
-            tor->doneDate = tor->anyDate = tr_time( );
-        }
 
         tr_torrentSetDirty( tor );
     }
@@ -2377,7 +2376,7 @@ walkLocalData( const tr_torrent * tor,
             struct dirent *d;
             tr_ptrArrayInsertSorted( folders, tr_strdup( buf ), vstrcmp );
             for( d = readdir( odir ); d != NULL; d = readdir( odir ) )
-                if( d->d_name && d->d_name[0] != '.' ) /* skip dotfiles */
+                if( d->d_name && strcmp( d->d_name, "." ) && strcmp( d->d_name, ".." ) )
                     walkLocalData( tor, root, buf, d->d_name, torrentFiles, folders, dirtyFolders );
             closedir( odir );
         }

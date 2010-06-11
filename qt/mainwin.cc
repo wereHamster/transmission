@@ -454,12 +454,16 @@ TrMainWindow :: createStatusBar( )
 
         p = myOptionsButton = new TrIconPushButton( this );
         p->setIcon( QIcon( ":/icons/options.png" ) );
+        p->setIconSize( QPixmap( ":/icons/options.png" ).size() );
         p->setFlat( true );
         p->setMenu( createOptionsMenu( ) );
         h->addWidget( p );
 
-        p = myAltSpeedButton = new TrIconPushButton( this );
+        p = myAltSpeedButton = new QPushButton( this );
         p->setIcon( myPrefs.get<bool>(Prefs::ALT_SPEED_LIMIT_ENABLED) ? mySpeedModeOnIcon : mySpeedModeOffIcon );
+        p->setIconSize( QPixmap( ":/icons/alt-limit-on.png" ).size() );
+        p->setCheckable( true );
+        p->setFixedWidth( p->height() );
         p->setFlat( true );
         h->addWidget( p );
         connect( p, SIGNAL(clicked()), this, SLOT(toggleSpeedMode()));
@@ -490,6 +494,7 @@ TrMainWindow :: createStatusBar( )
         connect( ui.action_SessionTransfer, SIGNAL(triggered()), this, SLOT(showSessionTransfer()));
         p = myStatsModeButton = new TrIconPushButton( this );
         p->setIcon( QIcon( ":/icons/ratio.png" ) );
+        p->setIconSize( QPixmap( ":/icons/ratio.png" ).size() );
         p->setFlat( true );
         p->setMenu( m );
         h->addWidget( p );
@@ -667,7 +672,7 @@ TrMainWindow :: openProperties( )
 void
 TrMainWindow :: setLocation( )
 {
-    QDialog * d = new RelocateDialog( mySession, getSelectedTorrents(), this );
+    QDialog * d = new RelocateDialog( mySession, myModel, getSelectedTorrents(), this );
     d->show( );
 }
 
@@ -1174,7 +1179,7 @@ void
 TrMainWindow :: removeTorrents( const bool deleteFiles )
 {
     QSet<int> ids;
-    QMessageBox msgBox( this );
+    QMessageBox * msgBox = new QMessageBox( this );
     QString primary_text, secondary_text;
     int incomplete = 0;
     int connected  = 0;
@@ -1247,18 +1252,18 @@ TrMainWindow :: removeTorrents( const bool deleteFiles )
         }
     }
 
-    msgBox.setWindowTitle( QString(" ") );
-    msgBox.setText( QString( "<big><b>%1</big></b>" ).arg( primary_text ) );
-    msgBox.setInformativeText( secondary_text );
-    msgBox.setStandardButtons( QMessageBox::Ok | QMessageBox::Cancel );
-    msgBox.setDefaultButton( QMessageBox::Cancel );
-    msgBox.setIcon( QMessageBox::Question );
+    msgBox->setWindowTitle( QString(" ") );
+    msgBox->setText( QString( "<big><b>%1</big></b>" ).arg( primary_text ) );
+    msgBox->setInformativeText( secondary_text );
+    msgBox->setStandardButtons( QMessageBox::Ok | QMessageBox::Cancel );
+    msgBox->setDefaultButton( QMessageBox::Cancel );
+    msgBox->setIcon( QMessageBox::Question );
     /* hack needed to keep the dialog from being too narrow */
-    QGridLayout* layout = (QGridLayout*)msgBox.layout();
+    QGridLayout* layout = (QGridLayout*)msgBox->layout();
     QSpacerItem* spacer = new QSpacerItem( 450, 0, QSizePolicy::Minimum, QSizePolicy::Expanding );
     layout->addItem( spacer, layout->rowCount(), 0, 1, layout->columnCount() );
 
-    if( msgBox.exec() == QMessageBox::Ok )
+    if( msgBox->exec() == QMessageBox::Ok )
         mySession.removeTorrents( ids, deleteFiles );
 }
 

@@ -1229,6 +1229,13 @@ parseAnnounceResponse( tr_tier     * tier,
     int scrapeFields = 0;
     const int bencLoaded = !tr_bencLoad( response, responseLen, &benc, NULL );
 
+    if( getenv( "TR_CURL_VERBOSE" ) != NULL )
+    {
+        char * str = tr_bencToStr( &benc, TR_FMT_JSON, NULL );
+        fprintf( stderr, "Announce response:\n< %s\n", str );
+        tr_free( str );
+    }
+
     dbgmsg( tier, "response len: %d, isBenc: %d", (int)responseLen, (int)bencLoaded );
     publishErrorClear( tier );
     if( bencLoaded && tr_bencIsDict( &benc ) )
@@ -1536,13 +1543,19 @@ getNextAnnounceEvent( tr_tier * tier )
     assert( tier != NULL );
     assert( tr_isTorrent( tier->tor ) );
 
-    /* special case #1: if "stopped" is in the queue, ignore everything before it */
     events = (const char**) tr_ptrArrayPeek( &tier->announceEvents, &n );
+
+    /* special case #1: if "stopped" is in the queue,
+     * ignore everything before it except "completed" */
     if( pos == -1 ) {
-        for( i=0; i<n; ++i )
+        tr_bool completed = FALSE;
+        for( i = 0; i < n; ++i ) {
+            if( !strcmp( events[i], "completed" ) )
+                completed = TRUE;
             if( !strcmp( events[i], "stopped" ) )
                 break;
-        if( i <  n )
+        }
+        if( !completed && ( i <  n ) )
             pos = i;
     }
 

@@ -228,12 +228,12 @@ static tr_option opts[] =
     { 'p', "port",                   "Port for incoming peers (Default: " TR_DEFAULT_PEER_PORT_STR ")", "p", 1, "<port>" },
     { 962, "port-test",              "Port testing", "pt", 0, NULL },
     { 'P', "random-port",            "Random port for incomping peers", "P", 0, NULL },
-    { 900, "file-priority-high",     "Set the files' priorities as high", "fh", 1, "<files>" },
-    { 901, "file-priority-normal",   "Set the files' priorities as normal", "fn", 1, "<files>" },
-    { 902, "file-priority-low",      "Set the files' priorities as low", "fl", 1, "<files>" },
-    { 700, "torrent-priority-high",  "Set the current torrent(s)' priorities as high", "th", 0, NULL },
-    { 701, "torrent-priority-normal","Set the current torrent(s)' priorities as normal", "tn", 0, NULL },
-    { 702, "torrent-priority-low",   "Set the current torrent(s)' priorities as low", "tl", 0, NULL },
+    { 900, "priority-high",          "Try to download the specified file(s) first", "ph", 1, "<files>" },
+    { 901, "priority-normal",        "Try to download the specified file(s) normally", "pn", 1, "<files>" },
+    { 902, "priority-low",           "Try to download the specified file(s) last", "pl", 1, "<files>" },
+    { 700, "bandwidth-high",         "Give this torrent first chance at available bandwidth", "Bh", 0, NULL },
+    { 701, "bandwidth-normal",       "Give this torrent the bandwidth left over by high priority torrents", "Bn", 0, NULL },
+    { 702, "bandwidth-low",          "Give this torrent the bandwidth left over by high and normal priority torrents", "Bl", 0, NULL },
     { 'r', "remove",                 "Remove the current torrent(s)", "r",  0, NULL },
     { 930, "peers",                  "Set the maximum number of peers for the current torrent(s) or globally", "pr", 1, "<max>" },
     { 'R', "remove-and-delete",      "Remove the current torrent(s) and delete local data", NULL, 0, NULL },
@@ -1690,8 +1690,8 @@ processArgs( const char * host, int port, int argc, const char ** argv )
             switch( c )
             {
                 case 'a': /* add torrent */
-                    if( tadd != 0 ) flush( host, port, &tadd );
-                    if( tset != 0 ) { addIdArg( tr_bencDictFind( tset, ARGUMENTS ), id ); flush( host, port, &tset ); }
+                    if( tadd != 0 ) status |= flush( host, port, &tadd );
+                    if( tset != 0 ) { addIdArg( tr_bencDictFind( tset, ARGUMENTS ), id ); status |= flush( host, port, &tset ); }
                     tadd = tr_new0( tr_benc, 1 );
                     tr_bencInitDict( tadd, 3 );
                     tr_bencDictAddStr( tadd, "method", "torrent-add" );
@@ -1712,8 +1712,8 @@ processArgs( const char * host, int port, int argc, const char ** argv )
                     break;
 
                 case 't': /* set current torrent */
-                    if( tadd != 0 ) flush( host, port, &tadd );
-                    if( tset != 0 ) { addIdArg( tr_bencDictFind( tset, ARGUMENTS ), id ); flush( host, port, &tset ); }
+                    if( tadd != 0 ) status |= flush( host, port, &tadd );
+                    if( tset != 0 ) { addIdArg( tr_bencDictFind( tset, ARGUMENTS ), id ); status |= flush( host, port, &tset ); }
                     tr_strlcpy( id, optarg, sizeof( id ) );
                     break;
 
@@ -1755,7 +1755,7 @@ processArgs( const char * host, int port, int argc, const char ** argv )
             args = tr_bencDictAddDict( top, ARGUMENTS, 0 );
             fields = tr_bencDictAddList( args, "fields", 0 );
 
-            if( tset != 0 ) { addIdArg( tr_bencDictFind( tset, ARGUMENTS ), id ); flush( host, port, &tset ); }
+            if( tset != 0 ) { addIdArg( tr_bencDictFind( tset, ARGUMENTS ), id ); status |= flush( host, port, &tset ); }
             
             switch( c )
             {
@@ -1780,7 +1780,7 @@ processArgs( const char * host, int port, int argc, const char ** argv )
                 default:  assert( "unhandled value" && 0 );
             }
 
-            flush( host, port, &top );
+            status |= flush( host, port, &top );
         }
         else if( stepMode == MODE_SESSION_SET )
         {
@@ -1975,7 +1975,7 @@ processArgs( const char * host, int port, int argc, const char ** argv )
                 tr_bencDictAddStr( args, "location", optarg );
                 tr_bencDictAddBool( args, "move", FALSE );
                 addIdArg( args, id );
-                flush( host, port, &top );
+                status |= flush( host, port, &top );
                 break;
             }
         }
@@ -1987,7 +1987,7 @@ processArgs( const char * host, int port, int argc, const char ** argv )
                 tr_bencInitDict( top, 2 );
                 tr_bencDictAddStr( top, "method", "session-get" );
                 tr_bencDictAddInt( top, "tag", TAG_SESSION );
-                flush( host, port, &top );
+                status |= flush( host, port, &top );
                 break;
             }
             case 's': /* start */
@@ -1999,7 +1999,7 @@ processArgs( const char * host, int port, int argc, const char ** argv )
                     tr_bencInitDict( top, 2 );
                     tr_bencDictAddStr( top, "method", "torrent-start" );
                     addIdArg( tr_bencDictAddDict( top, ARGUMENTS, 1 ), id );
-                    flush( host, port, &top );
+                    status |= flush( host, port, &top );
                 }
                 break;
             }
@@ -2012,7 +2012,7 @@ processArgs( const char * host, int port, int argc, const char ** argv )
                     tr_bencInitDict( top, 2 );
                     tr_bencDictAddStr( top, "method", "torrent-stop" );
                     addIdArg( tr_bencDictAddDict( top, ARGUMENTS, 1 ), id );
-                    flush( host, port, &top );
+                    status |= flush( host, port, &top );
                 }
                 break;
             }
@@ -2033,7 +2033,7 @@ processArgs( const char * host, int port, int argc, const char ** argv )
                 tr_benc * top = tr_new0( tr_benc, 1 );
                 tr_bencInitDict( top, 1 );
                 tr_bencDictAddStr( top, "method", "blocklist-update" );
-                flush( host, port, &top );
+                status |= flush( host, port, &top );
                 break;
             }
             case 921:
@@ -2042,7 +2042,7 @@ processArgs( const char * host, int port, int argc, const char ** argv )
                 tr_bencInitDict( top, 2 );
                 tr_bencDictAddStr( top, "method", "session-stats" );
                 tr_bencDictAddInt( top, "tag", TAG_STATS );
-                flush( host, port, &top );
+                status |= flush( host, port, &top );
                 break;
             }
             case 962:
@@ -2051,18 +2051,18 @@ processArgs( const char * host, int port, int argc, const char ** argv )
                 tr_bencInitDict( top, 2 );
                 tr_bencDictAddStr( top, "method", "port-test" );
                 tr_bencDictAddInt( top, "tag", TAG_PORTTEST );
-                flush( host, port, &top );
+                status |= flush( host, port, &top );
                 break;
             }
             case 'v':
             {
                 tr_benc * top;
-                if( tset != 0 ) { addIdArg( tr_bencDictFind( tset, ARGUMENTS ), id ); flush( host, port, &tset ); }
+                if( tset != 0 ) { addIdArg( tr_bencDictFind( tset, ARGUMENTS ), id ); status |= flush( host, port, &tset ); }
                 top = tr_new0( tr_benc, 1 );
                 tr_bencInitDict( top, 2 );
                 tr_bencDictAddStr( top, "method", "torrent-verify" );
                 addIdArg( tr_bencDictAddDict( top, ARGUMENTS, 1 ), id );
-                flush( host, port, &top );
+                status |= flush( host, port, &top );
                 break;
             }
             case 'r':
@@ -2075,7 +2075,7 @@ processArgs( const char * host, int port, int argc, const char ** argv )
                 args = tr_bencDictAddDict( top, ARGUMENTS, 2 );
                 tr_bencDictAddBool( args, "delete-local-data", c=='R' );
                 addIdArg( args, id );
-                flush( host, port, &top );
+                status |= flush( host, port, &top );
                 break;
             }
             case 960:
@@ -2088,7 +2088,7 @@ processArgs( const char * host, int port, int argc, const char ** argv )
                 tr_bencDictAddStr( args, "location", optarg );
                 tr_bencDictAddBool( args, "move", TRUE );
                 addIdArg( args, id );
-                flush( host, port, &top );
+                status |= flush( host, port, &top );
                 break;
             }
             default:
@@ -2100,9 +2100,9 @@ processArgs( const char * host, int port, int argc, const char ** argv )
         }
     }
 
-    if( tadd != 0 ) flush( host, port, &tadd );
-    if( tset != 0 ) { addIdArg( tr_bencDictFind( tset, ARGUMENTS ), id ); flush( host, port, &tset ); }
-    if( sset != 0 ) flush( host, port, &sset );
+    if( tadd != 0 ) status |= flush( host, port, &tadd );
+    if( tset != 0 ) { addIdArg( tr_bencDictFind( tset, ARGUMENTS ), id ); status |= flush( host, port, &tset ); }
+    if( sset != 0 ) status |= flush( host, port, &sset );
     return status;
 }
 

@@ -773,6 +773,25 @@ tr_strstrip( char * str )
     return str;
 }
 
+tr_bool
+tr_str_has_suffix( const char *str, const char *suffix )
+{
+    size_t str_len;
+    size_t suffix_len;
+
+    if( !str )
+        return FALSE;
+    if( !suffix )
+        return TRUE;
+
+    str_len = strlen( str );
+    suffix_len = strlen( suffix );
+    if( str_len < suffix_len )
+        return FALSE;
+
+    return !strncasecmp( str + str_len - suffix_len, suffix, suffix_len );
+}
+
 /****
 *****
 ****/
@@ -1342,9 +1361,8 @@ tr_parseNumberRange( const char * str_in, int len, int * setmeCount )
 double
 tr_truncd( double x, int decimal_places )
 {
-    static const int multiplier[] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000 };
-    const int64_t i = multiplier[decimal_places];
-    double x2 = (int64_t)(x*i);
+    const int i = (int) pow( 10, decimal_places );  
+    double x2 = (int)(x*i);
     return x2 / i;
 }
 
