@@ -3,8 +3,8 @@ dnl STATUS: "X" for prerelease beta builds,
 dnl         "Z" for unsupported trunk builds,
 dnl         "0" for stable, supported releases
 dnl these should be the only two lines you need to change
-m4_define([user_agent_prefix],[1.93+])
-m4_define([peer_id_prefix],[-TR193Z-])
+m4_define([user_agent_prefix],[2.01+])
+m4_define([peer_id_prefix],[-TR201Z-])
 
 AC_INIT([transmission],
         [user_agent_prefix],
@@ -40,7 +40,7 @@ AM_CONDITIONAL(TR_UNSTABLE, test "x$supported_build" = "xno")
 ##
 CURL_MINIMUM=7.15.4
 AC_SUBST(CURL_MINIMUM)
-LIBEVENT_MINIMUM=1.4.5
+LIBEVENT_MINIMUM=1.4.9
 AC_SUBST(LIBEVENT_MINIUM)
 OPENSSL_MINIMUM=0.9.4
 AC_SUBST(OPENSSL_MINIMUM)
@@ -211,7 +211,7 @@ if test "x$user_specified_libevent" == "xyes"; then
 else
     AC_CHECK_LIB([event],[evutil_vsnprintf],
                  [],
-                 [AC_MSG_ERROR(libevent not found!)],
+                 [AC_MSG_ERROR(libevent $LIBEVENT_MINIMUM or higher not found!)],
                  [$libevent_extra_libs])
     AC_CHECK_HEADER([event-config.h],[],
                     [AC_MSG_ERROR(event-config.h not found!)])
@@ -407,7 +407,7 @@ case $host_os in
      have_msw="yes"
      CXXFLAGS="$CXXFLAGS -mms-bitfields -mwin32 -mwindows"
      CPPFLAGS="$CPPFLAGS -DWIN32 -D_WIN32 -DWIN32_LEAN_AND_MEAN"
-     LIBS="$LIBS -lshell32 -lws2_32"
+     LIBS="$LIBS -liphlpapi -lshell32 -lws2_32"
      transmissionlocaledir="locale"
      if test -z "$host_alias"; then
        hostaliaswindres=
@@ -476,6 +476,7 @@ AC_CONFIG_FILES([Makefile
                  daemon/Makefile
                  doc/Makefile
                  libtransmission/Makefile
+                 utils/Makefile
                  third-party/Makefile
                  third-party/miniupnp/Makefile
                  third-party/libnatpmp/Makefile

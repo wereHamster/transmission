@@ -26,7 +26,6 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
-#include <QLocale>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QResizeEvent>
@@ -207,7 +206,17 @@ void
 Details :: onTimer( )
 {
     if( !myIds.empty( ) )
+    {
+        QSet<int> infos;
+        foreach( int id, myIds ) {
+            const Torrent * tor = myModel.getTorrentFromId( id );
+            if( tor->isMagnet() )
+                infos.insert( tor->id() );
+        }
+        if( !infos.isEmpty() )
+            mySession.initTorrents( infos );
         mySession.refreshExtraStats( myIds );
+    }
 }
 
 void
@@ -223,7 +232,6 @@ Details :: onTorrentChanged( )
 void
 Details :: refresh( )
 {
-    QLocale locale;
     const int n = myIds.size( );
     const bool single = n == 1;
     const QString blank;
@@ -300,7 +308,7 @@ Details :: refresh( )
             string = none;
         else {
             const double d = 100.0 * ( sizeWhenDone ? ( sizeWhenDone - leftUntilDone ) / sizeWhenDone : 1 );
-            QString pct = locale.toString( d, 'f', 2 );
+            QString pct = Utils::percentToString( d );
             if( !haveUnverified )
                 string = tr( "%1 (%2%)" )
                              .arg( Utils :: sizeToString( haveVerified + haveUnverified ) )
@@ -315,10 +323,14 @@ Details :: refresh( )
     myHaveLabel->setText( string );
 
     // myAvailabilityLabel
-    if( sizeWhenDone < 1 )
+    if( torrents.empty( ) )
         string = none;
-    else
-        string.sprintf( "%'.1f%%", ( 100.0 * available ) / sizeWhenDone );
+    else {
+        if( sizeWhenDone == 0 )
+            string = none;
+        else
+            string = QString( "%1%" ).arg( Utils::percentToString( ( 100.0 * available ) / sizeWhenDone ) );
+    }
     myAvailabilityLabel->setText( string );
 
     // myDownloadedLabel
@@ -813,15 +825,7 @@ Details :: refresh( )
                 newItems << item;
             }
 
-            QString code;
-            if( peer.isDownloadingFrom )                           { code += 'D'; }
-            else if( peer.clientIsInterested )                     { code += 'd'; }
-            if( peer.isUploadingTo )                               { code += 'U'; }
-            else if( peer.peerIsInterested )                       { code += 'u'; }
-            if( !peer.clientIsChoked && !peer.clientIsInterested ) { code += 'K'; }
-            if( !peer.peerIsChoked && !peer.peerIsInterested )     { code += '?'; }
-            if( peer.isEncrypted )                                 { code += 'E'; }
-            if( peer.isIncoming )                                  { code += 'I'; }
+            const QString code = peer.flagStr;
             item->setStatus( code );
             item->refresh( peer );
 
@@ -837,6 +841,7 @@ Details :: refresh( )
                     case 'K': txt = tr( "Peer has unchoked us, but we're not interested" ); break;
                     case '?': txt = tr( "We unchoked this peer, but they're not interested" ); break;
                     case 'E': txt = tr( "Encrypted connection" ); break;
+                    case 'H': txt = tr( "Peer was discovered through DHT" ); break;
                     case 'X': txt = tr( "Peer was discovered through Peer Exchange (PEX)" ); break;
                     case 'I': txt = tr( "Peer is an incoming connection" ); break;
                 }
@@ -849,7 +854,7 @@ Details :: refresh( )
 
             item->setText( COL_UP, peer.rateToPeer.isZero() ? "" : Utils::speedToString( peer.rateToPeer ) );
             item->setText( COL_DOWN, peer.rateToClient.isZero() ? "" : Utils::speedToString( peer.rateToClient ) );
-            item->setText( COL_PERCENT, peer.progress > 0 ? QString( "%1%" ).arg( locale.toString((int)(peer.progress*100.0))) : "" );
+            item->setText( COL_PERCENT, peer.progress > 0 ? QString( "%1%" ).arg( (int)( peer.progress * 100.0 ) ) : "" );
             item->setText( COL_STATUS, code );
             item->setToolTip( COL_STATUS, codeTip );
 
@@ -914,6 +919,7 @@ Details :: createInfoTab( )
     hig->addRow( tr( "Hash:" ), myHashLabel = new SqueezeLabel );
     hig->addRow( tr( "Privacy:" ), myPrivacyLabel = new SqueezeLabel );
     hig->addRow( tr( "Origin:" ), myOriginLabel = new SqueezeLabel );
+    myOriginLabel->setMinimumWidth( 325 ); // stop long origin strings from resizing the widgit
     hig->addRow( tr( "Comment:" ), myCommentBrowser = new QTextBrowser );
     const int h = QFontMetrics(myCommentBrowser->font()).lineSpacing() * 4;
     myCommentBrowser->setFixedHeight( h );
@@ -1153,6 +1159,7 @@ Details :: createPeersTab( )
     myPeerTree->setHeaderLabels( headers );
     myPeerTree->setColumnWidth( 0, 20 );
     myPeerTree->setSortingEnabled( true );
+    myPeerTree->sortByColumn( COL_ADDRESS, Qt::AscendingOrder );
     myPeerTree->setRootIsDecorated( false );
     myPeerTree->setTextElideMode( Qt::ElideRight );
     v->addWidget( myPeerTree, 1 );

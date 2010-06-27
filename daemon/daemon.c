@@ -1,11 +1,11 @@
 /*
  * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
- * Transmission project are granted a special exemption to clause 2(b)
- * so that the bulk of its code can remain under the MIT license.
- * This exemption does not extend to derived works not owned by
- * the Transmission project.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2
+ * as published by the Free Software Foundation.
+ *
+ * http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  *
  * $Id$
  */
@@ -68,7 +68,7 @@ static const struct tr_option options[] =
     { 'a', "allowed", "Allowed IP addresses.  (Default: " TR_DEFAULT_RPC_WHITELIST ")", "a", 1, "<list>" },
     { 'b', "blocklist", "Enable peer blocklists", "b", 0, NULL },
     { 'B', "no-blocklist", "Disable peer blocklists", "B", 0, NULL },
-    { 'c', "watch-dir", "Directory to watch for new .torrent files", "c", 1, "<directory>" },
+    { 'c', "watch-dir", "Where to watch for new .torrent files", "c", 1, "<directory>" },
     { 'C', "no-watch-dir", "Disable the watch-dir", "C", 0, NULL },
     { 941, "incomplete-dir", "Where to store new torrents until they're complete", NULL, 1, "<directory>" },
     { 942, "no-incomplete-dir", "Don't store incomplete torrents in a different location", NULL, 0, NULL },
@@ -96,9 +96,9 @@ static const struct tr_option options[] =
     { 910, "encryption-required",  "Encrypt all peer connections", "er", 0, NULL },
     { 911, "encryption-preferred", "Prefer encrypted peer connections", "ep", 0, NULL },
     { 912, "encryption-tolerated", "Prefer unencrypted peer connections", "et", 0, NULL },
-    { 'i', "bind-address-ipv4", "Where to listen for peer connections", "i", 1, "<ipv4 address>" },
-    { 'I', "bind-address-ipv6", "Where to listen for peer connections", "I", 1, "<ipv6 address>" },
-    { 'r', "rpc-bind-address", "Where to listen for RPC connections", "r", 1, "<ipv4 address>" },
+    { 'i', "bind-address-ipv4", "Where to listen for peer connections", "i", 1, "<ipv4 addr>" },
+    { 'I', "bind-address-ipv6", "Where to listen for peer connections", "I", 1, "<ipv6 addr>" },
+    { 'r', "rpc-bind-address", "Where to listen for RPC connections", "r", 1, "<ipv4 addr>" },
     { 953, "global-seedratio", "All torrents, unless overridden by a per-torrent setting, should seed until a specific ratio", "gsr", 1, "ratio" },
     { 954, "no-global-seedratio", "All torrents, unless overridden by a per-torrent setting, should seed regardless of ratio", "GSR", 0, NULL },
     { 'x', "pid-file", "Enable PID file", "x", 1, "<pid-file>" },

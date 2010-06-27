@@ -25,13 +25,19 @@ THE SOFTWARE.
 #include <stdio.h>
 
 /* posix */
-#include <netinet/in.h> /* sockaddr_in */
 #include <signal.h> /* sig_atomic_t */
 #include <sys/time.h>
-#include <sys/types.h>
-#include <sys/socket.h> /* socket(), bind() */
-#include <netdb.h>
 #include <unistd.h> /* close() */
+#ifdef WIN32
+  #include <inttypes.h>
+  #define _WIN32_WINNT  0x0501	/* freeaddrinfo(),getaddrinfo(),getnameinfo() */
+  #include <ws2tcpip.h>
+#else
+  #include <sys/types.h>
+  #include <sys/socket.h> /* socket(), bind() */
+  #include <netdb.h>
+  #include <netinet/in.h> /* sockaddr_in */
+#endif
 
 /* third party */
 #include <event.h>
@@ -193,7 +199,7 @@ dht_bootstrap(void *closure)
             tr_buildPath(cl->session->configDir, "dht.bootstrap", NULL);
 
         if(bootstrap_file)
-            f = fopen(bootstrap_file, "r");
+            f = fopen(bootstrap_file, "rb");
         if(f != NULL) {
             tr_ninf("DHT", "Attempting manual bootstrap");
             for(;;) {

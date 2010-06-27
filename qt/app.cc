@@ -26,6 +26,7 @@
 
 #include <libtransmission/transmission.h>
 #include <libtransmission/tr-getopt.h>
+#include <libtransmission/utils.h>
 #include <libtransmission/version.h>
 
 #include "app.h"
@@ -97,6 +98,18 @@ MyApp :: MyApp( int& argc, char ** argv ):
     t->load( QString(MY_NAME) + "_" + QLocale::system().name() );
     installTranslator( t );
 
+    // initialize the units formatter
+
+    tr_formatter_size_init ( 1024, qPrintable(tr("B")),
+                                   qPrintable(tr("KiB")),
+                                   qPrintable(tr("MiB")),
+                                   qPrintable(tr("GiB")) );
+
+    tr_formatter_speed_init( 1024, qPrintable(tr("B/s")),
+                                   qPrintable(tr("KiB/s")),
+                                   qPrintable(tr("MiB/s")),
+                                   qPrintable(tr("GiB/s")) );
+
     // set the default icon
     QIcon icon;
     icon.addPixmap( QPixmap( ":/icons/transmission-16.png" ) );
@@ -159,6 +172,8 @@ MyApp :: MyApp( int& argc, char ** argv ):
     connect( mySession, SIGNAL(torrentsUpdated(tr_benc*,bool)), myModel, SLOT(updateTorrents(tr_benc*,bool)) );
     connect( mySession, SIGNAL(torrentsUpdated(tr_benc*,bool)), myWindow, SLOT(refreshActionSensitivity()) );
     connect( mySession, SIGNAL(torrentsRemoved(tr_benc*)), myModel, SLOT(removeTorrents(tr_benc*)) );
+    // when the session source gets changed, request a full refresh
+    connect( mySession, SIGNAL(sourceChanged()), this, SLOT(onSessionSourceChanged()) );
     // when the model sees a torrent for the first time, ask the session for full info on it
     connect( myModel, SIGNAL(torrentsAdded(QSet<int>)), mySession, SLOT(initTorrents(QSet<int>)) );
 
@@ -300,6 +315,14 @@ MyApp :: maybeUpdateBlocklist( )
 }
 
 void
+MyApp :: onSessionSourceChanged( )
+{
+    mySession->initTorrents( );
+    mySession->refreshSessionStats( );
+    mySession->refreshSessionInfo( );
+}
+
+void
 MyApp :: refreshTorrents( )
 {
     // usually we just poll the torrents that have shown recent activity,
@@ -378,16 +401,6 @@ main( int argc, char * argv[] )
 
         QDBusMessage response = bus.call( request );
         arguments = response.arguments( );
-        delegated |= (arguments.size()==1) && arguments[0].toBool();
-    }
-    if( addme.empty() )
-    {
-        QDBusMessage request = QDBusMessage::createMethodCall( DBUS_SERVICE,
-                                                               DBUS_OBJECT_PATH,
-                                                               DBUS_INTERFACE,
-                                                               "PresentWindow" );
-        QDBusMessage response = bus.call( request );
-        QList<QVariant> arguments = response.arguments( );
         delegated |= (arguments.size()==1) && arguments[0].toBool();
     }
 

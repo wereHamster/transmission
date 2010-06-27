@@ -87,8 +87,8 @@ Torrent :: myProperties[] =
     { TRACKERS, "trackers", QVariant::StringList, INFO },
     { TRACKERSTATS, "trackerStats", TrTypes::TrackerStatsList, STAT_EXTRA },
     { MIME_ICON, "ccc", QVariant::Icon, DERIVED },
-    { SEED_RATIO_LIMIT, "seedRatioLimit", QVariant::Double, STAT_EXTRA },
-    { SEED_RATIO_MODE, "seedRatioMode", QVariant::Int, STAT_EXTRA },
+    { SEED_RATIO_LIMIT, "seedRatioLimit", QVariant::Double, STAT },
+    { SEED_RATIO_MODE, "seedRatioMode", QVariant::Int, STAT },
     { DOWN_LIMIT, "downloadLimit", QVariant::Int, STAT_EXTRA }, /* KiB/s */
     { DOWN_LIMITED, "downloadLimited", QVariant::Bool, STAT_EXTRA },
     { UP_LIMIT, "uploadLimit", QVariant::Int, STAT_EXTRA }, /* KiB/s */
@@ -635,6 +635,8 @@ Torrent :: update( tr_benc * d )
                 peer.clientIsChoked = b;
             if( tr_bencDictFindBool( child, "clientIsInterested", &b ) )
                 peer.clientIsInterested = b;
+            if( tr_bencDictFindStr( child, "flagStr", &str ) )
+                peer.flagStr = QString::fromUtf8( str );
             if( tr_bencDictFindBool( child, "isDownloadingFrom", &b ) )
                 peer.isDownloadingFrom = b;
             if( tr_bencDictFindBool( child, "isEncrypted", &b ) )

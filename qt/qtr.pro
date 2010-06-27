@@ -1,15 +1,19 @@
-TARGET = qtr
+TARGET = transmission-qt
 NAME = "Transmission"
 DESCRIPTION = "Transmission: a fast, easy, and free BitTorrent client"
-VERSION = 1.60
+VERSION = 2.00
 LICENSE = "GPL"
 
 target.path = /bin
 INSTALLS += target
 
+unix: INSTALLS += man
+man.path = /share/man/man1/
+man.files = transmission-qt.1
+
 CONFIG += qt qdbus thread debug link_pkgconfig
 QT += network
-PKGCONFIG = fontconfig libcurl openssl
+PKGCONFIG = fontconfig libcurl openssl dbus-1
 
 TRANSMISSION_TOP = ..
 INCLUDEPATH += $${TRANSMISSION_TOP}
@@ -17,7 +21,10 @@ LIBS += $${TRANSMISSION_TOP}/libtransmission/libtransmission.a
 LIBS += $${TRANSMISSION_TOP}/third-party/dht/libdht.a
 LIBS += $${TRANSMISSION_TOP}/third-party/miniupnp/libminiupnp.a
 LIBS += $${TRANSMISSION_TOP}/third-party/libnatpmp/libnatpmp.a
-LIBS += -levent
+unix: LIBS += -levent
+win32:DEFINES += QT_DBUS
+win32:LIBS += -levent -lws2_32 -lintl
+win32:LIBS += -lidn -liconv -lwldap32 -liphlpapi
 
 TRANSLATIONS += transmission_en.ts transmission_ru.ts
 
@@ -32,3 +39,4 @@ SOURCES += about.cc app.cc dbus-adaptor.cc details.cc file-tree.cc filters.cc \
 HEADERS += $$replace(SOURCES, .cc, .h)
 HEADERS += speed.h types.h
 
+win32:RC_FILE = qtr.rc

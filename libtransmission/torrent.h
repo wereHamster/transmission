@@ -165,10 +165,13 @@ struct tr_torrent
     /* Where the files are when the torrent is incomplete */
     char * incompleteDir;
 
-    /* Length, in bytes, of the "info" dict in the .torrent file */
+    /* Length, in bytes, of the "info" dict in the .torrent file. */
     int infoDictLength;
 
-    /* Offset, in bytes, of the beginning of the "info" dict in the .torrent file */
+    /* Offset, in bytes, of the beginning of the "info" dict in the .torrent file.
+     *
+     * Used by the torrent-magnet code for serving metainfo to peers.
+     * This field is lazy-generated and might not be initialized yet. */
     int infoDictOffset;
 
     /* Where the files are now.
@@ -191,7 +194,6 @@ struct tr_torrent
     tr_completeness            completeness;
 
     struct tr_torrent_tiers  * tiers;
-    struct tr_publisher_tag  * tiersSubscription;
 
     time_t                     dhtAnnounceAt;
     time_t                     dhtAnnounce6At;
@@ -228,9 +230,12 @@ struct tr_torrent
     void                             * ratio_limit_hit_func_user_data;
 
     tr_bool                    isRunning;
+    tr_bool                    isStopping;
     tr_bool                    isDeleting;
     tr_bool                    startAfterVerify;
     tr_bool                    isDirty;
+
+    tr_bool                    infoDictOffsetIsCached;
 
     uint16_t                   maxConnectedPeers;
 
@@ -378,6 +383,8 @@ const char * tr_torrentName( const tr_torrent * tor )
 
     return tor->info.name;
 }
+
+uint32_t tr_getBlockSize( uint32_t pieceSize );
 
 /**
  * Tell the tr_torrent that one of its files has become complete

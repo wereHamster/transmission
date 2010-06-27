@@ -15,7 +15,11 @@
 #include <string.h>
 
 #ifdef WIN32
+ #include <w32api.h>
+ #define WINVER  WindowsXP
  #include <windows.h>
+ #define PROT_READ      PAGE_READONLY
+ #define MAP_PRIVATE    FILE_MAP_COPY
 #endif
 
 #ifndef WIN32
@@ -27,13 +31,15 @@
 #include <unistd.h>
 #include <assert.h>
 
-#include "ggets.h"
-
 #include "transmission.h"
 #include "platform.h"
 #include "blocklist.h"
 #include "net.h"
 #include "utils.h"
+
+#ifndef O_BINARY
+ #define O_BINARY 0
+#endif
 
 
 /***
@@ -82,18 +88,14 @@ blocklistLoad( tr_blocklist * b )
     if( stat( b->filename, &st ) == -1 )
         return;
 
-    fd = open( b->filename, O_RDONLY );
+    fd = open( b->filename, O_RDONLY | O_BINARY );
     if( fd == -1 )
     {
         tr_err( err_fmt, b->filename, tr_strerror( errno ) );
         return;
     }
 
-#ifndef WIN32
     b->rules = mmap( NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0 );
-#else
-    b->rules = mmap( NULL, st.st_size, 0, 0, fd, 0 );
-#endif
     if( !b->rules )
     {
         tr_err( err_fmt, b->filename, tr_strerror( errno ) );
@@ -304,11 +306,11 @@ int
 _tr_blocklistSetContent( tr_blocklist * b,
                          const char *   filename )
 {
-    FILE *       in;
-    FILE *       out;
-    char *       line;
-    int          inCount = 0;
-    int          outCount = 0;
+    FILE * in;
+    FILE * out;
+    int inCount = 0;
+    int outCount = 0;
+    char line[2048];
     const char * err_fmt = _( "Couldn't read \"%1$s\": %2$s" );
 
     if( !filename )
@@ -317,7 +319,7 @@ _tr_blocklistSetContent( tr_blocklist * b,
         return 0;
     }
 
-    in = fopen( filename, "r" );
+    in = fopen( filename, "rb" );
     if( !in )
     {
         tr_err( err_fmt, filename, tr_strerror( errno ) );
@@ -334,7 +336,7 @@ _tr_blocklistSetContent( tr_blocklist * b,
         return 0;
     }
 
-    while( !fggets( &line, in ) )
+    while( fgets( line, sizeof( line ), in ) != NULL )
     {
         char * walk;
         struct tr_ip_range range;
@@ -349,11 +351,8 @@ _tr_blocklistSetContent( tr_blocklist * b,
         {
             /* don't try to display the actual lines - it causes issues */
             tr_err( _( "blocklist skipped invalid address at line %d" ), inCount );
-            free( line );
             continue;
         }
-
-        free( line );
 
         if( fwrite( &range, sizeof( struct tr_ip_range ), 1, out ) != 1 )
         {
@@ -367,7 +366,7 @@ _tr_blocklistSetContent( tr_blocklist * b,
 
     {
         char * base = tr_basename( b->filename );
-        tr_inf( _( "Blocklist \"%1$s\" updated with %2$'d entries" ), base, outCount );
+        tr_inf( _( "Blocklist \"%s\" updated with %'d entries" ), base, outCount );
         tr_free( base );
     }
 

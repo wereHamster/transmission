@@ -88,6 +88,8 @@ extern "C" {
 ****
 ***/
 
+const char * tr_strip_positional_args( const char * fmt );
+
 #if !defined( _ )
  #if defined( HAVE_LIBINTL_H ) && !defined( SYS_DARWIN )
   #include <libintl.h>
@@ -98,11 +100,12 @@ extern "C" {
 #endif
 
 /* #define DISABLE_GETTEXT */
-#if defined(TR_EMBEDDED) && !defined(DISABLE_GETTEXT)
- #define DISABLE_GETTEXT
+#ifndef DISABLE_GETTEXT
+ #if defined(WIN32) || defined(TR_EMBEDDED)
+   #define DISABLE_GETTEXT
+ #endif
 #endif
 #ifdef DISABLE_GETTEXT
- const char * tr_strip_positional_args( const char * fmt );
  #undef _
  #define _( a ) tr_strip_positional_args( a )
 #endif
@@ -492,6 +495,9 @@ int* tr_parseNumberRange( const char * str,
  */
 double tr_truncd( double x, int decimal_places );
 
+/* return a percent formatted string of either x.xx, xx.x or xxx */
+char* tr_strpercent( char * buf, double x, size_t buflen );
+
 /**
  * @param buf the buffer to write the string to
  * @param buflef buf's size
@@ -499,6 +505,9 @@ double tr_truncd( double x, int decimal_places );
  * @param the string represntation of "infinity"
  */
 char* tr_strratio( char * buf, size_t buflen, double ratio, const char * infinity ) TR_GNUC_NONNULL(1,4);
+
+/* return a truncated double as a string */
+char* tr_strtruncd( char * buf, double x, int precision, size_t buflen );
 
 /** @brief Portability wrapper for localtime_r() that uses the system implementation if available */
 struct tm * tr_localtime_r( const time_t *_clock, struct tm *_result );
@@ -545,6 +554,33 @@ static inline time_t tr_time( void ) { return transmission_now; }
 
 /** @brief Private libtransmission function to update tr_time()'s counter */
 static inline void tr_timeUpdate( time_t now ) { transmission_now = now; }
+
+/** @brief Portability wrapper for realpath() that uses the system implementation if available */
+char* tr_realpath( const char *path, char * resolved_path );
+
+/***
+****
+***/
+
+/* example: tr_formatter_size_init( 1024, _("B"), _("KiB"), _("MiB"), _("GiB") ); */
+
+void tr_formatter_size_init( double kilo, const char * b, const char * kb,
+                                          const char * mb, const char * gb );
+
+void tr_formatter_speed_init( double kilo, const char * b, const char * kb,
+                                           const char * mb, const char * gb );
+
+/* format a size into a user-readable string. */
+char* tr_formatter_size( char * buf, uint64_t bytes, size_t buflen );
+
+/* format a speed into a user-readable string. */
+char* tr_formatter_speed( char * buf, uint64_t bytes_per_second, size_t buflen );
+
+enum { TR_FMT_B, TR_FMT_KB, TR_FMT_MB, TR_FMT_GB };
+/* return the human-readable unit initialized by tr_formatter_size_init() */
+const char* tr_formatter_size_units( int size );
+/* return the human-readable unit initialized by tr_formatter_speed_init() */
+const char* tr_formatter_speed_units( int size );
 
 /***
 ****

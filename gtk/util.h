@@ -39,6 +39,8 @@ enum
 };
 const char * gtr_get_unicode_string( int );
 
+/* return a percent formatted string of either x.xx, xx.x or xxx */
+char* tr_strlpercent( char * buf, double x, size_t buflen );
 
 /* return a human-readable string for the size given in bytes. */
 char* tr_strlsize( char * buf, guint64  size, size_t buflen );
@@ -126,6 +128,9 @@ void gtr_toolbar_set_orientation( GtkToolbar * tb, GtkOrientation orientation );
 /* backwards-compatible wrapper around gtk_widget_set_tooltip_text() */
 void gtr_widget_set_tooltip_text( GtkWidget * w, const char * tip );
 
+/* backwards-compatible wrapper around gtk_widget_get_realized() */
+gboolean gtr_widget_get_realized( GtkWidget * w );
+
 /* backwards-compatible wrapper around g_object_ref_sink() */
 gpointer gtr_object_ref_sink( gpointer object );
 
@@ -154,6 +159,7 @@ GtkWidget * gtr_priority_combo_new( void );
 
 void gtr_unrecognized_url_dialog( GtkWidget * parent, const char * url );
 
+void gtr_http_failure_dialog( GtkWidget * parent, const char * url, long response_code );
 
 void addTorrentErrorDialog( GtkWidget  * window_or_child,
                             int          err,

@@ -17,39 +17,39 @@ if (iPhone) var scroll_timeout;
 
 function testSafari3()
 {
-    var minimum = new Array(521,0);
-    var webKitFields = RegExp("( AppleWebKit/)([^ ]+)").exec(navigator.userAgent);
-    if (!webKitFields || webKitFields.length < 3) return false;
-    var version = webKitFields[2].split(".");
-    for (var i = 0; i < minimum.length; i++) {
-        var toInt = parseInt(version[i]);
-        var versionField = isNaN(toInt) ? 0 : toInt;
-        var minimumField = minimum[i];
+	var minimum = new Array(521,0);
+	var webKitFields = RegExp("( AppleWebKit/)([^ ]+)").exec(navigator.userAgent);
+	if (!webKitFields || webKitFields.length < 3) return false;
+	var version = webKitFields[2].split(".");
+	for (var i = 0; i < minimum.length; i++) {
+		var toInt = parseInt(version[i]);
+		var versionField = isNaN(toInt) ? 0 : toInt;
+		var minimumField = minimum[i];
 
-        if (versionField > minimumField) return true;
-        if (versionField < minimumField) return false;
-    }
-    return true;
+		if (versionField > minimumField) return true;
+		if (versionField < minimumField) return false;
+	}
+	return true;
 };
 
 $(document).ready( function() {
 	// Initialise the dialog controller
 	dialog = new Dialog();
-	
+
 	// Initialise the main Transmission controller
 	transmission = new Transmission();
 
 	// IE specific fixes here
 	if ($.browser.msie) {
 		try {
-		  document.execCommand("BackgroundImageCache", false, true);
+			document.execCommand("BackgroundImageCache", false, true);
 		} catch(err) {}
 		$('.dialog_container').css('height',$(window).height()+'px');
 	}
 
 	if ($.browser.safari) {
 		// Move search field's margin down for the styled input
-		$('#torrent_search').css('margin-top', 3);		
+		$('#torrent_search').css('margin-top', 3);
 	}
 	if (!Safari3 && !iPhone) {
 		// Fix for non-Safari-3 browsers: dark borders to replace shadows.
@@ -97,6 +97,9 @@ Array.prototype.clone = function () {
  */
 function setInnerHTML( e, html )
 {
+	if( e == undefined )
+		return;
+
 	/* innerHTML is listed as a string, but the browser seems to change it.
 	 * For example, "&infin;" gets changed to "∞" somewhere down the line.
 	 * So, let's use an arbitrary  different field to test our state... */
@@ -108,179 +111,38 @@ function setInnerHTML( e, html )
 };
 
 /*
- *   Converts file & folder byte size values to more
- *   readable values (bytes, KiB, MiB, GiB or TiB).
- *
- *   @param integer bytes
- *   @returns string
+ *   Given a numerator and denominator, return a ratio string
  */
-Math.formatBytes = function(bytes) {
-    var size;
-    var unit;
+Math.ratio = function( numerator, denominator ) {
+	var result = Math.floor(100 * numerator / denominator) / 100;
 
-    // Terabytes (TiB).
-    if ( bytes >= 1099511627776 ) {
-        size = bytes / 1099511627776;
-        unit = ' TiB';
-
-    // Gigabytes (GiB).
-    } else if ( bytes >= 1073741824 ) {
-        size = bytes / 1073741824;
-        unit = ' GiB';
-
-    // Megabytes (MiB).
-    } else if ( bytes >= 1048576 ) {
-        size = bytes / 1048576;
-        unit = ' MiB';
-
-    // Kilobytes (KiB).
-    } else if ( bytes >= 1024 ) {
-        size = bytes / 1024;
-        unit = ' KiB';
-
-    // The file is less than one KiB
-    } else {
-        size = bytes;
-        unit = ' bytes';
-    }
-	
-	// Single-digit numbers have greater precision
-	var precision = 1;
-	if (size < 10) {
-	    precision = 2;
-	}
-	size = Math.roundWithPrecision(size, precision);
-
-	// Add the decimal if this is an integer
-	if ((size % 1) == 0 && unit != ' bytes') {
-		size = size + '.0';
-	}
-
-    return size + unit;
-};
-
-
-/*
- *   Converts seconds to more readable units (hours, minutes etc).
- *
- *   @param integer seconds
- *   @returns string
- */
-Math.formatSeconds = function(seconds)
-{
-	var result;
-	var days = Math.floor(seconds / 86400);
-	var hours = Math.floor((seconds % 86400) / 3600);
-	var minutes = Math.floor((seconds % 3600) / 60);
-	var seconds = Math.floor((seconds % 3600) % 60);
-
-	if (days > 0 && hours == 0)
-		result = days + ' days';
-	else if (days > 0 && hours > 0)
-		result = days + ' days ' + hours + ' hr';
-	else if (hours > 0 && minutes == 0)
-		result = hours + ' hr';
-	else if (hours > 0 && minutes > 0)
-		result = hours + ' hr ' + minutes + ' min';
-	else if (minutes > 0 && seconds == 0)
-		result = minutes + ' min';
-	else if (minutes > 0 && seconds > 0)
-		result = minutes + ' min ' + seconds + ' seconds';
-	else
-		result = seconds + ' seconds';
+	// check for special cases
+	if(result==Number.POSITIVE_INFINITY || result==Number.NEGATIVE_INFINITY) result = -2;
+	else if(isNaN(result)) result = -1;
 
 	return result;
 };
 
-
 /*
- *   Converts a unix timestamp to a human readable value
- *
- *   @param integer seconds
- *   @returns string
- */
-Math.formatTimestamp = function(seconds) {
-	var myDate = new Date(seconds*1000);
-	var now = new Date();
-
-	var date = "";
-	var time = "";
-
-	var sameYear = now.getFullYear() == myDate.getFullYear();
-	var sameMonth = now.getMonth() == myDate.getMonth();
-
-	var dateDiff = now.getDate() - myDate.getDate();
-	if(sameYear && sameMonth && Math.abs(dateDiff) <= 1){
-		if(dateDiff == 0){
-			date = "Today";
-		}
-		else if(dateDiff == 1){
-			date = "Yesterday";
-		}
-		else{
-			date = "Tomorrow";
-		}
-	}
-	else{
-		date = myDate.toDateString();
-	}
-
-	var hours = myDate.getHours();
-	var period = "AM";
-	if(hours > 12){
-		hours = hours - 12;
-		period = "PM";
-	}
-	if(hours == 0){
-		hours = 12;
-	}
-	if(hours < 10){
-		hours = "0" + hours; 
-	} 
-	var minutes = myDate.getMinutes(); 
-	if(minutes < 10){ 
-		minutes = "0" + minutes; 
-	} 
-	var seconds = myDate.getSeconds(); 
-		if(seconds < 10){ 
-			seconds = "0" + seconds; 
-	} 
-
-	time = [hours, minutes, seconds].join(':');
-
-	return [date, time, period].join(' ');
-};
-
-/*
- *   Round a float to a specified number of decimal
+ *   Truncate a float to a specified number of decimal
  *   places, stripping trailing zeroes
  *
  *   @param float floatnum
  *   @param integer precision
  *   @returns float
  */
-Math.roundWithPrecision = function(floatnum, precision) {
-    return Math.round ( floatnum * Math.pow ( 10, precision ) ) / Math.pow ( 10, precision );
+Math.truncateWithPrecision = function(floatnum, precision) {
+	return Math.floor( floatnum * Math.pow ( 10, precision ) ) / Math.pow( 10, precision );
 };
-
 
 /*
- *   Given a numerator and denominator, return a ratio string
+ *   Round a string of a number to a specified number of decimal
+ *   places
  */
-Math.ratio = function( numerator, denominator )
-{
-	var result = Math.floor(100 * numerator / denominator) / 100;
-
-	// check for special cases
-	if (isNaN(result)) result = 0;
-	if (result=="Infinity") result = "&infin;";
-
-	// Add the decimals if this is an integer
-	if ((result % 1) == 0)
-		result = result + '.00';
-
-	return result;
-};
+Number.prototype.toTruncFixed = function( place ) {
+	var ret = Math.truncateWithPrecision( this, place );
+	return ret.toFixed( place );
+}
 
 /*
  * Trim whitespace from a string
@@ -294,9 +156,9 @@ String.prototype.trim = function () {
  */
 String.prototype.compareTo = function( that ) {
 	// FIXME: how to fold these two comparisons together?
-        if( this < that ) return -1;
-        if( this > that ) return 1;
-        return 0;
+	if( this < that ) return -1;
+	if( this > that ) return 1;
+	return 0;
 }
 
 /**
@@ -331,7 +193,7 @@ function Prefs() { }
 Prefs.prototype = { };
 
 Prefs._RefreshRate        = 'refresh_rate';
-Prefs._SessionRefreshRate        = 'session_refresh_rate';
+Prefs._SessionRefreshRate = 'session_refresh_rate';
 
 Prefs._ShowFilter         = 'show_filter';
 
@@ -339,6 +201,7 @@ Prefs._ShowInspector      = 'show_inspector';
 
 Prefs._FilterMode         = 'filter';
 Prefs._FilterAll          = 'all';
+Prefs._FilterActive       = 'active';
 Prefs._FilterSeeding      = 'seeding';
 Prefs._FilterDownloading  = 'downloading';
 Prefs._FilterPaused       = 'paused';
@@ -357,6 +220,7 @@ Prefs._SortByState        = 'state';
 Prefs._SortByTracker      = 'tracker';
 
 Prefs._TurtleState        = 'turtle-state';
+Prefs._CompactDisplayState= 'compact_display_state';
 
 Prefs._Defaults =
 {
@@ -366,7 +230,8 @@ Prefs._Defaults =
 	'show_inspector': false,
 	'sort_direction': 'ascending',
 	'sort_method': 'name',
-	'turtle-state' : false
+	'turtle-state' : false,
+	'compact_display_state' : false
 };
 
 /*
@@ -396,8 +261,8 @@ Prefs.getValue = function( key, fallback )
 	if( Prefs._Defaults[key] == undefined )
 		console.warn( "unrecognized preference key '%s'", key );
 
-        var lines = document.cookie.split( ';' );
-        for( var i=0, len=lines.length; !val && i<len; ++i ) {
+	var lines = document.cookie.split( ';' );
+	for( var i=0, len=lines.length; !val && i<len; ++i ) {
 		var line = lines[i].trim( );
 		var delim = line.indexOf( '=' );
 		if( ( delim == key.length ) && line.indexOf( key ) == 0 )

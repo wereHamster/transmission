@@ -38,6 +38,8 @@
 #include "event.h"
 
 #ifdef WIN32
+ #include <w32api.h>
+ #define WINVER WindowsXP /* freeaddrinfo(),getaddrinfo(),getnameinfo() */
  #include <direct.h> /* _getcwd */
  #include <windows.h> /* Sleep */
 #endif
@@ -114,11 +116,7 @@ tr_getLog( void )
 void
 tr_setMessageLevel( int level )
 {
-    tr_lockLock( messageLock );
-
     messageLevel = MAX( 0, level );
-
-    tr_lockUnlock( messageLock );
 }
 
 int
@@ -406,8 +404,6 @@ tr_set_compare( const void * va,
 ****
 ***/
 
-#ifdef DISABLE_GETTEXT
-
 const char*
 tr_strip_positional_args( const char* str )
 {
@@ -426,22 +422,24 @@ tr_strip_positional_args( const char* str )
     for( out = buf; *str; ++str )
     {
         *out++ = *str;
+
         if( ( *str == '%' ) && isdigit( str[1] ) )
         {
             const char * tmp = str + 1;
             while( isdigit( *tmp ) )
                 ++tmp;
-
             if( *tmp == '$' )
-                str = tmp;
+                str = tmp[1]=='\'' ? tmp+1 : tmp;
         }
+
+        if( ( *str == '%' ) && ( str[1] == '\'' ) )
+            str = str + 1;
+ 
     }
     *out = '\0';
 
     return strcmp( buf, in ) ? buf : in;
 }
-
-#endif
 
 /**
 ***
@@ -1367,18 +1365,34 @@ tr_truncd( double x, int decimal_places )
 }
 
 char*
+tr_strtruncd( char * buf, double x, int precision, size_t buflen )
+{
+    tr_snprintf( buf, buflen, "%.*f", precision, tr_truncd( x, precision ) );
+
+    return buf;
+}
+
+char*
+tr_strpercent( char * buf, double x, size_t buflen )
+{
+    if( x < 10.0 )
+        tr_strtruncd( buf, x, 2, buflen );
+    else if( x < 100.0 )
+        tr_strtruncd( buf, x, 1, buflen );
+    else
+        tr_strtruncd( buf, x, 0, buflen );
+    return buf;
+}
+
+char*
 tr_strratio( char * buf, size_t buflen, double ratio, const char * infinity )
 {
     if( (int)ratio == TR_RATIO_NA )
         tr_strlcpy( buf, _( "None" ), buflen );
     else if( (int)ratio == TR_RATIO_INF )
         tr_strlcpy( buf, infinity, buflen );
-    else if( ratio < 10.0 )
-        tr_snprintf( buf, buflen, "%.2f", tr_truncd( ratio, 2 ) );
-    else if( ratio < 100.0 )
-        tr_snprintf( buf, buflen, "%.1f", tr_truncd( ratio, 1 ) );
     else
-        tr_snprintf( buf, buflen, "%'.0f", ratio );
+        tr_strpercent( buf, ratio, buflen );
     return buf;
 }
 
@@ -1394,7 +1408,7 @@ tr_moveFile( const char * oldpath, const char * newpath, tr_bool * renamed )
     char * buf;
     struct stat st;
     off_t bytesLeft;
-    off_t buflen;
+    const off_t buflen = 1024 * 128; /* 128 KiB buffer */
 
     /* make sure the old file exists */
     if( stat( oldpath, &st ) ) {
@@ -1429,7 +1443,6 @@ tr_moveFile( const char * oldpath, const char * newpath, tr_bool * renamed )
     /* copy the file */
     in = tr_open_file_for_scanning( oldpath );
     out = tr_open_file_for_writing( newpath );
-    buflen = stat( newpath, &st ) ? 4096 : st.st_blksize;
     buf = tr_valloc( buflen );
     while( bytesLeft > 0 )
     {
@@ -1491,4 +1504,130 @@ tr_valloc( size_t bufLen )
 
     tr_dbg( "tr_valloc(%zu) allocating %zu bytes", bufLen, allocLen );
     return buf;
+}
+
+char *
+tr_realpath( const char * path, char * resolved_path )
+{
+#ifdef WIN32
+    /* From a message to the Mingw-msys list, Jun 2, 2005 by Mark Junker. */
+    if( GetFullPathNameA( path, TR_PATH_MAX, resolved_path, NULL ) == 0 )
+        return NULL;
+    return resolved_path;
+#else
+    return realpath( path, resolved_path );
+#endif
+}
+
+/***
+****
+****
+****
+***/
+
+struct formatter_unit
+{
+    char * name;
+    double value;
+};
+  
+struct formatter_units
+{
+    struct formatter_unit units[4];
+};
+
+static void
+formatter_init( struct formatter_units * units,
+                double kilo,
+                const char * b, const char * kb,
+                const char * mb, const char * gb )
+{
+    units->units[TR_FMT_B].name = tr_strdup( b );
+    units->units[TR_FMT_B].value = 1;
+
+    units->units[TR_FMT_KB].name = tr_strdup( kb );
+    units->units[TR_FMT_KB].value = kilo;
+
+    units->units[TR_FMT_MB].name = tr_strdup( mb );
+    units->units[TR_FMT_MB].value = pow( kilo, 2 );
+
+    units->units[TR_FMT_GB].name = tr_strdup( gb );
+    units->units[TR_FMT_GB].value = pow( kilo, 3 );
+}
+
+static const char*
+tr_formatter_units( const struct formatter_units * u, int size )
+{
+    assert( u != NULL );
+    assert( 0<=size && size<4 );
+
+    return u->units[size].name;
+}
+
+static char*
+formatter_get_size_str( const struct formatter_units * u,
+                        char * buf, uint64_t bytes, size_t buflen )
+{
+    int precision;
+    double value;
+    const char * units;
+    const struct formatter_unit * unit;
+
+         if( bytes < u->units[1].value ) unit = &u->units[0];
+    else if( bytes < u->units[2].value ) unit = &u->units[1];
+    else if( bytes < u->units[3].value ) unit = &u->units[2];
+    else                                 unit = &u->units[3];
+
+    value = bytes / unit->value;
+    units = unit->name;
+    if( unit->value == 1 )
+        precision = 0;
+    else if( value < 100 )
+        precision = 2;
+    else
+        precision = 1;
+    tr_snprintf( buf, buflen, "%.*f %s", precision, value, units );
+    return buf;
+}
+
+static struct formatter_units size_units;
+
+void
+tr_formatter_size_init( double kilo, const char * b, const char * kb,
+                                     const char * mb, const char * gb )
+{
+    formatter_init( &size_units, kilo, b, kb, mb, gb );
+}
+
+char*
+tr_formatter_size( char * buf, uint64_t bytes, size_t buflen )
+{
+    return formatter_get_size_str( &size_units, buf, bytes, buflen );
+}
+
+const char*
+tr_formatter_size_units( int i )
+{
+    return tr_formatter_units( &size_units, i );
+}
+
+static struct formatter_units speed_units;
+
+void
+tr_formatter_speed_init( double kilo, const char * b, const char * kb,
+                                      const char * mb, const char * gb )
+{
+    formatter_init( &speed_units, kilo, b, kb, mb, gb );
+}
+
+char*
+tr_formatter_speed( char * buf, uint64_t bytes_per_second, size_t buflen )
+{
+    return formatter_get_size_str( &speed_units, buf, bytes_per_second, buflen );
+}
+
+const char*
+tr_formatter_speed_units( int i )
+{
+    return tr_formatter_units( &speed_units, i );
 }

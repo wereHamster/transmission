@@ -11,6 +11,8 @@
  */
 
 #include <assert.h>
+#include <errno.h> /* error codes ERANGE, ... */
+#include <limits.h> /* INT_MAX */
 #include <string.h> /* memcpy, memcmp, strstr */
 #include <stdlib.h> /* qsort */
 
@@ -21,6 +23,7 @@
 #include "bandwidth.h"
 #include "bencode.h"
 #include "blocklist.h"
+#include "cache.h"
 #include "clients.h"
 #include "completion.h"
 #include "crypto.h"
@@ -61,8 +64,8 @@ enum
     MAX_UPLOAD_IDLE_SECS = ( 60 * 5 ),
 
     /* max number of peers to ask for per second overall.
-    * this throttle is to avoid overloading the router */
-    MAX_CONNECTIONS_PER_SECOND = 8,
+     * this throttle is to avoid overloading the router */
+    MAX_CONNECTIONS_PER_SECOND = 12,
 
     MAX_CONNECTIONS_PER_PULSE = (int)(MAX_CONNECTIONS_PER_SECOND * (RECONNECT_PERIOD_MSEC/1000.0)),
 
@@ -118,6 +121,7 @@ struct peer_atom
     uint8_t     myflags;            /* flags that aren't defined in added_f */
     uint8_t     uploadOnly;         /* UPLOAD_ONLY_ */
     int8_t      seedProbability;    /* how likely is this to be a seed... [0..100] or -1 for unknown */
+    int8_t      blocklisted;        /* -1 for unknown, TRUE for blocklisted, FALSE for not blocklisted */
 
     tr_port     port;
     uint16_t    numFails;
@@ -271,10 +275,12 @@ handshakeCompare( const void * a, const void * b )
     return handshakeCompareToAddr( a, tr_handshakeGetAddr( b, NULL ) );
 }
 
-static tr_handshake*
-getExistingHandshake( tr_ptrArray      * handshakes,
-                      const tr_address * addr )
+static inline tr_handshake*
+getExistingHandshake( tr_ptrArray * handshakes, const tr_address * addr )
 {
+    if( tr_ptrArrayEmpty( handshakes ) )
+        return NULL;
+
     return tr_ptrArrayFindSorted( handshakes, addr, handshakeCompareToAddr );
 }
 
@@ -388,10 +394,7 @@ peerDestructor( Torrent * t, tr_peer * peer )
     peerDeclinedAllRequests( t, peer );
 
     if( peer->msgs != NULL )
-    {
-        tr_peerMsgsUnsubscribe( peer->msgs, peer->msgsTag );
         tr_peerMsgsFree( peer->msgs );
-    }
 
     tr_peerIoClear( peer->io );
     tr_peerIoUnref( peer->io ); /* balanced by the ref in handshakeDoneCB() */
@@ -453,7 +456,7 @@ torrentDestructor( void * vt )
     tr_free( t );
 }
 
-static void peerCallbackFunc( void * vpeer, void * vevent, void * vt );
+static void peerCallbackFunc( tr_peer *, const tr_peer_event *, void * );
 
 static Torrent*
 torrentConstructor( tr_peerMgr * manager,
@@ -546,6 +549,41 @@ clientIsUploadingTo( const tr_peer * peer )
 ****
 ***/
 
+void
+tr_peerMgrOnBlocklistChanged( tr_peerMgr * mgr )
+{
+    tr_torrent * tor = NULL;
+    tr_session * session = mgr->session;
+
+    /* we cache whether or not a peer is blocklisted...
+       since the blocklist has changed, erase that cached value */
+    while(( tor = tr_torrentNext( session, tor )))
+    {
+        int i;
+        Torrent * t = tor->torrentPeers;
+        const int n = tr_ptrArraySize( &t->pool );
+        for( i=0; i<n; ++i ) {
+            struct peer_atom * atom = tr_ptrArrayNth( &t->pool, i );
+            atom->blocklisted = -1;
+        }
+    }
+}
+
+static tr_bool
+isAtomBlocklisted( tr_session * session, struct peer_atom * atom )
+{
+    if( atom->blocklisted < 0 )
+        atom->blocklisted = tr_sessionIsAddressBlocked( session, &atom->addr );
+
+    assert( tr_isBool( atom->blocklisted ) );
+    return atom->blocklisted;
+}
+
+
+/***
+****
+***/
+
 static void
 atomSetSeedProbability( struct peer_atom * atom, int seedProbability )
 {
@@ -566,7 +604,7 @@ atomSetSeed( struct peer_atom * atom )
     atomSetSeedProbability( atom, 100 );
 }
 
-static tr_bool
+static inline tr_bool
 atomIsSeed( const struct peer_atom * atom )
 {
     return atom->seedProbability == 100;
@@ -1299,11 +1337,9 @@ peerDeclinedAllRequests( Torrent * t, const tr_peer * peer )
 }
 
 static void
-peerCallbackFunc( void * vpeer, void * vevent, void * vt )
+peerCallbackFunc( tr_peer * peer, const tr_peer_event * e, void * vt )
 {
-    tr_peer * peer = vpeer; /* may be NULL if peer is a webseed */
     Torrent * t = vt;
-    const tr_peer_event * e = vevent;
 
     torrentLock( t );
 
@@ -1460,9 +1496,13 @@ peerCallbackFunc( void * vpeer, void * vevent, void * vt )
 
                         for( fileIndex=0; fileIndex<tor->info.fileCount; ++fileIndex ) {
                             const tr_file * file = &tor->info.files[fileIndex];
-                            if( ( file->firstPiece <= p ) && ( p <= file->lastPiece ) )
-                                if( tr_cpFileIsComplete( &tor->completion, fileIndex ) )
+                            if( ( file->firstPiece <= p ) && ( p <= file->lastPiece ) ) {
+                                if( tr_cpFileIsComplete( &tor->completion, fileIndex ) ) {
+fprintf( stderr, "flushing complete file %d (%s)\n", fileIndex, tor->info.files[fileIndex].name );
+                                    tr_cacheFlushFile( tor->session->cache, tor, fileIndex );
                                     tr_torrentFileCompleted( tor, fileIndex );
+                                }
+                            }
                         }
 
                         pieceListRemovePiece( t, p );
@@ -1537,6 +1577,7 @@ ensureAtomExists( Torrent           * t,
         a->flags = flags;
         a->from = from;
         a->shelf_date = tr_time( ) + getDefaultShelfLife( from ) + jitter;
+        a->blocklisted = -1;
         atomSetSeedProbability( a, seedProbability );
         tr_ptrArrayInsertSorted( &t->pool, a, compareAtomsByAddress );
 
@@ -1662,7 +1703,7 @@ myHandshakeDoneCB( tr_handshake  * handshake,
                 peer->io = tr_handshakeStealIO( handshake ); /* this steals its refcount too, which is
                                                                 balanced by our unref in peerDestructor()  */
                 tr_peerIoSetParent( peer->io, t->tor->bandwidth );
-                tr_peerMsgsNew( t->tor, peer, peerCallbackFunc, t, &peer->msgsTag );
+                tr_peerMsgsNew( t->tor, peer, peerCallbackFunc, t );
 
                 success = TRUE;
             }
@@ -2272,6 +2313,7 @@ tr_peerMgrPeerStats( const tr_torrent    * tor,
     const tr_peer ** peers;
     tr_peer_stat * ret;
     uint64_t now;
+    static const int CANCEL_HISTORY_MSEC = CANCEL_HISTORY_SEC * 1000;
 
     assert( t->manager );
     managerLock( t->manager );
@@ -2306,10 +2348,10 @@ tr_peerMgrPeerStats( const tr_torrent    * tor,
         stat->isUploadingTo       = clientIsUploadingTo( peer );
         stat->isSeed              = ( atom->uploadOnly == UPLOAD_ONLY_YES ) || ( peer->progress >= 1.0 );
 
-        stat->blocksToPeer        = tr_historyGet( peer->blocksSentToPeer,    now, CANCEL_HISTORY_SEC*1000 );
-        stat->blocksToClient      = tr_historyGet( peer->blocksSentToClient,  now, CANCEL_HISTORY_SEC*1000 );
-        stat->cancelsToPeer       = tr_historyGet( peer->cancelsSentToPeer,   now, CANCEL_HISTORY_SEC*1000 );
-        stat->cancelsToClient     = tr_historyGet( peer->cancelsSentToClient, now, CANCEL_HISTORY_SEC*1000 );
+        stat->blocksToPeer        = tr_historyGet( peer->blocksSentToPeer,    now, CANCEL_HISTORY_MSEC );
+        stat->blocksToClient      = tr_historyGet( peer->blocksSentToClient,  now, CANCEL_HISTORY_MSEC );
+        stat->cancelsToPeer       = tr_historyGet( peer->cancelsSentToPeer,   now, CANCEL_HISTORY_MSEC );
+        stat->cancelsToClient     = tr_historyGet( peer->cancelsSentToClient, now, CANCEL_HISTORY_MSEC );
 
         stat->pendingReqsToPeer   = peer->pendingReqsToPeer;
         stat->pendingReqsToClient = peer->pendingReqsToClient;
@@ -2459,30 +2501,41 @@ rechokeDownloads( Torrent * t )
     /* separate the peers into "good" (ones with a low cancel-to-block ratio),
      * untested peers, and "bad" (ones with a high cancel-to-block ratio).
      * That's the order in which we'll choose who to show interest in */
-    for( i=0; i<peerCount; ++i )
     {
-        tr_peer * peer = tr_ptrArrayNth( &t->peers, i );
+        /* Randomize the peer array so the peers in the three groups will be unsorted... */
+        int n = peerCount;
+        tr_peer ** peers = tr_memdup( tr_ptrArrayBase( &t->peers ), n * sizeof( tr_peer * ) );
 
-        if( !isPeerInteresting( t->tor, peer ) )
+        while( n > 0 )
         {
-            tr_peerMsgsSetInterested( peer->msgs, FALSE );
-        }
-        else
-        {
-            const int blocks = tr_historyGet( peer->blocksSentToClient, now, msec );
-            const int cancels = tr_historyGet( peer->cancelsSentToPeer, now, msec );
+            const int i = tr_cryptoWeakRandInt( n );
+            tr_peer * peer = tr_ptrArrayNth( &t->peers, i );
 
-            if( !blocks && !cancels )
-                untested[untestedCount++] = peer;
-            else if( !cancels )
-                good[goodCount++] = peer;
-            else if( !blocks )
-                bad[badCount++] = peer;
-            else if( ( cancels * 10 ) < blocks )
-                good[goodCount++] = peer;
+            if( !isPeerInteresting( t->tor, peer ) )
+            {
+                tr_peerMsgsSetInterested( peer->msgs, FALSE );
+            }
             else
-                bad[badCount++] = peer;
+            {
+                const int blocks = tr_historyGet( peer->blocksSentToClient, now, msec );
+                const int cancels = tr_historyGet( peer->cancelsSentToPeer, now, msec );
+
+                if( !blocks && !cancels )
+                    untested[untestedCount++] = peer;
+                else if( !cancels )
+                    good[goodCount++] = peer;
+                else if( !blocks )
+                    bad[badCount++] = peer;
+                else if( ( cancels * 10 ) < blocks )
+                    good[goodCount++] = peer;
+                else
+                    bad[badCount++] = peer;
+            }
+
+            tr_removeElementFromArray( peers, i, sizeof(tr_peer*), n-- );
         }
+
+        tr_free( peers );
     }
 
     t->interestedCount = 0;
@@ -2527,6 +2580,7 @@ struct ChokeData
     tr_bool         isInterested;
     tr_bool         isChoked;
     int             rate;
+    int             salt;
     tr_peer *       peer;
 };
 
@@ -2543,6 +2597,9 @@ compareChoke( const void * va,
     if( a->isChoked != b->isChoked ) /* prefer unchoked */
         return a->isChoked ? 1 : -1;
 
+    if( a->salt != b->salt ) /* random order */
+        return a->salt - b->salt;
+
     return 0;
 }
 
@@ -2551,6 +2608,29 @@ static int
 isNew( const tr_peer * peer )
 {
     return peer && peer->io && tr_peerIoGetAge( peer->io ) < 45;
+}
+
+/* get a rate for deciding which peers to choke and unchoke. */
+static int
+getRate( const tr_torrent * tor, struct peer_atom * atom, uint64_t now )
+{
+    double KiB_s;
+
+    if( tr_torrentIsSeed( tor ) )
+        KiB_s = tr_peerGetPieceSpeed( atom->peer, now, TR_CLIENT_TO_PEER );
+
+    /* downloading a private torrent... take upload speed into account
+     * because there may only be a small window of opportunity to share */
+    else if( tr_torrentIsPrivate( tor ) )
+        KiB_s = tr_peerGetPieceSpeed( atom->peer, now, TR_PEER_TO_CLIENT )
+              + tr_peerGetPieceSpeed( atom->peer, now, TR_CLIENT_TO_PEER );
+
+    /* downloading a public torrent */
+    else
+        KiB_s = tr_peerGetPieceSpeed( atom->peer, now, TR_PEER_TO_CLIENT );
+
+    /* convert it to bytes per second */
+    return (int)( KiB_s * 1024 );
 }
 
 static void
@@ -2589,7 +2669,8 @@ rechokeUploads( Torrent * t, const uint64_t now )
             n->peer         = peer;
             n->isInterested = peer->peerIsInterested;
             n->isChoked     = peer->peerIsChoked;
-            n->rate         = tr_peerGetPieceSpeed( peer, now, TR_CLIENT_TO_PEER ) * 1024;
+            n->rate         = getRate( t->tor, atom, now );
+            n->salt         = tr_cryptoWeakRandInt( INT_MAX );
         }
     }
 
@@ -3092,10 +3173,11 @@ bandwidthPulse( int foo UNUSED, short bar UNUSED, void * vmgr )
         }
     }
 
-    /* possibly stop torrents that have an error */
+    /* stop torrents that are ready to stop, but couldn't be stopped earlier
+     * during the peer-io callback call chain */
     tor = NULL;
     while(( tor = tr_torrentNext( mgr->session, tor )))
-        if( tor->isRunning && ( tor->error == TR_STAT_LOCAL_ERROR ))
+        if( tor->isStopping )
             tr_torrentStop( tor );
 
     reconnectPulse( 0, 0, mgr );
@@ -3242,18 +3324,10 @@ isBandwidthMaxedOut( const tr_bandwidth * b,
 
 /* is this atom someone that we'd want to initiate a connection to? */
 static tr_bool
-isPeerCandidate( const tr_torrent * tor, const struct peer_atom * atom, const time_t now )
+isPeerCandidate( const tr_torrent * tor, struct peer_atom * atom, const time_t now )
 {
-    /* not if we've already got a connection to them... */
-    if( peerIsInUse( tor->torrentPeers, atom ) )
-        return FALSE;
-
     /* not if they're banned... */
     if( atom->myflags & MYFLAG_BANNED )
-        return FALSE;
-
-    /* not if we just tried them already */
-    if( ( now - atom->time ) < getReconnectIntervalSecs( atom, now ) )
         return FALSE;
 
     /* not if we're both seeds */
@@ -3261,9 +3335,16 @@ isPeerCandidate( const tr_torrent * tor, const struct peer_atom * atom, const ti
         if( atomIsSeed( atom ) || ( atom->uploadOnly == UPLOAD_ONLY_YES ) )
             return FALSE;
  
+    /* not if we just tried them already */
+    if( ( now - atom->time ) < getReconnectIntervalSecs( atom, now ) )
+        return FALSE;
+
     /* not if they're blocklisted */
-    /* FIXME: maybe we should remove this atom altogether? */
-    if( tr_sessionIsAddressBlocked( tor->session, &atom->addr ) )
+    if( isAtomBlocklisted( tor->session, atom ) )
+        return FALSE;
+
+    /* not if we've already got a connection to them...  */
+    if( peerIsInUse( tor->torrentPeers, atom ) )
         return FALSE;
 
     return TRUE;
@@ -3271,23 +3352,10 @@ isPeerCandidate( const tr_torrent * tor, const struct peer_atom * atom, const ti
 
 struct peer_candidate
 {
-    int salt;
+    uint64_t score;
     tr_torrent * tor;
     struct peer_atom * atom;
 };
-
-static int
-compareSeedProbabilities( int a, int b )
-{
-    /* 1. smaller numbers are better
-       2. prefer leechers to unknown
-       3. prefer unknown to seeds (FIXME: this is a simplistic test) */
-    if( a == 100 ) a = 101;
-    if( b == 100 ) b = 101;
-    if( a == -1 ) a = 100;
-    if( b == -1 ) b = 100;
-    return a - b;
-}
 
 static tr_bool
 torrentWasRecentlyStarted( const tr_torrent * tor )
@@ -3295,47 +3363,74 @@ torrentWasRecentlyStarted( const tr_torrent * tor )
     return difftime( tr_time( ), tor->startDate ) < 120;
 }
 
+static inline uint64_t
+addValToKey( uint64_t value, int width, uint64_t addme )
+{
+    value = (value << (uint64_t)width);
+    value |= addme;
+    return value;
+}
+
+/* smaller value is better */
+static uint64_t
+getPeerCandidateScore( const tr_torrent * tor, const struct peer_atom * atom, uint8_t salt  )
+{
+    uint64_t i;
+    uint64_t score = 0;
+    const tr_bool failed = atom->lastConnectionAt < atom->lastConnectionAttemptAt;
+
+    /* prefer peers we've connected to, or never tried, over peers we failed to connect to. */
+    i = failed ? 1 : 0;
+    score = addValToKey( score, 1, i );
+
+    /* prefer the one we attempted least recently (to cycle through all peers) */
+    i = atom->lastConnectionAttemptAt;
+    score = addValToKey( score, 32, i );
+
+    /* prefer peers belonging to a torrent of a higher priority */
+    switch( tr_torrentGetPriority( tor ) ) {
+        case TR_PRI_HIGH:    i = 0; break;
+        case TR_PRI_NORMAL:  i = 1; break;
+        case TR_PRI_LOW:     i = 2; break;
+    }
+    score = addValToKey( score, 4, i );
+
+    /* prefer recently-started torrents */
+    i = torrentWasRecentlyStarted( tor ) ? 0 : 1;
+    score = addValToKey( score, 1, i );
+
+    /* prefer torrents we're downloading with */
+    i = tr_torrentIsSeed( tor ) ? 1 : 0;
+    score = addValToKey( score, 1, i );
+
+    /* prefer peers that we might have a chance of uploading to...
+       so lower seed probability is better */
+    if( atom->seedProbability == 100 ) i = 101;
+    else if( atom->seedProbability == -1 ) i = 100;
+    else i = atom->seedProbability;
+    score = addValToKey( score, 8, i );
+
+    /* Prefer peers that we got from more trusted sources.
+     * lower `from' values indicate more trusted sources */
+    score = addValToKey( score, 4, atom->from );
+
+    /* salt */
+    score = addValToKey( score, 8, salt );
+
+    return score;
+}
+
 /* sort an array of peer candidates */
 static int
 comparePeerCandidates( const void * va, const void * vb )
 {
-    int i, ai, bi;
-    tr_bool af, bf;
     const struct peer_candidate * a = va;
     const struct peer_candidate * b = vb;
 
-    /* prefer peers we've connected to, or never tried, over peers we failed to connect to. */
-    af = a->atom->lastConnectionAt < a->atom->lastConnectionAttemptAt;
-    bf = b->atom->lastConnectionAt < b->atom->lastConnectionAttemptAt;
-    if( af != bf )
-        return af ? 1 : -1;
+    if( a->score < b->score ) return -1;
+    if( a->score > b->score ) return 1;
 
-    /* prefer the one we attempted least recently (to cycle through all peers) */
-    if( a->atom->lastConnectionAttemptAt != b->atom->lastConnectionAttemptAt )
-        return a->atom->lastConnectionAttemptAt < b->atom->lastConnectionAttemptAt ? -1 : 1;
-
-    /* prefer peers belonging to a torrent of a higher priority */
-    ai = tr_torrentGetPriority( a->tor );
-    bi = tr_torrentGetPriority( b->tor );
-    if( ai != bi )
-        return ai > bi ? -1 : 1;
-
-    /* prefer recently-started torrents */
-    af = torrentWasRecentlyStarted( a->tor );
-    bf = torrentWasRecentlyStarted( a->tor );
-    if( af != bf )
-        return af ? -1 : 1;
-
-    /* prefer peers that we might have a chance of uploading to */
-    if(( i = compareSeedProbabilities( a->atom->seedProbability, b->atom->seedProbability )))
-        return i;
-
-    /* prefer peers that we got from more trusted sources */
-    if( a->atom->from != b->atom->from )
-        return a->atom->from < b->atom->from ? -1 : 1;
-
-    /* salt */
-    return a->salt - b->salt;
+    return 0;
 }
 
 /** @return an array of all the atoms we might want to connect to */
@@ -3393,9 +3488,10 @@ getPeerCandidates( tr_session * session, int * candidateCount )
 
             if( isPeerCandidate( tor, atom, now ) )
             {
+                const uint8_t salt = tr_cryptoWeakRandInt( 1024 );
                 walk->tor = tor;
                 walk->atom = atom;
-                walk->salt = tr_cryptoWeakRandInt( 4096 );
+                walk->score = getPeerCandidateScore( tor, atom, salt );
                 ++walk;
             }
         }

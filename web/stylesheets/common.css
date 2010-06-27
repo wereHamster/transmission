@@ -212,7 +212,7 @@ div.torrent_global_details div#torrent_global_transfer {
 	float: left;
 }
 
-div.torrent_global_details div#torrent_global_upload, 
+div.torrent_global_details div#torrent_global_upload,
 div.torrent_global_details div#torrent_global_download {
 	float: right;
 	padding-left: 13px;
@@ -329,7 +329,7 @@ div#torrent_filter_bar input#torrent_search {
 	div#torrent_filter_bar input#torrent_search.blur {
 		border-color: #CCC;
 	}
-} 
+}
 
 div#torrent_filter_bar input#torrent_search.blur {
 	color: #999;
@@ -370,6 +370,7 @@ ul.torrent_list li {
 	vertical-align: middle;
 	-moz-user-select: none;
 	-webkit-user-select: none;
+	overflow: hidden;
 }
 
 ul.torrent_list li.torrent {
@@ -402,6 +403,12 @@ ul.torrent_list li.torrent div.torrent_name {
 	margin-bottom: 2px;
 }
 
+ul.torrent_list li.torrent div.torrent_name.compact {
+	float: left;
+	z-index: 1;
+	position: absolute;
+}
+
 ul.torrent_list li.torrent.selected div.torrent_name {
 	color: #fff;
 }
@@ -409,6 +416,22 @@ ul.torrent_list li.torrent.selected div.torrent_name {
 ul.torrent_list li.torrent div.torrent_progress_details,
 ul.torrent_list li.torrent div.torrent_peer_details {
 	font-size: 1em;
+}
+
+ul.torrent_list li.torrent div.torrent_progress_details.compact,
+ul.torrent_list li.torrent div.torrent_peer_details.compact {
+	padding-top: 3px;
+	float: left;
+}
+ul.torrent_list li.torrent div.torrent_progress_details.compact {
+	float: right;
+}
+
+ul.torrent_list li.torrent div.torrent_progress_bar_container.compact {
+	position: absolute;
+	left: 5px;
+	right: 35px;
+	opacity:0.4;
 }
 
 ul.torrent_list li.torrent div.torrent_progress_bar {
@@ -423,7 +446,7 @@ ul.torrent_list li.torrent div.torrent_progress_bar {
 	background-color: transparent;
 }
 
-ul.torrent_list li.torrent div.torrent_progress_bar.complete {
+ul.torrent_list li.torrent div.torrent_progress_bar.compact {
 	background-position: left -10px;
 	border: 1px solid #29AD35;
 }
@@ -437,6 +460,11 @@ ul.torrent_list li.torrent div.torrent_progress_bar.in_progress {
 	background-position: left 0px;
 	border: 1px solid #3F79EE;
 	border-right: none;
+}
+
+ul.torrent_list li.torrent div.torrent_progress_bar.incomplete.compact {
+	background: none;
+	border: none;
 }
 
 ul.torrent_list li.torrent div.torrent_progress_bar.incomplete {
@@ -490,6 +518,10 @@ li.torrent a div {
 	width: 14px;
 }
 
+li.torrent a div.compact {
+	top: 0px;
+}
+
 li.torrent a div.torrent_pause {
 	background-position: left top;
 }
@@ -525,7 +557,7 @@ div#torrent_inspector {
 	top: 97px;
 	bottom: 22px;
 	right: 0px;
-	width: 350px;
+	width: 500px;
 	background-color: #ddd;
 	border-left: 1px solid #888;
 	z-index: 2;
@@ -549,7 +581,7 @@ div#inspector_header {
 	padding-right: 10px;
 }
 div#inspector_tabs {
-	width: 243px;
+	width: 303px;
 	margin: 0 auto;
 	padding-top: 10px;
 }
@@ -576,6 +608,11 @@ div#inspector_tabs {
 	margin: 10px 0px;
 	padding: 10px 0px;
 }
+.inspector_torrent_label {
+	display: table-caption;
+	font-size: 1.2em;
+	font-weight: bold;
+}
 .inspector_group_label {
 	display: table-header-group;
 	font-weight: bold;
@@ -585,12 +622,76 @@ div#inspector_tabs {
 }
 .inspector_row > .inspector_label {
 	display: table-cell;
-	width: 100px; /* this + the next 230 == inspector_container_with */
+	width: 100px; /* this + the next 380 == inspector_container_with */
 }
 .inspector_row > div {
 	display: table-cell;
 	padding-top: 10px;
-	width: 230px; /* inspector_container_width==330 - inspector_label_width==100 */
+	width: 380px; /* inspector_container_width==480 - inspector_label_width==100 */
+}
+
+/* Peers Inspector Tab */
+#inspector_peers_list {
+	padding: 0 0 0 0;
+	margin: 0 0 0 0;
+	text-align: left;
+	cursor: default;
+	overflow: hidden;
+}
+
+#inspector_peers_list > div.inspector_group {
+	padding-bottom: 0;
+	margin-bottom: 0;
+}
+
+table.peer_list {
+	width: 100%;
+	border-collapse: collapse;
+	text-align: left;
+	cursor: default;
+	clear: both;
+}
+
+.peer_list .encryptedCol {
+	width: 16px;
+}
+
+.peer_list .upCol {
+	width: 70px;
+}
+
+.peer_list .downCol {
+	width: 70px;
+}
+
+.peer_list .percentCol {
+	width: 30px;
+	padding-right: 5px;
+}
+
+.peer_list td.percentCol {
+	text-align: right;
+}
+
+.peer_list .statusCol {
+	width: 40px;
+	padding-right: 5px;
+}
+
+.peer_list .addressCol {
+	width: 90px;
+}
+
+.peer_list .clientCol {
+	text-overflow: ellipsis;
+}
+
+tr.inspector_peer_entry {
+
+}
+
+tr.inspector_peer_entry.odd {
+	background-color: #EEEEEE;
 }
 
 /* Trackers Inspector Tab */
@@ -609,7 +710,7 @@ div#inspector_tabs {
 
 ul.tier_list {
 	width: 100%;
-	margin: 10px 0 0 0;
+	margin: 2px 0 8px 0;
 	padding-left: 0px;
 	text-align: left;
 	display: block;
@@ -625,7 +726,7 @@ ul.tier_list {
 .tier_list .tracker_activity{
 	float: left;
 	color: #666;
-	width: 200px;
+	width: 350px;
 	display: table;
 	margin-top: 1px;
 }
@@ -712,7 +813,7 @@ div.inspector_torrent_file_list_entry_progress {
 	font-size: 1em;
 	color: #666;
 	margin-left: 20px;
-} 
+}
 div.file_wanted_control {
 	background-position: left -19px;
 	float: left;
@@ -770,8 +871,8 @@ div.file_priority_control.low:hover {
 }
 ul.single_file li.inspector_torrent_file_list_entry>.file_priority_control,
 li.inspector_torrent_file_list_entry.complete div.file_priority_control {
-  background-position: left -57px;
-  cursor: default;
+	background-position: left -57px;
+	cursor: default;
 }
 
 /*--------------------------------------
@@ -887,7 +988,7 @@ div.dialog_container div.dialog_window {
 		margin-top: 71px;
 		z-index: 2
 	}
-} 
+}
 
 div#prefs_container div.dialog_window {
 	width: 410px;
@@ -1171,10 +1272,10 @@ div#prefs_container div#pref_error {
 }
 
 #transmission_version{
-  position: absolute;
-  bottom: 10px;
-  left:   10px;
-  color:  #999;
+	position: absolute;
+	bottom: 10px;
+	left:   10px;
+	color:  #999;
 }
 
 /*--------------------------------------

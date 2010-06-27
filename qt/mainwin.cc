@@ -90,7 +90,6 @@ TrMainWindow :: TrMainWindow( Session& session, Prefs& prefs, TorrentModel& mode
     myAboutDialog( new AboutDialog( this ) ),
     myStatsDialog( new StatsDialog( session, this ) ),
     myDetailsDialog( 0 ),
-    myFileDialog( 0 ),
     myFilterModel( prefs ),
     myTorrentDelegate( new TorrentDelegate( this ) ),
     myTorrentDelegateMin( new TorrentDelegateMin( this ) ),
@@ -439,8 +438,8 @@ QWidget *
 TrMainWindow :: createStatusBar( )
 {
     QMenu * m;
-    QLabel *l, *l2;
-    QWidget *w;
+    QLabel * l;
+    QWidget * w;
     QHBoxLayout * h;
     QPushButton * p;
     QActionGroup * a;
@@ -501,27 +500,29 @@ TrMainWindow :: createStatusBar( )
         l = myStatsLabel = new QLabel( this );
         h->addWidget( l );
 
-        w = new QWidget( this );
-        w->setMinimumSize( HIG::PAD_BIG, 1 );
-        w->setMaximumSize( HIG::PAD_BIG, 1 );
-        h->addWidget( w );
-        l = new QLabel( this );
-        l->setPixmap( getStockIcon( "go-down", QStyle::SP_ArrowDown ).pixmap( smallIconSize ) );
-        h->addWidget( l );
-        l2 = myDownloadSpeedLabel = new QLabel( this );
-        h->addWidget( l2 );
-        myDownStatusWidgets << w << l << l2;
+    h->addSpacing( HIG::PAD_BIG );
 
         w = new QWidget( this );
         w->setMinimumSize( HIG::PAD_BIG, 1 );
         w->setMaximumSize( HIG::PAD_BIG, 1 );
         h->addWidget( w );
+        l = myDownloadSpeedLabel = new QLabel( this );
+        h->addWidget( l );
+        l = new QLabel( this );
+        l->setPixmap( getStockIcon( "go-down", QStyle::SP_ArrowDown ).pixmap( smallIconSize ) );
+        h->addWidget( l );
+
+    h->addSpacing( HIG::PAD_BIG );
+
+        w = new QWidget( this );
+        w->setMinimumSize( HIG::PAD_BIG, 1 );
+        w->setMaximumSize( HIG::PAD_BIG, 1 );
+        h->addWidget( w );
+        l = myUploadSpeedLabel = new QLabel;
+        h->addWidget( l );
         l = new QLabel;
         l->setPixmap( getStockIcon( "go-up", QStyle::SP_ArrowUp ).pixmap( smallIconSize ) );
         h->addWidget( l );
-        l2 = myUploadSpeedLabel = new QLabel;
-        h->addWidget( l2 );
-        myUpStatusWidgets << w << l << l2;
 
     return top;
 }
@@ -709,7 +710,7 @@ TrMainWindow :: refreshTitle( )
     QString title( "Transmission" );
     const QUrl url( mySession.getRemoteUrl( ) );
     if( !url.isEmpty() )
-        title += tr( " - %1" ).arg( url.toString(QUrl::RemoveUserInfo) );
+        title += tr( " - %1:%2" ).arg( url.host() ).arg( url.port() );
     setWindowTitle( title );
 }
 
@@ -734,8 +735,6 @@ TrMainWindow :: refreshStatusBar( )
     const Speed down( myModel.getDownloadSpeed( ) );
     myUploadSpeedLabel->setText( Utils :: speedToString( up ) );
     myDownloadSpeedLabel->setText( Utils :: speedToString( down ) );
-    foreach( QWidget * w, myUpStatusWidgets ) w->setVisible( !up.isZero( ) );
-    foreach( QWidget * w, myDownStatusWidgets ) w->setVisible( !down.isZero( ) );
 
     myNetworkLabel->setVisible( !mySession.isServer( ) );
 
@@ -1112,24 +1111,21 @@ TrMainWindow :: newTorrent( )
 void
 TrMainWindow :: openTorrent( )
 {
-    if( myFileDialog == 0 )
-    {
-        myFileDialog = new QFileDialog( this,
-                                        tr( "Add Torrent" ),
-                                        myPrefs.getString( Prefs::OPEN_DIALOG_FOLDER ),
-                                        tr( "Torrent Files (*.torrent);;All Files (*.*)" ) );
-        myFileDialog->setFileMode( QFileDialog::ExistingFiles );
+    QFileDialog * myFileDialog;
+    myFileDialog = new QFileDialog( this,
+                                    tr( "Add Torrent" ),
+                                    myPrefs.getString( Prefs::OPEN_DIALOG_FOLDER ),
+                                    tr( "Torrent Files (*.torrent);;All Files (*.*)" ) );
+    myFileDialog->setFileMode( QFileDialog::ExistingFiles );
 
+    QCheckBox * button = new QCheckBox( tr( "Show &options dialog" ) );
+    button->setChecked( myPrefs.getBool( Prefs::OPTIONS_PROMPT ) );
+    QGridLayout * layout = dynamic_cast<QGridLayout*>(myFileDialog->layout());
+    layout->addWidget( button, layout->rowCount( ), 0, 1, -1, Qt::AlignLeft );
+    myFileDialogOptionsCheck = button;
 
-        QCheckBox * button = new QCheckBox( tr( "Show &options dialog" ) );
-        button->setChecked( myPrefs.getBool( Prefs::OPTIONS_PROMPT ) );
-        QGridLayout * layout = dynamic_cast<QGridLayout*>(myFileDialog->layout());
-        layout->addWidget( button, layout->rowCount( ), 0, 1, -1, Qt::AlignLeft );
-        myFileDialogOptionsCheck = button;
-
-        connect( myFileDialog, SIGNAL(filesSelected(const QStringList&)),
-                 this, SLOT(addTorrents(const QStringList&)));
-    }
+    connect( myFileDialog, SIGNAL(filesSelected(const QStringList&)),
+             this, SLOT(addTorrents(const QStringList&)));
 
     myFileDialog->show( );
 }
@@ -1179,7 +1175,7 @@ void
 TrMainWindow :: removeTorrents( const bool deleteFiles )
 {
     QSet<int> ids;
-    QMessageBox * msgBox = new QMessageBox( this );
+    QMessageBox msgBox( this );
     QString primary_text, secondary_text;
     int incomplete = 0;
     int connected  = 0;
@@ -1252,19 +1248,22 @@ TrMainWindow :: removeTorrents( const bool deleteFiles )
         }
     }
 
-    msgBox->setWindowTitle( QString(" ") );
-    msgBox->setText( QString( "<big><b>%1</big></b>" ).arg( primary_text ) );
-    msgBox->setInformativeText( secondary_text );
-    msgBox->setStandardButtons( QMessageBox::Ok | QMessageBox::Cancel );
-    msgBox->setDefaultButton( QMessageBox::Cancel );
-    msgBox->setIcon( QMessageBox::Question );
+    msgBox.setWindowTitle( QString(" ") );
+    msgBox.setText( QString( "<big><b>%1</big></b>" ).arg( primary_text ) );
+    msgBox.setInformativeText( secondary_text );
+    msgBox.setStandardButtons( QMessageBox::Ok | QMessageBox::Cancel );
+    msgBox.setDefaultButton( QMessageBox::Cancel );
+    msgBox.setIcon( QMessageBox::Question );
     /* hack needed to keep the dialog from being too narrow */
-    QGridLayout* layout = (QGridLayout*)msgBox->layout();
+    QGridLayout* layout = (QGridLayout*)msgBox.layout();
     QSpacerItem* spacer = new QSpacerItem( 450, 0, QSizePolicy::Minimum, QSizePolicy::Expanding );
     layout->addItem( spacer, layout->rowCount(), 0, 1, layout->columnCount() );
 
-    if( msgBox->exec() == QMessageBox::Ok )
+    if( msgBox.exec() == QMessageBox::Ok )
+    {
+        ui.listView->selectionModel()->clear();
         mySession.removeTorrents( ids, deleteFiles );
+    }
 }
 
 /***
