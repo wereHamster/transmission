@@ -185,8 +185,8 @@ struct tr_torrent
     uint32_t                   lastBlockSize;
     uint32_t                   lastPieceSize;
 
-    uint32_t                   blockCountInPiece;
-    uint32_t                   blockCountInLastPiece;
+    uint16_t                   blockCountInPiece;
+    uint16_t                   blockCountInLastPiece;
 
     struct tr_completion       completion;
 
@@ -210,9 +210,9 @@ struct tr_torrent
     uint64_t                   corruptPrev;
 
     uint64_t                   etaDLSpeedCalculatedAt;
-    double                     etaDLSpeed;
+    double                     etaDLSpeed_KBps;
     uint64_t                   etaULSpeedCalculatedAt;
-    double                     etaULSpeed;
+    double                     etaULSpeed_KBps;
 
     time_t                     addedDate;
     time_t                     activityDate;
@@ -273,11 +273,13 @@ tr_torBlockPiece( const tr_torrent * tor, const tr_block_index_t block )
 }
 
 /* how many blocks are in this piece? */
-static inline uint32_t
+static inline uint16_t
 tr_torPieceCountBlocks( const tr_torrent * tor, const tr_piece_index_t piece )
 {
-    return piece == tor->info.pieceCount - 1 ? tor->blockCountInLastPiece
-                                             : tor->blockCountInPiece;
+    if( piece + 1 == tor->info.pieceCount )
+        return tor->blockCountInLastPiece;
+    else
+        return tor->blockCountInPiece;
 }
 
 /* how many bytes are in this piece? */
@@ -418,5 +420,9 @@ char* tr_torrentBuildPartial( const tr_torrent *, tr_file_index_t fileNo );
 /* for when the info dict has been fundamentally changed wrt files,
  * piece size, etc. such as in BEP 9 where peers exchange metadata */
 void tr_torrentGotNewInfoDict( tr_torrent * tor );
+
+void tr_torrentSetSpeedLimit_Bps  ( tr_torrent *, tr_direction, int Bps );
+int tr_torrentGetSpeedLimit_Bps  ( const tr_torrent *, tr_direction );
+
 
 #endif

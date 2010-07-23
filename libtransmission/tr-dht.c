@@ -87,12 +87,11 @@ bootstrap_done( tr_session *session, int af )
 }
 
 static void
-nap( int roughly )
+nap( int roughly_sec )
 {
-    struct timeval tv;
-    tv.tv_sec = roughly / 2 + tr_cryptoWeakRandInt( roughly );
-    tv.tv_usec = tr_cryptoWeakRandInt( 1000000 );
-    select( 0, NULL, NULL, NULL, &tv );
+    const int roughly_msec = roughly_sec * 1000;
+    const int msec = roughly_msec/2 + tr_cryptoWeakRandInt(roughly_msec);
+    tr_wait_msec( msec );
 }
 
 static int
@@ -544,7 +543,7 @@ tr_dhtStatus( tr_session * session, int af, int * nodes_return )
 
     tr_runInEventThread( session, getstatus, &closure );
     while( closure.status < 0 )
-        tr_wait_msec( 10 /*msec*/ );
+        tr_wait_msec( 50 /*msec*/ );
 
     if( nodes_return )
         *nodes_return = closure.count;

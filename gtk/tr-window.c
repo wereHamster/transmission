@@ -205,8 +205,8 @@ prefsChanged( TrCore * core UNUSED,
         tr_window_update( (TrWindow*)wind );
     }
     else if( !strcmp( key, TR_PREFS_KEY_ALT_SPEED_ENABLED ) ||
-             !strcmp( key, TR_PREFS_KEY_ALT_SPEED_UP ) ||
-             !strcmp( key, TR_PREFS_KEY_ALT_SPEED_DOWN ) )
+             !strcmp( key, TR_PREFS_KEY_ALT_SPEED_UP_KBps ) ||
+             !strcmp( key, TR_PREFS_KEY_ALT_SPEED_DOWN_KBps ) )
     {
         syncAltSpeedButton( p );
     }
@@ -266,8 +266,8 @@ syncAltSpeedButton( PrivateData * p )
     const char * stock = b ? "alt-speed-on" : "alt-speed-off";
     GtkWidget * w = p->alt_speed_button;
 
-    tr_strlspeed( u, pref_int_get( TR_PREFS_KEY_ALT_SPEED_UP ), sizeof( u ) );
-    tr_strlspeed( d, pref_int_get( TR_PREFS_KEY_ALT_SPEED_DOWN ), sizeof( d ) );
+    tr_formatter_speed_KBps( u, pref_int_get( TR_PREFS_KEY_ALT_SPEED_UP_KBps ), sizeof( u ) );
+    tr_formatter_speed_KBps( d, pref_int_get( TR_PREFS_KEY_ALT_SPEED_DOWN_KBps ), sizeof( d ) );
     fmt = b ? _( "Click to disable Temporary Speed Limits\n(%1$s down, %2$s up)" )
             : _( "Click to enable Temporary Speed Limits\n(%1$s down, %2$s up)" );
     str = g_strdup_printf( fmt, d, u );
@@ -388,11 +388,11 @@ onSpeedSet( GtkCheckMenuItem * check, gpointer vp )
     const char * key;
     PrivateData * p = vp;
     GObject * o = G_OBJECT( check );
-    const int speed = GPOINTER_TO_INT( g_object_get_data( o, SPEED_KEY ) );
+    const int KBps = GPOINTER_TO_INT( g_object_get_data( o, SPEED_KEY ) );
     tr_direction dir = GPOINTER_TO_INT( g_object_get_data( o, DIRECTION_KEY ) );
 
-    key = dir==TR_UP ? TR_PREFS_KEY_USPEED : TR_PREFS_KEY_DSPEED;
-    tr_core_set_pref_int( p->core, key, speed );
+    key = dir==TR_UP ? TR_PREFS_KEY_USPEED_KBps : TR_PREFS_KEY_DSPEED_KBps;
+    tr_core_set_pref_int( p->core, key, KBps );
 
     key = dir==TR_UP ? TR_PREFS_KEY_USPEED_ENABLED : TR_PREFS_KEY_DSPEED_ENABLED;
     tr_core_set_pref_bool( p->core, key, TRUE );
@@ -403,7 +403,7 @@ createSpeedMenu( PrivateData * p, tr_direction dir )
 {
     int i, n;
     GtkWidget *w, *m;
-    const int speeds[] = { 5, 10, 20, 30, 40, 50, 75, 100, 150, 200, 250, 500, 750 };
+    const int speeds_KBps[] = { 5, 10, 20, 30, 40, 50, 75, 100, 150, 200, 250, 500, 750 };
 
     m = gtk_menu_new( );
 
@@ -424,13 +424,13 @@ createSpeedMenu( PrivateData * p, tr_direction dir )
     w = gtk_separator_menu_item_new( );
     gtk_menu_shell_append( GTK_MENU_SHELL( m ), w );
 
-    for( i=0, n=G_N_ELEMENTS(speeds); i<n; ++i )
+    for( i=0, n=G_N_ELEMENTS(speeds_KBps); i<n; ++i )
     {
         char buf[128];
-        tr_strlspeed( buf, speeds[i], sizeof( buf ) );
+        tr_formatter_speed_KBps( buf, speeds_KBps[i], sizeof( buf ) );
         w = gtk_menu_item_new_with_label( buf );
         g_object_set_data( G_OBJECT( w ), DIRECTION_KEY, GINT_TO_POINTER( dir ) );
-        g_object_set_data( G_OBJECT( w ), SPEED_KEY, GINT_TO_POINTER( speeds[i] ) );
+        g_object_set_data( G_OBJECT( w ), SPEED_KEY, GINT_TO_POINTER( speeds_KBps[i] ) );
         g_signal_connect( w, "activate", G_CALLBACK(onSpeedSet), p );
         gtk_menu_shell_append( GTK_MENU_SHELL( m ), w );
     }
@@ -541,7 +541,7 @@ onOptionsClicked( GtkButton * button UNUSED, gpointer vp )
     PrivateData * p = vp;
 
     w = p->speedlimit_on_item[TR_DOWN];
-    tr_strlspeed( buf1, pref_int_get( TR_PREFS_KEY_DSPEED ), sizeof( buf1 ) );
+    tr_formatter_speed_KBps( buf1, pref_int_get( TR_PREFS_KEY_DSPEED_KBps ), sizeof( buf1 ) );
     gtk_label_set_text( GTK_LABEL( gtk_bin_get_child( GTK_BIN( w ) ) ), buf1 );
 
     b = pref_flag_get( TR_PREFS_KEY_DSPEED_ENABLED );
@@ -549,7 +549,7 @@ onOptionsClicked( GtkButton * button UNUSED, gpointer vp )
     gtk_check_menu_item_set_active( GTK_CHECK_MENU_ITEM( w ), TRUE );
 
     w = p->speedlimit_on_item[TR_UP];
-    tr_strlspeed( buf1, pref_int_get( TR_PREFS_KEY_USPEED ), sizeof( buf1 ) );
+    tr_formatter_speed_KBps( buf1, pref_int_get( TR_PREFS_KEY_USPEED_KBps ), sizeof( buf1 ) );
     gtk_label_set_text( GTK_LABEL( gtk_bin_get_child( GTK_BIN( w ) ) ), buf1 );
 
     b = pref_flag_get( TR_PREFS_KEY_USPEED_ENABLED );
@@ -731,7 +731,7 @@ tr_window_new( GtkUIManager * ui_mgr, TrCore * core )
         int w=0, h=0;
         /* this is to determine the maximum width/height for the label */
         PangoLayout * pango_layout =
-            gtk_widget_create_pango_layout( p->ul_lb, _( "999.9 KiB/s" ) );
+            gtk_widget_create_pango_layout( p->ul_lb, _( "999.99 KiB/s" ) );
         pango_layout_get_pixel_size( pango_layout, &w, &h );
         gtk_widget_set_size_request( p->ul_lb, w, h );
         gtk_widget_set_size_request( p->dl_lb, w, h );
@@ -857,10 +857,10 @@ updateSpeeds( PrivateData * p )
         }
         while( gtk_tree_model_iter_next( model, &iter ) );
 
-        tr_strlspeed( buf, down, sizeof( buf ) );
+        tr_formatter_speed_KBps( buf, down, sizeof( buf ) );
         gtk_label_set_text( GTK_LABEL( p->dl_lb ), buf );
 
-        tr_strlspeed( buf, up, sizeof( buf ) );
+        tr_formatter_speed_KBps( buf, up, sizeof( buf ) );
         gtk_label_set_text( GTK_LABEL( p->ul_lb ), buf );
     }
 }

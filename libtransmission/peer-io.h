@@ -77,11 +77,11 @@ typedef struct tr_peerIo
 
     tr_priority_t         priority;
 
-    int                   pendingEvents;
+    short int             pendingEvents;
 
     int                   magicNumber;
 
-    uint8_t               encryptionMode;
+    uint32_t              encryptionMode;
     tr_bool               isSeed;
 
     tr_port               port;
@@ -276,10 +276,10 @@ typedef enum
 }
 EncryptionMode;
 
-void      tr_peerIoSetEncryption( tr_peerIo * io,
-                                  int         encryptionMode );
+void tr_peerIoSetEncryption( tr_peerIo * io, uint32_t encryptionMode );
 
-static inline tr_bool tr_peerIoIsEncrypted( const tr_peerIo * io )
+static inline tr_bool
+tr_peerIoIsEncrypted( const tr_peerIo * io )
 {
     return ( io != NULL ) && ( io->encryptionMode == PEER_ENCRYPTION_RC4 );
 }
@@ -368,8 +368,8 @@ void      tr_peerIoBandwidthUsed( tr_peerIo           * io,
                                   size_t                byteCount,
                                   int                   isPieceData );
 
-static inline tr_bool tr_peerIoHasBandwidthLeft( const tr_peerIo  * io,
-                                                    tr_direction       dir )
+static inline tr_bool
+tr_peerIoHasBandwidthLeft( const tr_peerIo * io, tr_direction dir )
 {
     assert( tr_isPeerIo( io ) );
 
@@ -377,12 +377,13 @@ static inline tr_bool tr_peerIoHasBandwidthLeft( const tr_peerIo  * io,
         || ( tr_bandwidthClamp( &io->bandwidth, dir, 1024 ) > 0 );
 }
 
-static inline double tr_peerIoGetPieceSpeed( const tr_peerIo * io, uint64_t now, tr_direction dir )
+static inline unsigned int
+tr_peerIoGetPieceSpeed_Bps( const tr_peerIo * io, uint64_t now, tr_direction dir )
 {
     assert( tr_isPeerIo( io ) );
     assert( tr_isDirection( dir ) );
 
-    return tr_bandwidthGetPieceSpeed( &io->bandwidth, now, dir );
+    return tr_bandwidthGetPieceSpeed_Bps( &io->bandwidth, now, dir );
 }
 
 /**

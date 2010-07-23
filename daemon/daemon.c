@@ -39,11 +39,31 @@
 
 #define PREF_KEY_DIR_WATCH          "watch-dir"
 #define PREF_KEY_DIR_WATCH_ENABLED  "watch-dir-enabled"
+#define PREF_KEY_PIDFILE            "pidfile"
+
+#define MEM_K 1024
+#define MEM_K_STR "KiB"
+#define MEM_M_STR "MiB"
+#define MEM_G_STR "GiB"
+#define MEM_T_STR "TiB"
+
+#define DISK_K 1000
+#define DISK_B_STR "B"
+#define DISK_K_STR "kB"
+#define DISK_M_STR "MB"
+#define DISK_G_STR "GB"
+#define DISK_T_STR "TB"
+
+#define SPEED_K 1000
+#define SPEED_B_STR "B/s"
+#define SPEED_K_STR "kB/s"
+#define SPEED_M_STR "MB/s"
+#define SPEED_G_STR "GB/s"
+#define SPEED_T_STR "TB/s"
 
 static tr_bool paused = FALSE;
 static tr_bool closing = FALSE;
 static tr_session * mySession = NULL;
-static const char * pid_filename = NULL;
 
 /***
 ****  Config File
@@ -245,6 +265,12 @@ onFileAdded( tr_session * session, const char * dir, const char * file )
                 if( remove( filename ) )
                     tr_err( "Error deleting .torrent file: %s", tr_strerror( errno ) );
             }
+            else
+            {
+                char * new_filename = tr_strdup_printf( "%s.added", filename );
+                rename( filename, new_filename );
+                tr_free( new_filename );
+            }
         }
     }
 
@@ -307,6 +333,7 @@ main( int argc, char ** argv )
     tr_bool foreground = FALSE;
     tr_bool dumpSettings = FALSE;
     const char * configDir = NULL;
+    const char * pid_filename;
     dtr_watchdir * watchdir = NULL;
     FILE * logfile = NULL;
     tr_bool pidfile_created = FALSE;
@@ -402,7 +429,7 @@ main( int argc, char ** argv )
                       break;
             case 954: tr_bencDictAddBool( &settings, TR_PREFS_KEY_RATIO_ENABLED, FALSE );
                       break;
-            case 'x': pid_filename = optarg;
+            case 'x': tr_bencDictAddStr( &settings, PREF_KEY_PIDFILE, optarg );
                       break;
             case 'y': tr_bencDictAddBool( &settings, TR_PREFS_KEY_LPD_ENABLED, TRUE );
                       break;
@@ -439,11 +466,16 @@ main( int argc, char ** argv )
     }
 
     /* start the session */
+    tr_formatter_mem_init( MEM_K, MEM_K_STR, MEM_M_STR, MEM_G_STR, MEM_T_STR );
+    tr_formatter_size_init( DISK_K, DISK_K_STR, DISK_M_STR, DISK_G_STR, DISK_T_STR );
+    tr_formatter_speed_init( SPEED_K, SPEED_K_STR, SPEED_M_STR, SPEED_G_STR, SPEED_T_STR );
     mySession = tr_sessionInit( "daemon", configDir, TRUE, &settings );
     tr_ninf( NULL, "Using settings from \"%s\"", configDir );
     tr_sessionSaveSettings( mySession, configDir, &settings );
 
-    if( pid_filename != NULL )
+    pid_filename = NULL;
+    tr_bencDictFindStr( &settings, PREF_KEY_PIDFILE, &pid_filename );
+    if( pid_filename && *pid_filename )
     {
         FILE * fp = fopen( pid_filename, "w+" );
         if( fp != NULL )

@@ -129,22 +129,33 @@ tr_torrentFindFromObfuscatedHash( tr_session * session,
 ***/
 
 void
-tr_torrentSetSpeedLimit( tr_torrent * tor, tr_direction dir, int KiB_sec )
+tr_torrentSetSpeedLimit_Bps( tr_torrent * tor, tr_direction dir, int Bps )
 {
     assert( tr_isTorrent( tor ) );
     assert( tr_isDirection( dir ) );
+    assert( Bps >= 0 );
 
-    if( tr_bandwidthSetDesiredSpeed( tor->bandwidth, dir, KiB_sec ) )
+    if( tr_bandwidthSetDesiredSpeed_Bps( tor->bandwidth, dir, Bps ) )
         tr_torrentSetDirty( tor );
+}
+void
+tr_torrentSetSpeedLimit_KBps( tr_torrent * tor, tr_direction dir, int KBps )
+{
+    tr_torrentSetSpeedLimit_Bps( tor, dir, toSpeedBytes( KBps ) );
 }
 
 int
-tr_torrentGetSpeedLimit( const tr_torrent * tor, tr_direction dir )
+tr_torrentGetSpeedLimit_Bps( const tr_torrent * tor, tr_direction dir )
 {
     assert( tr_isTorrent( tor ) );
     assert( tr_isDirection( dir ) );
 
-    return tr_bandwidthGetDesiredSpeed( tor->bandwidth, dir );
+    return tr_bandwidthGetDesiredSpeed_Bps( tor->bandwidth, dir );
+}
+int
+tr_torrentGetSpeedLimit_KBps( const tr_torrent * tor, tr_direction dir )
+{
+    return toSpeedKBps( tr_torrentGetSpeedLimit_Bps( tor, dir ) );
 }
 
 void
@@ -243,11 +254,11 @@ tr_torrentIsPieceTransferAllowed( const tr_torrent  * tor,
     tr_bool allowed = TRUE;
 
     if( tr_torrentUsesSpeedLimit( tor, direction ) )
-        if( tr_torrentGetSpeedLimit( tor, direction ) <= 0 )
+        if( tr_torrentGetSpeedLimit_Bps( tor, direction ) <= 0 )
             allowed = FALSE;
 
     if( tr_torrentUsesSessionLimits( tor ) )
-        if( tr_sessionGetActiveSpeedLimit( tor->session, direction, &limit ) )
+        if( tr_sessionGetActiveSpeedLimit_Bps( tor->session, direction, &limit ) )
             if( limit <= 0 )
                 allowed = FALSE;
 
@@ -370,7 +381,7 @@ onTrackerResponse( tr_torrent * tor, const tr_tracker_event * event, void * unus
         case TR_TRACKER_PEERS:
         {
             size_t i, n;
-            const int seedProbability = event->seedProbability;
+            const int8_t seedProbability = event->seedProbability;
             const tr_bool allAreSeeds = seedProbability == 100;
             tr_pex * pex = tr_peerMgrArrayToPex( event->compact,
                                                  event->compactLen, &n );
@@ -416,9 +427,8 @@ onTrackerResponse( tr_torrent * tor, const tr_tracker_event * event, void * unus
 ****
 ***/
 
-static int
-getBytePiece( const tr_info * info,
-              uint64_t        byteOffset )
+static tr_piece_index_t
+getBytePiece( const tr_info * info, uint64_t byteOffset )
 {
     assert( info );
     assert( info->pieceSize != 0 );
@@ -456,7 +466,7 @@ calculatePiecePriority( const tr_torrent * tor,
                         int                fileHint )
 {
     tr_file_index_t i;
-    int             priority = TR_PRI_LOW;
+    tr_priority_t priority = TR_PRI_LOW;
 
     /* find the first file that has data in this piece */
     if( fileHint >= 0 ) {
@@ -567,7 +577,7 @@ torrentInitFromInfo( tr_torrent * tor )
     tor->blockSize = tr_getBlockSize( info->pieceSize );
 
     if( info->pieceSize )
-        tor->lastPieceSize = info->totalSize % info->pieceSize;
+        tor->lastPieceSize = (uint32_t)(info->totalSize % info->pieceSize);
 
     if( !tor->lastPieceSize )
         tor->lastPieceSize = info->pieceSize;
@@ -686,9 +696,9 @@ torrentInit( tr_torrent * tor, const tr_ctor * ctor )
     if( !( loaded & TR_FR_SPEEDLIMIT ) )
     {
         tr_torrentUseSpeedLimit( tor, TR_UP, FALSE );
-        tr_torrentSetSpeedLimit( tor, TR_UP, tr_sessionGetSpeedLimit( tor->session, TR_UP ) );
+        tr_torrentSetSpeedLimit_Bps( tor, TR_UP, tr_sessionGetSpeedLimit_Bps( tor->session, TR_UP ) );
         tr_torrentUseSpeedLimit( tor, TR_DOWN, FALSE );
-        tr_torrentSetSpeedLimit( tor, TR_DOWN, tr_sessionGetSpeedLimit( tor->session, TR_DOWN ) );
+        tr_torrentSetSpeedLimit_Bps( tor, TR_DOWN, tr_sessionGetSpeedLimit_Bps( tor->session, TR_DOWN ) );
         tr_torrentUseSessionLimits( tor, TRUE );
     }
 
@@ -967,11 +977,11 @@ tr_torrentStat( tr_torrent * tor )
                             s->peersFrom );
 
     now = tr_date( );
-    d = tr_peerMgrGetWebseedSpeed( tor, now );
-    s->rawUploadSpeed     = tr_bandwidthGetRawSpeed  ( tor->bandwidth, now, TR_UP );
-    s->pieceUploadSpeed   = tr_bandwidthGetPieceSpeed( tor->bandwidth, now, TR_UP );
-    s->rawDownloadSpeed   = d + tr_bandwidthGetRawSpeed  ( tor->bandwidth, now, TR_DOWN );
-    s->pieceDownloadSpeed = d + tr_bandwidthGetPieceSpeed( tor->bandwidth, now, TR_DOWN );
+    d = tr_peerMgrGetWebseedSpeed_Bps( tor, now );
+    s->rawUploadSpeed_KBps     = toSpeedKBps( tr_bandwidthGetRawSpeed_Bps  ( tor->bandwidth, now, TR_UP ) );
+    s->pieceUploadSpeed_KBps   = toSpeedKBps( tr_bandwidthGetPieceSpeed_Bps( tor->bandwidth, now, TR_UP ) );
+    s->rawDownloadSpeed_KBps   = toSpeedKBps( d + tr_bandwidthGetRawSpeed_Bps  ( tor->bandwidth, now, TR_DOWN ) );
+    s->pieceDownloadSpeed_KBps = toSpeedKBps( d + tr_bandwidthGetPieceSpeed_Bps( tor->bandwidth, now, TR_DOWN ) );
 
     usableSeeds += tor->info.webseedCount;
 
@@ -983,9 +993,7 @@ tr_torrentStat( tr_torrent * tor )
     s->sizeWhenDone  = tr_cpSizeWhenDone ( &tor->completion );
 
     s->recheckProgress = s->activity == TR_STATUS_CHECK
-                       ? 1.0 -
-                         ( tr_torrentCountUncheckedPieces( tor ) /
-                           (double) tor->info.pieceCount )
+                       ? 1.0 - ( tr_torrentCountUncheckedPieces( tor ) / (float) tor->info.pieceCount )
                        : 0.0;
 
     s->activityDate = tor->activityDate;
@@ -1034,18 +1042,18 @@ tr_torrentStat( tr_torrent * tor )
 
         case TR_STATUS_DOWNLOAD:
             if( ( tor->etaDLSpeedCalculatedAt + 800 ) < now ) {
-                tor->etaDLSpeed = ( ( tor->etaDLSpeedCalculatedAt + 4000 ) < now )
-                    ? s->pieceDownloadSpeed /* if no recent previous speed, no need to smooth */
-                    : 0.8*tor->etaDLSpeed + 0.2*s->pieceDownloadSpeed; /* smooth across 5 readings */
+                tor->etaDLSpeed_KBps = ( ( tor->etaDLSpeedCalculatedAt + 4000 ) < now )
+                    ? s->pieceDownloadSpeed_KBps /* if no recent previous speed, no need to smooth */
+                    : ((tor->etaDLSpeed_KBps*4.0) + s->pieceDownloadSpeed_KBps)/5.0; /* smooth across 5 readings */
                 tor->etaDLSpeedCalculatedAt = now;
             }
 
             if( s->leftUntilDone > s->desiredAvailable )
                 s->eta = TR_ETA_NOT_AVAIL;
-            else if( s->pieceDownloadSpeed < 0.1 )
+            else if( tor->etaDLSpeed_KBps < 1 )
                 s->eta = TR_ETA_UNKNOWN;
             else
-                s->eta = s->leftUntilDone / tor->etaDLSpeed / 1024.0;
+                s->eta = s->leftUntilDone / toSpeedBytes(tor->etaDLSpeed_KBps);
             break;
 
         case TR_STATUS_SEED: {
@@ -1053,15 +1061,15 @@ tr_torrentStat( tr_torrent * tor )
                 s->eta = TR_ETA_NOT_AVAIL;
             else {
                 if( ( tor->etaULSpeedCalculatedAt + 800 ) < now ) {
-                    tor->etaULSpeed = ( ( tor->etaULSpeedCalculatedAt + 4000 ) < now )
-                        ? s->pieceUploadSpeed /* if no recent previous speed, no need to smooth */
-                        : 0.8*tor->etaULSpeed + 0.2*s->pieceUploadSpeed; /* smooth across 5 readings */
+                    tor->etaULSpeed_KBps = ( ( tor->etaULSpeedCalculatedAt + 4000 ) < now )
+                        ? s->pieceUploadSpeed_KBps /* if no recent previous speed, no need to smooth */
+                        : ((tor->etaULSpeed_KBps*4.0) + s->pieceUploadSpeed_KBps)/5.0; /* smooth across 5 readings */
                     tor->etaULSpeedCalculatedAt = now;
                 }
-                if( s->pieceUploadSpeed < 0.1 )
+                if( tor->etaULSpeed_KBps < 1 )
                     s->eta = TR_ETA_UNKNOWN;
                 else
-                    s->eta = seedRatioBytesLeft / tor->etaULSpeed / 1024.0;
+                    s->eta = seedRatioBytesLeft / toSpeedBytes(tor->etaULSpeed_KBps);
             }
             break;
         }
@@ -1153,7 +1161,7 @@ fileBytesCompleted( const tr_torrent * tor, tr_file_index_t index )
 
             /* the last block */
             if( tr_cpBlockIsCompleteFast( &tor->completion, lastBlock ) )
-                total += ( f->offset + f->length ) - ( tor->blockSize * lastBlock );
+                total += ( f->offset + f->length ) - ( (uint64_t)tor->blockSize * lastBlock );
         }
     }
 
@@ -1175,7 +1183,7 @@ tr_torrentFiles( const tr_torrent * tor,
     for( i=0; i<n; ++i, ++walk ) {
         const uint64_t b = isSeed ? tor->info.files[i].length : fileBytesCompleted( tor, i );
         walk->bytesCompleted = b;
-        walk->progress = tor->info.files[i].length > 0 ? ( (float)b / tor->info.files[i].length ) : 1.0;
+        walk->progress = tor->info.files[i].length > 0 ? ( (float)b / tor->info.files[i].length ) : 1.0f;
     }
 
     if( fileCount )
@@ -1195,12 +1203,10 @@ tr_torrentFilesFree( tr_file_stat *            files,
 ****
 ***/
 
-float*
-tr_torrentWebSpeeds( const tr_torrent * tor )
+double*
+tr_torrentWebSpeeds_KBps( const tr_torrent * tor )
 {
-    return tr_isTorrent( tor )
-         ? tr_peerMgrWebSpeeds( tor )
-         : NULL;
+    return tr_isTorrent( tor ) ? tr_peerMgrWebSpeeds_KBps( tor ) : NULL;
 }
 
 tr_peer_stat *
@@ -1844,9 +1850,11 @@ static void
 setFileDND( tr_torrent * tor, tr_file_index_t fileIndex, int doDownload )
 {
     tr_file *        file;
-    const int        dnd = !doDownload;
-    tr_piece_index_t firstPiece, firstPieceDND;
-    tr_piece_index_t lastPiece, lastPieceDND;
+    const int8_t     dnd = !doDownload;
+    tr_piece_index_t firstPiece;
+    int8_t           firstPieceDND;
+    tr_piece_index_t lastPiece;
+    int8_t           lastPieceDND;
     tr_file_index_t  i;
 
     assert( tr_isTorrent( tor ) );

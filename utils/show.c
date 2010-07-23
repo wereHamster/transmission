@@ -28,6 +28,26 @@
 #define MY_NAME "transmission-show"
 #define TIMEOUT_SECS 30
 
+#define MEM_K 1024
+#define MEM_K_STR "KiB"
+#define MEM_M_STR "MiB"
+#define MEM_G_STR "GiB"
+#define MEM_T_STR "TiB"
+
+#define DISK_K 1000
+#define DISK_B_STR "B"
+#define DISK_K_STR "kB"
+#define DISK_M_STR "MB"
+#define DISK_G_STR "GB"
+#define DISK_T_STR "TB"
+
+#define SPEED_K 1000
+#define SPEED_B_STR "B/s"
+#define SPEED_K_STR "kB/s"
+#define SPEED_M_STR "MB/s"
+#define SPEED_G_STR "GB/s"
+#define SPEED_T_STR "TB/s"
+
 static tr_option options[] =
 {
   { 's', "scrape", "Ask the torrent's trackers how many peers are in the torrent's swarm", "s", 0, NULL },
@@ -86,8 +106,8 @@ showInfo( const tr_info * inf )
     if( inf->comment && *inf->comment )
         printf( "  Comment: %s\n", inf->comment );
     printf( "  Piece Count: %d\n", inf->pieceCount );
-    printf( "  Piece Size: %s\n", tr_formatter_size( buf, inf->pieceSize, sizeof( buf ) ) );
-    printf( "  Total Size: %s\n", tr_formatter_size( buf, inf->totalSize, sizeof( buf ) ) );
+    printf( "  Piece Size: %s\n", tr_formatter_mem_B( buf, inf->pieceSize, sizeof( buf ) ) );
+    printf( "  Total Size: %s\n", tr_formatter_size_B( buf, inf->totalSize, sizeof( buf ) ) );
     printf( "  Privacy: %s\n", inf->isPrivate ? "Private torrent" : "Public torrent" );
 
     /**
@@ -112,7 +132,7 @@ showInfo( const tr_info * inf )
 
     printf( "\nFILES\n\n" );
     for( i=0; i<(int)inf->fileCount; ++i )
-        printf( "  %s (%s)\n", inf->files[i].name, tr_formatter_size( buf, inf->files[i].length, sizeof( buf ) ) );
+        printf( "  %s (%s)\n", inf->files[i].name, tr_formatter_size_B( buf, inf->files[i].length, sizeof( buf ) ) );
 }
 
 static size_t
@@ -231,8 +251,9 @@ main( int argc, char * argv[] )
     tr_ctor * ctor;
 
     tr_setMessageLevel( TR_MSG_ERR );
-    tr_formatter_size_init ( 1024, "B", "KiB", "MiB", "GiB" );
-    tr_formatter_speed_init( 1024, "B/s", "KiB/s", "MiB/s", "GiB/s" );
+    tr_formatter_mem_init  ( MEM_K, MEM_K_STR, MEM_M_STR, MEM_G_STR, MEM_T_STR );
+    tr_formatter_size_init ( DISK_K, DISK_K_STR, DISK_M_STR, DISK_G_STR, DISK_T_STR );
+    tr_formatter_speed_init ( SPEED_K, SPEED_K_STR, SPEED_M_STR, SPEED_G_STR, SPEED_T_STR );
 
     if( parseCommandLine( argc, (const char**)argv ) )
         return EXIT_FAILURE;

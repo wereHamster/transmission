@@ -96,8 +96,8 @@ spin_idle_data_free( gpointer gdata )
 static gboolean
 spun_cb_idle( gpointer spin )
 {
-    gboolean                keep_waiting = TRUE;
-    GObject *               o = G_OBJECT( spin );
+    gboolean keep_waiting = TRUE;
+    GObject * o = G_OBJECT( spin );
     struct spin_idle_data * data = g_object_get_data( o, IDLE_DATA );
 
     /* has the user stopped making changes? */
@@ -105,6 +105,7 @@ spun_cb_idle( gpointer spin )
     {
         /* update the core */
         const char * key = g_object_get_data( o, PREF_KEY );
+
         if (data->isDouble)
         {
             const double value = gtk_spin_button_get_value( GTK_SPIN_BUTTON( spin ) );
@@ -112,8 +113,7 @@ spun_cb_idle( gpointer spin )
         }
         else
         {
-            const int    value = gtk_spin_button_get_value_as_int(
-                                 GTK_SPIN_BUTTON( spin ) );
+            const int value = gtk_spin_button_get_value_as_int( GTK_SPIN_BUTTON( spin ) );
             tr_core_set_pref_int( TR_CORE( data->core ), key, value );
         }
 
@@ -127,13 +127,11 @@ spun_cb_idle( gpointer spin )
 }
 
 static void
-spun_cb( GtkSpinButton * w,
-         gpointer        core,
-         gboolean        isDouble )
+spun_cb( GtkSpinButton * w, gpointer core, gboolean isDouble )
 {
     /* user may be spinning through many values, so let's hold off
        for a moment to keep from flooding the core with changes */
-    GObject *               o = G_OBJECT( w );
+    GObject * o = G_OBJECT( w );
     struct spin_idle_data * data = g_object_get_data( o, IDLE_DATA );
 
     if( data == NULL )
@@ -150,15 +148,13 @@ spun_cb( GtkSpinButton * w,
 }
 
 static void
-spun_cb_int( GtkSpinButton * w,
-             gpointer        core )
+spun_cb_int( GtkSpinButton * w, gpointer core )
 {
     spun_cb( w, core, FALSE );
 }
 
 static void
-spun_cb_double( GtkSpinButton * w,
-                gpointer        core )
+spun_cb_double( GtkSpinButton * w, gpointer core )
 {
     spun_cb( w, core, TRUE );
 }
@@ -171,9 +167,7 @@ new_spin_button( const char * key,
                  int          step )
 {
     GtkWidget * w = gtk_spin_button_new_with_range( low, high, step );
-
-    g_object_set_data_full( G_OBJECT( w ), PREF_KEY, g_strdup(
-                                key ), g_free );
+    g_object_set_data_full( G_OBJECT( w ), PREF_KEY, g_strdup( key ), g_free );
     gtk_spin_button_set_digits( GTK_SPIN_BUTTON( w ), 0 );
     gtk_spin_button_set_value( GTK_SPIN_BUTTON( w ), pref_int_get( key ) );
     g_signal_connect( w, "value-changed", G_CALLBACK( spun_cb_int ), core );
@@ -188,9 +182,7 @@ new_spin_button_double( const char * key,
                        double        step )
 {
     GtkWidget * w = gtk_spin_button_new_with_range( low, high, step );
-
-    g_object_set_data_full( G_OBJECT( w ), PREF_KEY, g_strdup(
-                                key ), g_free );
+    g_object_set_data_full( G_OBJECT( w ), PREF_KEY, g_strdup( key ), g_free );
     gtk_spin_button_set_digits( GTK_SPIN_BUTTON( w ), 2 );
     gtk_spin_button_set_value( GTK_SPIN_BUTTON( w ), pref_double_get( key ) );
     g_signal_connect( w, "value-changed", G_CALLBACK( spun_cb_double ), core );
@@ -198,8 +190,7 @@ new_spin_button_double( const char * key,
 }
 
 static void
-entry_changed_cb( GtkEntry * w,
-                  gpointer   core )
+entry_changed_cb( GtkEntry * w, gpointer   core )
 {
     const char * key = g_object_get_data( G_OBJECT( w ), PREF_KEY );
     const char * value = gtk_entry_get_text( w );
@@ -1220,16 +1211,16 @@ bandwidthPage( GObject * core )
     t = hig_workarea_create( );
     hig_workarea_add_section_title( t, &row, _( "Speed Limits" ) );
 
-        s = _( "Limit _download speed (KiB/s):" );
-        w = new_check_button( s, TR_PREFS_KEY_DSPEED_ENABLED, core );
-        w2 = new_spin_button( TR_PREFS_KEY_DSPEED, core, 0, INT_MAX, 5 );
+        g_snprintf( buf, sizeof( buf ), _( "Limit _download speed (%s):" ), _(speed_K_str) );
+        w = new_check_button( buf, TR_PREFS_KEY_DSPEED_ENABLED, core );
+        w2 = new_spin_button( TR_PREFS_KEY_DSPEED_KBps, core, 0, INT_MAX, 5 );
         gtk_widget_set_sensitive( GTK_WIDGET( w2 ), pref_flag_get( TR_PREFS_KEY_DSPEED_ENABLED ) );
         g_signal_connect( w, "toggled", G_CALLBACK( target_cb ), w2 );
         hig_workarea_add_row_w( t, &row, w, w2, NULL );
 
-        s = _( "Limit _upload speed (KiB/s):" );
-        w = new_check_button( s, TR_PREFS_KEY_USPEED_ENABLED, core );
-        w2 = new_spin_button( TR_PREFS_KEY_USPEED, core, 0, INT_MAX, 5 );
+        g_snprintf( buf, sizeof( buf ), _( "Limit _upload speed (%s):" ), _(speed_K_str) );
+        w = new_check_button( buf, TR_PREFS_KEY_USPEED_ENABLED, core );
+        w2 = new_spin_button( TR_PREFS_KEY_USPEED_KBps, core, 0, INT_MAX, 5 );
         gtk_widget_set_sensitive( GTK_WIDGET( w2 ), pref_flag_get( TR_PREFS_KEY_USPEED_ENABLED ) );
         g_signal_connect( w, "toggled", G_CALLBACK( target_cb ), w2 );
         hig_workarea_add_row_w( t, &row, w, w2, NULL );
@@ -1252,13 +1243,13 @@ bandwidthPage( GObject * core )
         gtk_misc_set_alignment( GTK_MISC( w ), 0.5f, 0.5f );
         hig_workarea_add_wide_control( t, &row, w );
 
-        s = _( "Limit do_wnload speed (KiB/s):" );
-        w = new_spin_button( TR_PREFS_KEY_ALT_SPEED_DOWN, core, 0, INT_MAX, 5 );
-        hig_workarea_add_row( t, &row, s, w, NULL );
+        g_snprintf( buf, sizeof( buf ), _( "Limit do_wnload speed (%s):" ), _(speed_K_str) );
+        w = new_spin_button( TR_PREFS_KEY_ALT_SPEED_DOWN_KBps, core, 0, INT_MAX, 5 );
+        hig_workarea_add_row( t, &row, buf, w, NULL );
 
-        s = _( "Limit u_pload speed (KiB/s):" );
-        w = new_spin_button( TR_PREFS_KEY_ALT_SPEED_UP, core, 0, INT_MAX, 5 );
-        hig_workarea_add_row( t, &row, s, w, NULL );
+        g_snprintf( buf, sizeof( buf ), _( "Limit u_pload speed (%s):" ), _(speed_K_str) );
+        w = new_spin_button( TR_PREFS_KEY_ALT_SPEED_UP_KBps, core, 0, INT_MAX, 5 );
+        hig_workarea_add_row( t, &row, buf, w, NULL );
 
         s = _( "_Scheduled times:" );
         h = gtk_hbox_new( FALSE, 0 );

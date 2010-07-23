@@ -84,6 +84,7 @@ struct cbdata
     GSList            * dupqueue;
     GSList            * details;
     GtkTreeSelection  * sel;
+    GtkWidget         * quit_dialog;
 };
 
 /**
@@ -281,7 +282,7 @@ accumulateStatusForeach( GtkTreeModel *      model,
                          GtkTreeIter *       iter,
                          gpointer            user_data )
 {
-    int                  activity = 0;
+    int activity = 0;
     struct counts_data * counts = user_data;
 
     ++counts->totalCount;
@@ -295,6 +296,16 @@ accumulateStatusForeach( GtkTreeModel *      model,
 }
 
 static void
+getTorrentCounts( struct cbdata * data, struct counts_data * counts )
+{
+    counts->activeCount = 0;
+    counts->inactiveCount = 0;
+    counts->totalCount = 0;
+
+    gtk_tree_selection_selected_foreach( data->sel, accumulateStatusForeach, counts );
+}
+
+static void
 accumulateCanUpdateForeach( GtkTreeModel *      model,
                             GtkTreePath  * path UNUSED,
                             GtkTreeIter *       iter,
@@ -305,17 +316,14 @@ accumulateCanUpdateForeach( GtkTreeModel *      model,
     *(int*)accumulated_status |= tr_torrentCanManualUpdate( tor );
 }
 
-static void
-refreshActions( struct cbdata * data )
+static gboolean
+refreshActions( gpointer gdata )
 {
     int canUpdate;
     struct counts_data counts;
-    GtkTreeSelection * s = data->sel;
+    struct cbdata * data = gdata;
 
-    counts.activeCount = 0;
-    counts.inactiveCount = 0;
-    counts.totalCount = 0;
-    gtk_tree_selection_selected_foreach( s, accumulateStatusForeach, &counts );
+    getTorrentCounts( data, &counts );
     action_sensitize( "pause-torrent", counts.activeCount != 0 );
     action_sensitize( "start-torrent", counts.inactiveCount != 0 );
     action_sensitize( "remove-torrent", counts.totalCount != 0 );
@@ -327,11 +335,11 @@ refreshActions( struct cbdata * data )
     action_sensitize( "copy-magnet-link-to-clipboard", counts.totalCount == 1 );
 
     canUpdate = 0;
-    gtk_tree_selection_selected_foreach( s, accumulateCanUpdateForeach, &canUpdate );
+    gtk_tree_selection_selected_foreach( data->sel, accumulateCanUpdateForeach, &canUpdate );
     action_sensitize( "update-tracker", canUpdate != 0 );
 
     {
-        GtkTreeView *  view = gtk_tree_selection_get_tree_view( s );
+        GtkTreeView * view = gtk_tree_selection_get_tree_view( data->sel );
         GtkTreeModel * model = gtk_tree_view_get_model( view );
         const int torrentCount = gtk_tree_model_iter_n_children( model, NULL ) != 0;
         action_sensitize( "select-all", torrentCount != 0 );
@@ -344,12 +352,14 @@ refreshActions( struct cbdata * data )
         action_sensitize( "pause-all-torrents", active != 0 );
         action_sensitize( "start-all-torrents", active != total );
     }
+
+    return FALSE;
 }
 
 static void
 selectionChangedCB( GtkTreeSelection * s UNUSED, gpointer data )
 {
-    refreshActions( data );
+    gtr_idle_add( refreshActions, data );
 }
 
 static void
@@ -532,8 +542,9 @@ main( int argc, char ** argv )
     bind_textdomain_codeset( domain, "UTF-8" );
     textdomain( domain );
     g_set_application_name( _( "Transmission" ) );
-    tr_formatter_size_init( 1024, _("B"), _("KiB"), _("MiB"), _("GiB") );
-    tr_formatter_speed_init( 1024, _("B/s"), _("KiB/s"), _("MiB/s"), _("GiB/s") );
+    tr_formatter_mem_init( mem_K, _(mem_K_str), _(mem_M_str), _(mem_G_str), _(mem_T_str) );
+    tr_formatter_size_init( disk_K, _(disk_K_str), _(disk_M_str), _(disk_G_str), _(disk_T_str) );
+    tr_formatter_speed_init( speed_K, _(speed_K_str), _(speed_M_str), _(speed_G_str), _(speed_T_str) );
 
     /* initialize gtk */
     if( !g_thread_supported( ) )
@@ -801,6 +812,30 @@ toggleMainWindow( struct cbdata * cbdata )
 }
 
 static gboolean
+shouldConfirmBeforeExiting( struct cbdata * data )
+{
+    if( !pref_flag_get( PREF_KEY_ASKQUIT ) )
+        return FALSE;
+    else {
+        struct counts_data counts;
+        getTorrentCounts( data, &counts );
+        return counts.activeCount > 0;
+    }
+}
+
+static void
+maybeaskquit( struct cbdata * cbdata )
+{
+    if( !shouldConfirmBeforeExiting( cbdata ) )
+        wannaquit( cbdata );
+    else {
+        if( cbdata->quit_dialog == NULL )
+            cbdata->quit_dialog = askquit( cbdata->core, cbdata->wind, wannaquit, cbdata );
+        gtk_window_present( GTK_WINDOW( cbdata->quit_dialog ) );
+    }
+}
+
+static gboolean
 winclose( GtkWidget * w    UNUSED,
           GdkEvent * event UNUSED,
           gpointer         gdata )
@@ -810,7 +845,7 @@ winclose( GtkWidget * w    UNUSED,
     if( cbdata->icon != NULL )
         action_activate ( "toggle-main-window" );
     else
-        askquit( cbdata->core, cbdata->wind, wannaquit, cbdata );
+        maybeaskquit( cbdata );
 
     return TRUE; /* don't propagate event further */
 }
@@ -1202,17 +1237,17 @@ prefschanged( TrCore * core UNUSED, const char * key, gpointer data )
     {
         tr_sessionLimitSpeed( tr, TR_DOWN, pref_flag_get( key ) );
     }
-    else if( !strcmp( key, TR_PREFS_KEY_DSPEED ) )
+    else if( !strcmp( key, TR_PREFS_KEY_DSPEED_KBps ) )
     {
-        tr_sessionSetSpeedLimit( tr, TR_DOWN, pref_int_get( key ) );
+        tr_sessionSetSpeedLimit_KBps( tr, TR_DOWN, pref_int_get( key ) );
     }
     else if( !strcmp( key, TR_PREFS_KEY_USPEED_ENABLED ) )
     {
         tr_sessionLimitSpeed( tr, TR_UP, pref_flag_get( key ) );
     }
-    else if( !strcmp( key, TR_PREFS_KEY_USPEED ) )
+    else if( !strcmp( key, TR_PREFS_KEY_USPEED_KBps ) )
     {
-        tr_sessionSetSpeedLimit( tr, TR_UP, pref_int_get( key ) );
+        tr_sessionSetSpeedLimit_KBps( tr, TR_UP, pref_int_get( key ) );
     }
     else if( !strcmp( key, TR_PREFS_KEY_RATIO_ENABLED ) )
     {
@@ -1298,13 +1333,13 @@ prefschanged( TrCore * core UNUSED, const char * key, gpointer data )
     {
         tr_sessionSetProxyPort( tr, pref_int_get( key ) );
     }
-    else if( !strcmp( key, TR_PREFS_KEY_ALT_SPEED_UP ) )
+    else if( !strcmp( key, TR_PREFS_KEY_ALT_SPEED_UP_KBps ) )
     {
-        tr_sessionSetAltSpeed( tr, TR_UP, pref_int_get( key ) );
+        tr_sessionSetAltSpeed_KBps( tr, TR_UP, pref_int_get( key ) );
     }
-    else if( !strcmp( key, TR_PREFS_KEY_ALT_SPEED_DOWN ) )
+    else if( !strcmp( key, TR_PREFS_KEY_ALT_SPEED_DOWN_KBps ) )
     {
-        tr_sessionSetAltSpeed( tr, TR_DOWN, pref_int_get( key ) );
+        tr_sessionSetAltSpeed_KBps( tr, TR_DOWN, pref_int_get( key ) );
     }
     else if( !strcmp( key, TR_PREFS_KEY_ALT_SPEED_ENABLED ) )
     {
@@ -1688,7 +1723,7 @@ doAction( const char * action_name, gpointer user_data )
     }
     else if( !strcmp( action_name, "quit" ) )
     {
-        askquit( data->core, data->wind, wannaquit, data );
+        maybeaskquit( data );
     }
     else if( !strcmp( action_name, "select-all" ) )
     {

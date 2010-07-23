@@ -224,6 +224,8 @@ Transmission.prototype =
 		if( !iPhone && this[Prefs._ShowInspector] )
 			this.showInspector( );
 
+		if( !iPhone && this[Prefs._CompactDisplayState] )
+			$('#compact_view').selectMenuItem();
 	},
 
 	/*
@@ -640,20 +642,25 @@ Transmission.prototype =
 			tr.togglePeriodicRefresh( true );
 		}
 
+		var up_bytes        = parseInt( $('#prefs_form #upload_rate'  )[0].value );
+		var dn_bytes        = parseInt( $('#prefs_form #download_rate')[0].value );
+		var turtle_up_bytes = parseInt( $('#prefs_form #turtle_upload_rate'  )[0].value );
+		var turtle_dn_bytes = parseInt( $('#prefs_form #turtle_download_rate')[0].value );
+
 		// pass the new prefs upstream to the RPC server
 		var o = { };
 		o[RPC._StartAddedTorrent]    = $('#prefs_form #auto_start')[0].checked;
 		o[RPC._PeerPort]             = parseInt( $('#prefs_form #port')[0].value );
-		o[RPC._UpSpeedLimit]         = parseInt( $('#prefs_form #upload_rate')[0].value );
-		o[RPC._DownSpeedLimit]       = parseInt( $('#prefs_form #download_rate')[0].value );
+		o[RPC._UpSpeedLimit]         = up_bytes;
+		o[RPC._DownSpeedLimit]       = dn_bytes;
 		o[RPC._DownloadDir]          = $('#prefs_form #download_location')[0].value;
-		o[RPC._UpSpeedLimited]       = $('#prefs_form #limit_upload')[0].checked;
+		o[RPC._UpSpeedLimited]       = $('#prefs_form #limit_upload'  )[0].checked;
 		o[RPC._DownSpeedLimited]     = $('#prefs_form #limit_download')[0].checked;
 		o[RPC._Encryption]           = $('#prefs_form #encryption')[0].checked
 		                                   ? RPC._EncryptionRequired
 		                                   : RPC._EncryptionPreferred;
-		o[RPC._TurtleDownSpeedLimit] = parseInt( $('#prefs_form #turtle_download_rate')[0].value );
-		o[RPC._TurtleUpSpeedLimit]   = parseInt( $('#prefs_form #turtle_upload_rate')[0].value );
+		o[RPC._TurtleDownSpeedLimit] = turtle_dn_bytes;
+		o[RPC._TurtleUpSpeedLimit]   = turtle_up_bytes;
 		o[RPC._TurtleTimeEnabled]    = $('#prefs_form #turtle_schedule')[0].checked;
 		o[RPC._TurtleTimeBegin]      = parseInt( $('#prefs_form #turtle_start_time').val() );
 		o[RPC._TurtleTimeEnd]        = parseInt( $('#prefs_form #turtle_end_time').val() );
@@ -926,22 +933,24 @@ Transmission.prototype =
 		// remember them for later
 		this._prefs = prefs;
 
-		var down_limit    = prefs[RPC._DownSpeedLimit];
-		var down_limited  = prefs[RPC._DownSpeedLimited];
-		var up_limit      = prefs[RPC._UpSpeedLimit];
-		var up_limited    = prefs[RPC._UpSpeedLimited];
+		var up_limited        = prefs[RPC._UpSpeedLimited];
+		var dn_limited        = prefs[RPC._DownSpeedLimited];
+		var up_limit_k        = prefs[RPC._UpSpeedLimit];
+		var dn_limit_k        = prefs[RPC._DownSpeedLimit];
+		var turtle_up_limit_k = prefs[RPC._TurtleUpSpeedLimit];
+		var turtle_dn_limit_k = prefs[RPC._TurtleDownSpeedLimit];
 
 		$('div.download_location input')[0].value = prefs[RPC._DownloadDir];
 		$('div.port input')[0].value              = prefs[RPC._PeerPort];
 		$('div.auto_start input')[0].checked      = prefs[RPC._StartAddedTorrent];
-		$('input#limit_download')[0].checked      = down_limited;
-		$('input#download_rate')[0].value         = down_limit;
+		$('input#limit_download')[0].checked      = dn_limited;
+		$('input#download_rate')[0].value         = dn_limit_k;
 		$('input#limit_upload')[0].checked        = up_limited;
-		$('input#upload_rate')[0].value           = up_limit;
+		$('input#upload_rate')[0].value           = up_limit_k;
 		$('input#refresh_rate')[0].value          = prefs[Prefs._RefreshRate];
 		$('div.encryption input')[0].checked      = prefs[RPC._Encryption] == RPC._EncryptionRequired;
-		$('input#turtle_download_rate')[0].value  = prefs[RPC._TurtleDownSpeedLimit];
-		$('input#turtle_upload_rate')[0].value    = prefs[RPC._TurtleUpSpeedLimit];
+		$('input#turtle_download_rate')[0].value  = turtle_dn_limit_k;
+		$('input#turtle_upload_rate')[0].value    = turtle_up_limit_k;
 		$('input#turtle_schedule')[0].checked     = prefs[RPC._TurtleTimeEnabled];
 		$('select#turtle_start_time').val(          prefs[RPC._TurtleTimeBegin] );
 		$('select#turtle_end_time').val(            prefs[RPC._TurtleTimeEnd] );
@@ -950,12 +959,12 @@ Transmission.prototype =
 
 		if (!iPhone)
 		{
-			setInnerHTML( $('#limited_download_rate')[0], 'Limit (' + Transmission.fmt.speed(down_limit) + ')' );
-			var key = down_limited ? '#limited_download_rate'
+			setInnerHTML( $('#limited_download_rate')[0], 'Limit (' + Transmission.fmt.speed(dn_limit_k) + ')' );
+			var key = dn_limited ? '#limited_download_rate'
 			                       : '#unlimited_download_rate';
 			$(key).deselectMenuSiblings().selectMenuItem();
 
-			setInnerHTML( $('#limited_download_rate')[0], 'Limit (' + Transmission.fmt.speed(up_limit) + ')' );
+			setInnerHTML( $('#limited_upload_rate')[0], 'Limit (' + Transmission.fmt.speed(up_limit_k) + ')' );
 			key = up_limited ? '#limited_upload_rate'
 			                 : '#unlimited_upload_rate';
 			$(key).deselectMenuSiblings().selectMenuItem();
@@ -1051,28 +1060,28 @@ Transmission.prototype =
 					tr.showStatsDialog( );
 				}
 				else if ($element[0].id == 'compact_view') {
-					this[Prefs._CompactDisplayState] = !this[Prefs._CompactDisplayState];
+					this.setPref( Prefs._CompactDisplayState, !this[Prefs._CompactDisplayState])
 					if(this[Prefs._CompactDisplayState])
 						$element.selectMenuItem();
 					else
 						$element.deselectMenuItem();
-					this.setDisplayMode( this[Prefs._CompactDisplayState] );
-					// Redraw html here
+					this.refreshDisplay( );
 				}
 				break;
 
 			// Limit the download rate
 			case 'footer_download_rate_menu':
 				var args = { };
-				var rate = ($element[0].innerHTML).replace(/[^0-9]/ig, '');
 				if ($element.is('#unlimited_download_rate')) {
 					$element.deselectMenuSiblings().selectMenuItem();
 					args[RPC._DownSpeedLimited] = false;
 				} else {
-					setInnerHTML( $('#limited_download_rate')[0], 'Limit (' + Transmission.fmt.speed(rate) + ')' );
+					var rate_str = ($element[0].innerHTML).replace(/[^0-9]/ig, '');
+					var rate_val = parseInt( rate_str );
+					setInnerHTML( $('#limited_download_rate')[0], 'Limit (' + Transmission.fmt.speed(rate_val) + ')' );
 					$('#limited_download_rate').deselectMenuSiblings().selectMenuItem();
-					$('div.preference input#download_rate')[0].value = rate;
-					args[RPC._DownSpeedLimit] = parseInt( rate );
+					$('div.preference input#download_rate')[0].value = rate_str;
+					args[RPC._DownSpeedLimit] = rate_val;
 					args[RPC._DownSpeedLimited] = true;
 				}
 				$('div.preference input#limit_download')[0].checked = args[RPC._DownSpeedLimited];
@@ -1082,15 +1091,16 @@ Transmission.prototype =
 			// Limit the upload rate
 			case 'footer_upload_rate_menu':
 				var args = { };
-				var rate = ($element[0].innerHTML).replace(/[^0-9]/ig, '');
 				if ($element.is('#unlimited_upload_rate')) {
 					$element.deselectMenuSiblings().selectMenuItem();
 					args[RPC._UpSpeedLimited] = false;
 				} else {
-					setInnerHTML( $('#limited_upload_rate')[0], 'Limit (' + Transmission.fmt.speed(rate) + ')' );
+					var rate_str = ($element[0].innerHTML).replace(/[^0-9]/ig, '');
+					var rate_val = parseInt( rate_str );
+					setInnerHTML( $('#limited_upload_rate')[0], 'Limit (' + Transmission.fmt.speed(rate_val) + ')' );
 					$('#limited_upload_rate').deselectMenuSiblings().selectMenuItem();
-					$('div.preference input#upload_rate')[0].value = rate;
-					args[RPC._UpSpeedLimit] = parseInt( rate );
+					$('div.preference input#upload_rate')[0].value = rate_str;
+					args[RPC._UpSpeedLimit] = rate_val;
 					args[RPC._UpSpeedLimited] = true;
 				}
 				$('div.preference input#limit_upload')[0].checked = args[RPC._UpSpeedLimited];
@@ -1226,7 +1236,7 @@ Transmission.prototype =
 				download_dir = t._download_dir;
 
 			hash = t.hash();
-			pieces = t._pieceCount + ', ' + Transmission.fmt.size(t._pieceSize);
+			pieces = t._pieceCount + ' pieces @ ' + Transmission.fmt.mem(t._pieceSize);
 			date_created = Transmission.fmt.timestamp( t._creator_date );
 		}
 
@@ -1658,14 +1668,11 @@ Transmission.prototype =
 		return removedAny;
 	},
 
-	setDisplayMode: function( iscompact )
+	refreshDisplay: function( )
 	{
-		var torrents = this.getAllTorrents();
-
+		var torrents = this.getVisibleTorrents();
 		for( var i=0; torrents[i]; ++i )
-		{
-			torrents[i].setListDisplayElements(this[Prefs._CompactDisplayState]);
-		}
+			torrents[i].refreshHTML();
 	},
 
 	/*

@@ -36,6 +36,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
+#include "formatter.h"
 #include "hig.h"
 #include "prefs.h"
 #include "prefs-dialog.h"
@@ -81,7 +82,7 @@ void
 PrefsDialog :: spinBoxChangedIdle( )
 {
     const QObject * spin( sender()->property( "SPIN" ).value<QObject*>( ) );
-    const int key( spin->property( PREF_KEY ).toInt( ) );
+    const int key = spin->property( PREF_KEY ).toInt( );
 
     const QDoubleSpinBox * d = qobject_cast<const QDoubleSpinBox*>( spin );
     if( d != 0 )
@@ -140,7 +141,6 @@ PrefsDialog :: doubleSpinBoxNew( int key, double low, double high, double step, 
     spin->setRange( low, high );
     spin->setSingleStep( step );
     spin->setDecimals( decimals );
-    spin->setValue( myPrefs.getDouble( key ) );
     spin->setProperty( PREF_KEY, key );
     connect( spin, SIGNAL(valueChanged(double)), this, SLOT(doubleSpinBoxChanged(double)));
     myWidgets.insert( key, spin );
@@ -266,13 +266,14 @@ PrefsDialog :: createSpeedTab( )
     QWidget *l, *r;
     HIG * hig = new HIG( this );
     hig->addSectionTitle( tr( "Speed Limits" ) );
+    const QString speed_K_str = Formatter::unitStr( Formatter::SPEED, Formatter::KB );
 
-        l = checkBoxNew( tr( "Limit &download speed (KiB/s):" ), Prefs::DSPEED_ENABLED );
+        l = checkBoxNew( tr( "Limit &download speed (%1):" ).arg( speed_K_str ), Prefs::DSPEED_ENABLED );
         r = spinBoxNew( Prefs::DSPEED, 0, INT_MAX, 5 );
         hig->addRow( l, r );
         enableBuddyWhenChecked( qobject_cast<QCheckBox*>(l), r );
 
-        l = checkBoxNew( tr( "Limit &upload speed (KiB/s):" ), Prefs::USPEED_ENABLED );
+        l = checkBoxNew( tr( "Limit &upload speed (%1):" ).arg( speed_K_str ), Prefs::USPEED_ENABLED );
         r = spinBoxNew( Prefs::USPEED, 0, INT_MAX, 5 );
         hig->addRow( l, r );
         enableBuddyWhenChecked( qobject_cast<QCheckBox*>(l), r );
@@ -293,11 +294,11 @@ PrefsDialog :: createSpeedTab( )
         QString s = tr( "<small>Override normal speed limits manually or at scheduled times</small>" );
         hig->addWideControl( new QLabel( s ) );
 
-        s = tr( "Limit d&ownload speed (KiB/s):" );
+        s = tr( "Limit d&ownload speed (%1):" ).arg( speed_K_str );
         r = spinBoxNew( Prefs :: ALT_SPEED_LIMIT_DOWN, 0, INT_MAX, 5 );
         hig->addRow( s, r );
 
-        s = tr( "Limit u&pload speed (KiB/s):" );
+        s = tr( "Limit u&pload speed (%1):" ).arg( speed_K_str );
         r = spinBoxNew( Prefs :: ALT_SPEED_LIMIT_UP, 0, INT_MAX, 5 );
         hig->addRow( s, r );
 
@@ -552,7 +553,7 @@ PrefsDialog :: createTorrentsTab( )
 
     QWidget *l, *r;
     HIG * hig = new HIG( this );
-    hig->addSectionTitle( tr( "Adding Torrents" ) );
+    hig->addSectionTitle( tr( "Adding" ) );
 
         l = checkBoxNew( tr( "Automatically &add torrents from:" ), Prefs::DIR_WATCH_ENABLED );
         QPushButton * b = myWatchButton = new QPushButton;
@@ -565,6 +566,10 @@ PrefsDialog :: createTorrentsTab( )
         hig->addWideControl( checkBoxNew( tr( "Show &options dialog" ), Prefs::OPTIONS_PROMPT ) );
         hig->addWideControl( checkBoxNew( tr( "&Start when added" ), Prefs::START ) );
         hig->addWideControl( checkBoxNew( tr( "Mo&ve .torrent file to the trash" ), Prefs::TRASH_ORIGINAL ) );
+
+    hig->addSectionDivider( );
+    hig->addSectionTitle( tr( "Downloading" ) );
+
         hig->addWideControl( checkBoxNew( tr( "Append \".&part\" to incomplete files' names" ), Prefs::RENAME_PARTIAL_FILES ) );
 
         l = myIncompleteCheckbox = checkBoxNew( tr( "Keep &incomplete files in:" ), Prefs::INCOMPLETE_DIR_ENABLED );
@@ -590,7 +595,7 @@ PrefsDialog :: createTorrentsTab( )
         hig->addRow( tr( "Save to &Location:" ), b );
 
     hig->addSectionDivider( );
-    hig->addSectionTitle( tr( "Limits" ) );
+    hig->addSectionTitle( tr( "Seeding" ) );
 
         l = checkBoxNew( tr( "&Seed torrent until its ratio reaches:" ), Prefs::RATIO_ENABLED );
         r = doubleSpinBoxNew( Prefs::RATIO, 0, INT_MAX, 0.5, 2 );

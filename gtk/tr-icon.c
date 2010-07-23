@@ -15,6 +15,8 @@
 #ifdef HAVE_LIBAPPINDICATOR
  #include <libappindicator/app-indicator.h>
 #endif
+#include <libtransmission/transmission.h>
+#include <libtransmission/utils.h>
 #include "actions.h"
 #include "tr-icon.h"
 #include "util.h"
@@ -65,8 +67,8 @@ popup( GtkStatusIcon *       self,
 void
 tr_icon_refresh( gpointer vicon )
 {
-    double d;
-    int limit;
+    double KBps;
+    double limit;
     char up[64];
     char upLimit[64];
     char down[64];
@@ -77,32 +79,34 @@ tr_icon_refresh( gpointer vicon )
     tr_session * session = tr_core_session( g_object_get_data( G_OBJECT( icon ), "tr-core" ) );
 
     /* up */
-    if(((d = tr_sessionGetRawSpeed( session, TR_UP ))) < 0.1 )
+    KBps = tr_sessionGetRawSpeed_KBps( session, TR_UP );
+    if( KBps < 0.001 )
         g_strlcpy( up, idle, sizeof( up ) );
     else
-        tr_strlspeed( up, d, sizeof( up ) );
+        tr_formatter_speed_KBps( up, KBps, sizeof( up ) );
 
     /* up limit */
-    if( !tr_sessionGetActiveSpeedLimit( session, TR_UP, &limit ) )
+    if( !tr_sessionGetActiveSpeedLimit_KBps( session, TR_UP, &limit ) )
         *upLimit = '\0';
     else {
         char buf[64];
-        tr_strlspeed( buf, limit, sizeof( buf ) );
+        tr_formatter_speed_KBps( buf, limit, sizeof( buf ) );
         g_snprintf( upLimit, sizeof( upLimit ), _( "(Limit: %s)" ), buf );
     }
 
     /* down */
-    if(((d = tr_sessionGetRawSpeed( session, TR_DOWN ))) < 0.1 )
+    KBps = tr_sessionGetRawSpeed_KBps( session, TR_DOWN );
+    if( KBps < 0.001 )
         g_strlcpy( down, idle, sizeof( down ) );
     else
-        tr_strlspeed( down, d, sizeof( down ) );
+        tr_formatter_speed_KBps( down, KBps, sizeof( down ) );
 
     /* down limit */
-    if( !tr_sessionGetActiveSpeedLimit( session, TR_DOWN, &limit ) )
+    if( !tr_sessionGetActiveSpeedLimit_KBps( session, TR_DOWN, &limit ) )
         *downLimit = '\0';
     else {
         char buf[64];
-        tr_strlspeed( buf, limit, sizeof( buf ) );
+        tr_formatter_speed_KBps( buf, limit, sizeof( buf ) );
         g_snprintf( downLimit, sizeof( downLimit ), _( "(Limit: %s)" ), buf );
     }
 
@@ -120,13 +124,11 @@ tr_icon_refresh( gpointer vicon )
 }
 #endif
 
-#ifdef HAVE_LIBAPPINDICATOR
-gpointer
-tr_icon_new( TrCore * core)
+static const char *
+getIconName( void )
 {
-    GtkWidget * w;
     const char * icon_name;
-    AppIndicator * indicator;
+
     GtkIconTheme * theme = gtk_icon_theme_get_default( );
 
     /* if the tray's icon is a 48x48 file, use it;
@@ -140,22 +142,28 @@ tr_icon_new( TrCore * core)
         icon_name = icon_is_builtin ? MY_NAME : TRAY_ICON;
     }
 
-    indicator = app_indicator_new( MY_NAME, icon_name, APP_INDICATOR_CATEGORY_SYSTEM_SERVICES );
+    return icon_name;
+}
+
+#ifdef HAVE_LIBAPPINDICATOR
+gpointer
+tr_icon_new( TrCore * core)
+{
+    GtkWidget * w;
+    const char * icon_name = getIconName( );
+    AppIndicator * indicator = app_indicator_new( MY_NAME, icon_name, APP_INDICATOR_CATEGORY_SYSTEM_SERVICES );
     app_indicator_set_status( indicator, APP_INDICATOR_STATUS_ACTIVE );
     w = action_get_widget( "/icon-popup" );
     app_indicator_set_menu( indicator, GTK_MENU ( w ) );
-
     g_object_set_data( G_OBJECT( indicator ), "tr-core", core );
-
     return indicator;
 }
 #else
 gpointer
 tr_icon_new( TrCore * core )
 {
-    const char * icon_name = TRAY_ICON;
+    const char * icon_name = getIconName( );
     GtkStatusIcon * icon = gtk_status_icon_new_from_icon_name( icon_name );
-
     g_signal_connect( icon, "activate", G_CALLBACK( activated ), NULL );
     g_signal_connect( icon, "popup-menu", G_CALLBACK( popup ), NULL );
     g_object_set_data( G_OBJECT( icon ), "tr-core", core );

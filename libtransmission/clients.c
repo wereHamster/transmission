@@ -22,7 +22,7 @@
 #include "utils.h" /* tr_snprintf(), tr_strlcpy() */
 
 static int
-charint( char ch )
+charint( uint8_t ch )
 {
     if( '0' <= ch && ch <= '9' ) return      ch - '0';
     if( 'A' <= ch && ch <= 'Z' ) return 10 + ch - 'A';
@@ -31,7 +31,7 @@ charint( char ch )
 }
 
 static int
-getShadowInt( char ch, int * setme )
+getShadowInt( uint8_t ch, int * setme )
 {
     const char * str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.-";
     const char * pch = strchr( str, ch );
@@ -51,7 +51,7 @@ strint( const void * pch, int span )
 }
 
 static const char*
-getMnemonicEnd( char ch )
+getMnemonicEnd( uint8_t ch )
 {
     switch( ch )
     {
@@ -311,7 +311,7 @@ tr_clientForId( char * buf, size_t buflen, const void * id_in )
     else if( !memcmp( id, "10-------", 9 ) ) no_version( buf, buflen, "JVtorrent" );
     else if( !memcmp( id, "346-", 4 ) )      no_version( buf, buflen, "TorrentTopia" );
     else if( !memcmp( id, "eX", 2 ) )        no_version( buf, buflen, "eXeem" );
-    else if( !memcmp( id, "-aria2-", 7 ) )   no_version( buf, buflen, "aria2" );
+    else if( !memcmp( id, "aria2-", 6 ) )    no_version( buf, buflen, "aria2" );
     else if( !memcmp( id, "-WT-", 4 ) )      no_version( buf, buflen, "BitLet" );
     else if( !memcmp( id, "-FG", 3 ) )       two_major_two_minor( buf, buflen, "FlashGet", id+3 );
 

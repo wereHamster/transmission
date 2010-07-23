@@ -16,32 +16,37 @@
 
 #if defined(SYS_DARWIN)
  #define HAVE_GETPAGESIZE
+ #define HAVE_ICONV_OPEN
  #define HAVE_VALLOC
  #undef HAVE_POSIX_MEMALIGN /* not supported on OS X 10.5 and lower */
 #endif
 
 #include <assert.h>
-#include <ctype.h> /* isalpha, tolower */
+#include <ctype.h> /* isalpha(), tolower() */
 #include <errno.h>
-#include <math.h> /* pow */
+#include <math.h> /* pow(), fabs() */
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h> /* strerror, memset, memmem */
+#include <string.h> /* strerror(), memset(), memmem() */
+#include <time.h> /* nanosleep() */
 
-#include <libgen.h> /* basename */
+#ifdef HAVE_ICONV_OPEN
+ #include <iconv.h>
+#endif
+#include <libgen.h> /* basename() */
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h> /* usleep, stat, getcwd, getpagesize */
+#include <unistd.h> /* stat(), getcwd(), getpagesize() */
 
 #include "event.h"
 
 #ifdef WIN32
  #include <w32api.h>
- #define WINVER WindowsXP /* freeaddrinfo(),getaddrinfo(),getnameinfo() */
- #include <direct.h> /* _getcwd */
- #include <windows.h> /* Sleep */
+ #define WINVER WindowsXP /* freeaddrinfo(), getaddrinfo(), getnameinfo() */
+ #include <direct.h> /* _getcwd() */
+ #include <windows.h> /* Sleep() */
 #endif
 
 #include "transmission.h"
@@ -56,7 +61,7 @@
 
 time_t transmission_now = 0;
 
-int                   messageLevel = TR_MSG_INF;
+tr_msg_level messageLevel = TR_MSG_INF;
 static tr_lock *      messageLock = NULL;
 static tr_bool        messageQueuing = FALSE;
 static tr_msg_list *  messageQueue = NULL;
@@ -114,43 +119,27 @@ tr_getLog( void )
 }
 
 void
-tr_setMessageLevel( int level )
+tr_setMessageLevel( tr_msg_level level )
 {
-    messageLevel = MAX( 0, level );
+    messageLevel = level;
 }
 
-int
+tr_msg_level
 tr_getMessageLevel( void )
 {
-    int ret;
-    tr_lockLock( messageLock );
-
-    ret = messageLevel;
-
-    tr_lockUnlock( messageLock );
-    return ret;
+    return messageLevel;
 }
 
 void
 tr_setMessageQueuing( tr_bool enabled )
 {
-    tr_lockLock( messageLock );
-
     messageQueuing = enabled;
-
-    tr_lockUnlock( messageLock );
 }
 
 tr_bool
 tr_getMessageQueuing( void )
 {
-    int ret;
-    tr_lockLock( messageLock );
-
-    ret = messageQueuing;
-
-    tr_lockUnlock( messageLock );
-    return ret;
+    return messageQueuing != 0;
 }
 
 tr_msg_list *
@@ -271,7 +260,8 @@ tr_deepLog( const char  * file,
 
 void
 tr_msg( const char * file, int line,
-        int level, const char * name,
+        tr_msg_level level,
+        const char * name,
         const char * fmt, ... )
 {
     const int err = errno; /* message logging shouldn't affect errno */
@@ -479,7 +469,7 @@ tr_loadFile( const char * path,
     struct stat  sb;
     int fd;
     ssize_t n;
-    const char * err_fmt = _( "Couldn't read \"%1$s\": %2$s" );
+    const char * const err_fmt = _( "Couldn't read \"%1$s\": %2$s" );
 
     /* try to stat the file */
     errno = 0;
@@ -516,7 +506,7 @@ tr_loadFile( const char * path,
         errno = err;
         return NULL;
     }
-    n = read( fd, buf, sb.st_size );
+    n = read( fd, buf, (size_t)sb.st_size );
     if( n == -1 )
     {
         const int err = errno;
@@ -804,12 +794,15 @@ tr_date( void )
 }
 
 void
-tr_wait_msec( uint64_t delay_milliseconds )
+tr_wait_msec( long int msec )
 {
 #ifdef WIN32
-    Sleep( (DWORD)delay_milliseconds );
+    Sleep( (DWORD)msec );
 #else
-    usleep( 1000 * delay_milliseconds );
+    struct timespec ts;
+    ts.tv_sec = msec / 1000;
+    ts.tv_nsec = ( msec % 1000 ) * 1000000;
+    nanosleep( &ts, NULL );
 #endif
 }
 
@@ -877,14 +870,13 @@ tr_strlcpy( char *       dst,
 ***/
 
 double
-tr_getRatio( double numerator,
-             double denominator )
+tr_getRatio( uint64_t numerator, uint64_t denominator )
 {
     double ratio;
 
-    if( denominator )
-        ratio = numerator / denominator;
-    else if( numerator )
+    if( denominator > 0 )
+        ratio = numerator / (double)denominator;
+    else if( numerator > 0 )
         ratio = TR_RATIO_INF;
     else
         ratio = TR_RATIO_NA;
@@ -1077,7 +1069,7 @@ tr_base64_encode( const void * input, int length, int * setme_len )
         BUF_MEM * bptr;
 
         if( length < 1 )
-            length = strlen( input );
+            length = (int)strlen( input );
 
         bmem = BIO_new( BIO_s_mem( ) );
         b64 = BIO_new( BIO_f_base64( ) );
@@ -1173,8 +1165,68 @@ tr_lowerBound( const void * key,
 ****
 ***/
 
+static char*
+strip_non_utf8( const char * in, size_t inlen )
+{
+    char * ret;
+    const char * end;
+    const char zero = '\0';
+    struct evbuffer * buf = evbuffer_new( );
+ 
+    while( !tr_utf8_validate( in, inlen, &end ) )
+    {
+        const int good_len = end - in;
+
+        evbuffer_add( buf, in, good_len );
+        inlen -= ( good_len + 1 );
+        in += ( good_len + 1 );
+        evbuffer_add( buf, "?", 1 );
+    }
+ 
+    evbuffer_add( buf, in, inlen );
+    evbuffer_add( buf, &zero, 1 );
+    ret = tr_memdup( EVBUFFER_DATA( buf ), EVBUFFER_LENGTH( buf ) );
+    evbuffer_free( buf );
+    return ret;
+}
+
+static char*
+to_utf8( const char * in, size_t inlen )
+{
+    char * ret = NULL;
+
+#ifdef HAVE_ICONV_OPEN
+    int i;
+    const char * encodings[] = { "CURRENT", "ISO-8859-15" };
+    const int encoding_count = sizeof(encodings) / sizeof(encodings[1]);
+    const size_t buflen = inlen*4 + 10;
+    char * out = tr_new( char, buflen );
+
+    for( i=0; !ret && i<encoding_count; ++i )
+    {
+        char * inbuf = (char*) in;
+        char * outbuf = out;
+        size_t inbytesleft = inlen;
+        size_t outbytesleft = buflen;
+        const char * test_encoding = encodings[i];
+
+        iconv_t cd = iconv_open( "UTF-8", test_encoding );
+        if( cd != (iconv_t)-1 ) {
+            if( iconv( cd, &inbuf, &inbytesleft, &outbuf, &outbytesleft ) != (size_t)-1 )
+                ret = tr_strndup( out, buflen-outbytesleft );
+            iconv_close( cd );
+        }
+    }
+#endif
+
+    if( ret == NULL )
+        ret = strip_non_utf8( in, inlen );
+
+    return ret;
+}
+
 char*
-tr_utf8clean( const char * str, int max_len, tr_bool * err )
+tr_utf8clean( const char * str, int max_len )
 {
     char * ret;
     const char * end;
@@ -1182,36 +1234,10 @@ tr_utf8clean( const char * str, int max_len, tr_bool * err )
     if( max_len < 0 )
         max_len = (int) strlen( str );
 
-    if( err != NULL )
-        *err = FALSE;
-
     if( tr_utf8_validate( str, max_len, &end  ) )
-    {
         ret = tr_strndup( str, max_len );
-    }
     else
-    {
-        const char zero = '\0';
-        struct evbuffer * buf = evbuffer_new( );
-
-        while( !tr_utf8_validate ( str, max_len, &end ) )
-        {
-            const int good_len = end - str;
-
-            evbuffer_add( buf, str, good_len );
-            max_len -= ( good_len + 1 );
-            str += ( good_len + 1 );
-            evbuffer_add( buf, "?", 1 );
-
-            if( err != NULL )
-                *err = TRUE;
-        }
-
-        evbuffer_add( buf, str, max_len );
-        evbuffer_add( buf, &zero, 1 );
-        ret = tr_memdup( EVBUFFER_DATA( buf ), EVBUFFER_LENGTH( buf ) );
-        evbuffer_free( buf );
-    }
+        ret = to_utf8( str, max_len );
 
     assert( tr_utf8_validate( ret, -1, NULL ) );
     return ret;
@@ -1408,7 +1434,7 @@ tr_moveFile( const char * oldpath, const char * newpath, tr_bool * renamed )
     char * buf;
     struct stat st;
     off_t bytesLeft;
-    const off_t buflen = 1024 * 128; /* 128 KiB buffer */
+    const size_t buflen = 1024 * 128; /* 128 KiB buffer */
 
     /* make sure the old file exists */
     if( stat( oldpath, &st ) ) {
@@ -1481,7 +1507,7 @@ tr_valloc( size_t bufLen )
 
     if( !pageSize ) {
 #ifdef HAVE_GETPAGESIZE
-        pageSize = getpagesize();
+        pageSize = (size_t) getpagesize();
 #else /* guess */
         pageSize = 4096;
 #endif
@@ -1528,7 +1554,7 @@ tr_realpath( const char * path, char * resolved_path )
 struct formatter_unit
 {
     char * name;
-    double value;
+    uint64_t value;
 };
   
 struct formatter_units
@@ -1536,32 +1562,29 @@ struct formatter_units
     struct formatter_unit units[4];
 };
 
+enum { TR_FMT_KB, TR_FMT_MB, TR_FMT_GB, TR_FMT_TB };
+
 static void
 formatter_init( struct formatter_units * units,
-                double kilo,
-                const char * b, const char * kb,
-                const char * mb, const char * gb )
+                unsigned int kilo,
+                const char * kb, const char * mb,
+                const char * gb, const char * tb )
 {
-    units->units[TR_FMT_B].name = tr_strdup( b );
-    units->units[TR_FMT_B].value = 1;
-
+    uint64_t value = kilo;
     units->units[TR_FMT_KB].name = tr_strdup( kb );
-    units->units[TR_FMT_KB].value = kilo;
+    units->units[TR_FMT_KB].value = value;
 
+    value *= kilo;
     units->units[TR_FMT_MB].name = tr_strdup( mb );
-    units->units[TR_FMT_MB].value = pow( kilo, 2 );
+    units->units[TR_FMT_MB].value = value;
 
+    value *= kilo;
     units->units[TR_FMT_GB].name = tr_strdup( gb );
-    units->units[TR_FMT_GB].value = pow( kilo, 3 );
-}
+    units->units[TR_FMT_GB].value = value;
 
-static const char*
-tr_formatter_units( const struct formatter_units * u, int size )
-{
-    assert( u != NULL );
-    assert( 0<=size && size<4 );
-
-    return u->units[size].name;
+    value *= kilo;
+    units->units[TR_FMT_TB].name = tr_strdup( tb );
+    units->units[TR_FMT_TB].value = value;
 }
 
 static char*
@@ -1578,7 +1601,7 @@ formatter_get_size_str( const struct formatter_units * u,
     else if( bytes < u->units[3].value ) unit = &u->units[2];
     else                                 unit = &u->units[3];
 
-    value = bytes / unit->value;
+    value = (double)bytes / unit->value;
     units = unit->name;
     if( unit->value == 1 )
         precision = 0;
@@ -1593,41 +1616,70 @@ formatter_get_size_str( const struct formatter_units * u,
 static struct formatter_units size_units;
 
 void
-tr_formatter_size_init( double kilo, const char * b, const char * kb,
-                                     const char * mb, const char * gb )
+tr_formatter_size_init( unsigned int kilo,
+                        const char * kb, const char * mb,
+                        const char * gb, const char * tb )
 {
-    formatter_init( &size_units, kilo, b, kb, mb, gb );
+    formatter_init( &size_units, kilo, kb, mb, gb, tb );
 }
 
 char*
-tr_formatter_size( char * buf, uint64_t bytes, size_t buflen )
+tr_formatter_size_B( char * buf, uint64_t bytes, size_t buflen )
 {
     return formatter_get_size_str( &size_units, buf, bytes, buflen );
 }
 
-const char*
-tr_formatter_size_units( int i )
-{
-    return tr_formatter_units( &size_units, i );
-}
-
 static struct formatter_units speed_units;
 
+unsigned int tr_speed_K = 0u;
+
 void
-tr_formatter_speed_init( double kilo, const char * b, const char * kb,
-                                      const char * mb, const char * gb )
+tr_formatter_speed_init( unsigned int kilo,
+                         const char * kb, const char * mb,
+                         const char * gb, const char * tb )
 {
-    formatter_init( &speed_units, kilo, b, kb, mb, gb );
+    tr_speed_K = kilo;
+    formatter_init( &speed_units, kilo, kb, mb, gb, tb );
 }
 
 char*
-tr_formatter_speed( char * buf, uint64_t bytes_per_second, size_t buflen )
+tr_formatter_speed_KBps( char * buf, double KBps, size_t buflen )
 {
-    return formatter_get_size_str( &speed_units, buf, bytes_per_second, buflen );
+    const double K = speed_units.units[TR_FMT_KB].value;
+    double speed = KBps;
+
+    if( speed <= 999.95 ) /* 0.0 KB to 999.9 KB */
+        tr_snprintf( buf, buflen, "%.2f %s", speed, speed_units.units[TR_FMT_KB].name );
+    else {
+        speed /= K;
+        if( speed <= 99.995 ) /* 0.98 MB to 99.99 MB */
+            tr_snprintf( buf, buflen, "%.2f %s", speed, speed_units.units[TR_FMT_MB].name );
+        else if (speed <= 999.95) /* 100.0 MB to 999.9 MB */
+            tr_snprintf( buf, buflen, "%.1f %s", speed, speed_units.units[TR_FMT_MB].name );
+        else {
+            speed /= K;
+            tr_snprintf( buf, buflen, "%.1f %s", speed, speed_units.units[TR_FMT_GB].name );
+        }
+    }
+
+    return buf;
 }
 
-const char*
-tr_formatter_speed_units( int i )
+static struct formatter_units mem_units;
+
+unsigned int tr_mem_K = 0u;
+ 
+void
+tr_formatter_mem_init( unsigned int kilo,
+                       const char * kb, const char * mb,
+                       const char * gb, const char * tb )
 {
-    return tr_formatter_units( &speed_units, i );
+    tr_mem_K = kilo;
+    formatter_init( &mem_units, kilo, kb, mb, gb, tb );
+}
+
+char*
+tr_formatter_mem_B( char * buf, uint64_t bytes_per_second, size_t buflen )
+{
+    return formatter_get_size_str( &mem_units, buf, bytes_per_second, buflen );
 }
