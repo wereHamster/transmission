@@ -976,7 +976,7 @@ tr_torrentStat( tr_torrent * tor )
                             &s->peersGettingFromUs,
                             s->peersFrom );
 
-    now = tr_date( );
+    now = tr_time_msec( );
     d = tr_peerMgrGetWebseedSpeed_Bps( tor, now );
     s->rawUploadSpeed_KBps     = toSpeedKBps( tr_bandwidthGetRawSpeed_Bps  ( tor->bandwidth, now, TR_UP ) );
     s->pieceUploadSpeed_KBps   = toSpeedKBps( tr_bandwidthGetPieceSpeed_Bps( tor->bandwidth, now, TR_UP ) );
@@ -1000,6 +1000,11 @@ tr_torrentStat( tr_torrent * tor )
     s->addedDate    = tor->addedDate;
     s->doneDate     = tor->doneDate;
     s->startDate    = tor->startDate;
+
+    if (s->activity == TR_STATUS_DOWNLOAD || s->activity == TR_STATUS_SEED)
+        s->idleSecs = difftime(tr_time(), tor->anyDate);
+    else
+        s->idleSecs = -1;
 
     s->corruptEver     = tor->corruptCur    + tor->corruptPrev;
     s->downloadedEver  = tor->downloadedCur + tor->downloadedPrev;
@@ -1741,8 +1746,6 @@ tr_torrentRecheckCompleteness( tr_torrent * tor )
                 tr_announcerTorrentCompleted( tor );
                 tor->doneDate = tor->anyDate = tr_time( );
             }
-
-            tr_torrentCheckSeedRatio( tor );
 
             if( tor->currentDir == tor->incompleteDir )
                 tr_torrentSetLocation( tor, tor->downloadDir, TRUE, NULL, NULL );
