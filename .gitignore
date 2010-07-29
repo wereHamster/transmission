@@ -52,8 +52,13 @@ libtransmission/request-list-test
 libtransmission/rpc-test
 libtransmission/test-peer-id
 libtransmission/utils-test
+libtransmission/history-test
 
 libtransmission/version.h
+
+utils/transmission-create
+utils/transmission-edit
+utils/transmission-show
 
 m4/intltool.m4
 m4/libtool.m4
@@ -88,3 +93,4 @@ third-party/libevent/test/test-init
 third-party/libevent/test/test-time
 third-party/libevent/test/test-weof
 
+third-party/miniupnp/miniupnpcstrings.h
