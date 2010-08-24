@@ -183,6 +183,9 @@ tr_session * fHandle;
     //set stop ratio
     [fRatioStopField setFloatValue: [fDefaults floatForKey: @"RatioLimit"]];
     
+    //set idle seeding minutes
+    [fIdleStopField setIntegerValue: [fDefaults integerForKey: @"IdleLimitMinutes"]];
+    
     //set limits
     [self updateLimitFields];
     
@@ -589,9 +592,15 @@ tr_session * fHandle;
 
 - (void) applyRatioSetting: (id) sender
 {
-    //[[NSNotificationCenter defaultCenter] postNotificationName: @"UpdateUI" object: nil];
     tr_sessionSetRatioLimited(fHandle, [fDefaults boolForKey: @"RatioCheck"]);
     tr_sessionSetRatioLimit(fHandle, [fDefaults floatForKey: @"RatioLimit"]);
+}
+
+- (void) setRatioStop: (id) sender
+{
+    [fDefaults setFloat: [sender floatValue] forKey: @"RatioLimit"];
+    
+    [self applyRatioSetting: nil];
 }
 
 - (void) updateRatioStopField
@@ -602,11 +611,17 @@ tr_session * fHandle;
     [self applyRatioSetting: nil];
 }
 
-- (void) setRatioStop: (id) sender
+- (void) applyIdleStopSetting: (id) sender
 {
-    [fDefaults setFloat: [sender floatValue] forKey: @"RatioLimit"];
+    tr_sessionSetIdleLimited(fHandle, [fDefaults boolForKey: @"IdleLimitCheck"]);
+    tr_sessionSetIdleLimit(fHandle, [fDefaults integerForKey: @"IdleLimitMinutes"]);
+}
+
+- (void) setIdleStop: (id) sender
+{
+    [fDefaults setInteger: [sender integerValue] forKey: @"IdleLimitMinutes"];
     
-    [self applyRatioSetting: nil];
+    [self applyIdleStopSetting: nil];
 }
 
 - (void) updateLimitFields
@@ -1156,7 +1171,7 @@ tr_session * fHandle;
     
     //dht
     const BOOL lpd = tr_sessionIsLPDEnabled(fHandle);
-    [fDefaults setBool: lpd forKey: @"LocalPeerDiscovery"];
+    [fDefaults setBool: lpd forKey: @"LocalPeerDiscoveryGlobal"];
     
     //auto start
     const BOOL autoStart = !tr_sessionGetPaused(fHandle);
@@ -1226,6 +1241,13 @@ tr_session * fHandle;
     const float ratioLimit = tr_sessionGetRatioLimit(fHandle);
     [fDefaults setFloat: ratioLimit forKey: @"RatioLimit"];
     
+    //Idle seed limit
+    const BOOL idleLimited = tr_sessionIsIdleLimited(fHandle);
+    [fDefaults setBool: idleLimited forKey: @"IdleLimitCheck"];
+    
+    const NSUInteger idleLimitMin = tr_sessionGetIdleLimit(fHandle);
+    [fDefaults setInteger: idleLimitMin forKey: @"IdleLimitMinutes"];
+    
     //update gui if loaded
     if (fHasLoaded)
     {
@@ -1264,6 +1286,9 @@ tr_session * fHandle;
         
         //ratio limit enabled handled by bindings
         [fRatioStopField setFloatValue: ratioLimit];
+        
+        //idle limit enabled handled by bindings
+        [fIdleStopField setIntegerValue: idleLimitMin];
     }
     
     [[NSNotificationCenter defaultCenter] postNotificationName: @"SpeedLimitUpdate" object: nil];

@@ -45,27 +45,29 @@
 #define MEM_G_STR "GiB"
 #define MEM_T_STR "TiB"
 
-#define DISK_K 1000
-#define DISK_B_STR "B"
-#define DISK_K_STR "kB"
-#define DISK_M_STR "MB"
-#define DISK_G_STR "GB"
-#define DISK_T_STR "TB"
+#define DISK_K 1024
+#define DISK_B_STR   "B"
+#define DISK_K_STR "KiB"
+#define DISK_M_STR "MiB"
+#define DISK_G_STR "GiB"
+#define DISK_T_STR "TiB"
 
-#define SPEED_K 1000
-#define SPEED_B_STR "B/s"
-#define SPEED_K_STR "kB/s"
-#define SPEED_M_STR "MB/s"
-#define SPEED_G_STR "GB/s"
-#define SPEED_T_STR "TB/s"
+#define SPEED_K 1024
+#define SPEED_B_STR   "B/s"
+#define SPEED_K_STR "KiB/s"
+#define SPEED_M_STR "MiB/s"
+#define SPEED_G_STR "GiB/s"
+#define SPEED_T_STR "TiB/s"
 
 /***
 ****
 ***/
 
 #define LINEWIDTH 80
-#define MY_NAME "transmissioncli"
+#define MY_CONFIG_NAME "transmission"
+#define MY_READABLE_NAME "transmission-cli"
 
+static tr_bool showVersion = FALSE;
 static tr_bool verify                = 0;
 static sig_atomic_t gotsig           = 0;
 static sig_atomic_t manualUpdate     = 0;
@@ -90,6 +92,7 @@ static const struct tr_option options[] =
     { 'u', "uplimit",              "Set max upload speed in "SPEED_K_STR, "u",  1, "<speed>"   },
     { 'U', "no-uplimit",           "Don't limit the upload speed", "U",  0, NULL        },
     { 'v', "verify",               "Verify the specified torrent", "v",  0, NULL        },
+    { 'V', "version",              "Show version number and exit", "V", 0, NULL },
     { 'w', "download-dir",         "Where to save downloaded data", "w",  1, "<path>"    },
     { 0, NULL, NULL, NULL, 0, NULL }
 };
@@ -99,7 +102,7 @@ getUsage( void )
 {
     return "A fast and easy BitTorrent client\n"
            "\n"
-           "Usage: " MY_NAME " [options] <file|url|magnet>";
+           "Usage: " MY_READABLE_NAME " [options] <file|url|magnet>";
 }
 
 static int parseCommandLine( tr_benc*, int argc, const char ** argv );
@@ -206,7 +209,7 @@ getConfigDir( int argc, const char ** argv )
     tr_optind = ind;
 
     if( configDir == NULL )
-        configDir = tr_getDefaultConfigDir( MY_NAME );
+        configDir = tr_getDefaultConfigDir( MY_CONFIG_NAME );
 
     return configDir;
 }
@@ -227,23 +230,25 @@ main( int argc, char ** argv )
     tr_formatter_size_init( DISK_K,DISK_K_STR, DISK_M_STR, DISK_G_STR, DISK_T_STR );
     tr_formatter_speed_init( SPEED_K, SPEED_K_STR, SPEED_M_STR, SPEED_G_STR, SPEED_T_STR );
 
-    printf( "Transmission %s - http://www.transmissionbt.com/\n",
-            LONG_VERSION_STRING );
+    printf( "%s %s\n", MY_READABLE_NAME, LONG_VERSION_STRING );
+
+    /* the command line overrides defaults */
+    if( parseCommandLine( &settings, argc, (const char**)argv ) )
+        return EXIT_FAILURE;
+
+    if( showVersion )
+        return 0;
 
     /* user needs to pass in at least one argument */
     if( argc < 2 ) {
-        tr_getopt_usage( MY_NAME, getUsage( ), options );
+        tr_getopt_usage( MY_READABLE_NAME, getUsage( ), options );
         return EXIT_FAILURE;
     }
 
     /* load the defaults from config file + libtransmission defaults */
     tr_bencInitDict( &settings, 0 );
     configDir = getConfigDir( argc, (const char**)argv );
-    tr_sessionLoadSettings( &settings, configDir, MY_NAME );
-
-    /* the command line overrides defaults */
-    if( parseCommandLine( &settings, argc, (const char**)argv ) )
-        return EXIT_FAILURE;
+    tr_sessionLoadSettings( &settings, configDir, MY_CONFIG_NAME );
 
     /* Check the options for validity */
     if( !torrentPath ) {
@@ -265,6 +270,12 @@ main( int argc, char ** argv )
         tr_webRun( h, torrentPath, NULL, onTorrentFileDownloaded, ctor );
         waitingOnWeb = TRUE;
         while( waitingOnWeb ) tr_wait_msec( 1000 );
+    } else {
+        fprintf( stderr, "ERROR: Unrecognized torrent \"%s\".\n", torrentPath );
+        fprintf( stderr, " * If you're trying to create a torrent, use transmission-create.\n" );
+        fprintf( stderr, " * If you're trying to see a torrent's info, use transmission-show.\n" );
+        tr_sessionClose( h );
+        return EXIT_FAILURE;
     }
     tr_free( fileContents );
 
@@ -383,7 +394,9 @@ parseCommandLine( tr_benc * d, int argc, const char ** argv )
                       break;
             case 'U': tr_bencDictAddBool( d, TR_PREFS_KEY_USPEED_ENABLED, FALSE );
                       break;
-            case 'v': verify = 1;
+            case 'v': verify = TRUE;
+                      break;
+            case 'V': showVersion = TRUE;
                       break;
             case 'w': tr_bencDictAddStr( d, TR_PREFS_KEY_DOWNLOAD_DIR, optarg );
                       break;
@@ -394,7 +407,8 @@ parseCommandLine( tr_benc * d, int argc, const char ** argv )
             case 912: tr_bencDictAddInt( d, TR_PREFS_KEY_ENCRYPTION, TR_CLEAR_PREFERRED );
                       break;
             case TR_OPT_UNK:
-                      torrentPath = optarg;
+                      if( torrentPath == NULL )
+                          torrentPath = optarg;
                       break;
             default: return 1;
         }

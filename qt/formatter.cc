@@ -1,11 +1,11 @@
 /*
- * This file Copyright (C) 2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
- * Transmission project are granted a special exemption to clause 2(b)
- * so that the bulk of its code can remain under the MIT license.
- * This exemption does not extend to derived works not owned by
- * the Transmission project.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2
+ * as published by the Free Software Foundation.
+ *
+ * http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  *
  * $Id$
  */
@@ -29,29 +29,29 @@ namespace
     unsigned int size_K;
 }
 
-QString Formatter::unitStrings[3][4];
+QString Formatter::unitStrings[3][5];
 
 void
 Formatter :: initUnits( )
 {
-    speed_K = 1000;
-    unitStrings[SPEED][B]  = tr(  "B/s" );
-    unitStrings[SPEED][KB] = tr( "kB/s" );
-    unitStrings[SPEED][MB] = tr( "MB/s" );
-    unitStrings[SPEED][GB] = tr( "GB/s" );
-    unitStrings[SPEED][TB] = tr( "TB/s" );
+    speed_K = 1024;
+    unitStrings[SPEED][B]  = tr(   "B/s" );
+    unitStrings[SPEED][KB] = tr( "KiB/s" );
+    unitStrings[SPEED][MB] = tr( "MiB/s" );
+    unitStrings[SPEED][GB] = tr( "GiB/s" );
+    unitStrings[SPEED][TB] = tr( "TiB/s" );
     tr_formatter_speed_init( speed_K,
                              qPrintable( unitStrings[SPEED][KB] ),
                              qPrintable( unitStrings[SPEED][MB] ),
                              qPrintable( unitStrings[SPEED][GB] ),
                              qPrintable( unitStrings[SPEED][TB] ) );
 
-    size_K = 1000;
-    unitStrings[SIZE][B]  = tr(  "B" );
-    unitStrings[SIZE][KB] = tr( "KB" );
-    unitStrings[SIZE][MB] = tr( "MB" );
-    unitStrings[SIZE][GB] = tr( "GB" );
-    unitStrings[SIZE][TB] = tr( "TB" );
+    size_K = 1024;
+    unitStrings[SIZE][B]  = tr(   "B" );
+    unitStrings[SIZE][KB] = tr( "KiB" );
+    unitStrings[SIZE][MB] = tr( "MiB" );
+    unitStrings[SIZE][GB] = tr( "GiB" );
+    unitStrings[SIZE][TB] = tr( "TiB" );
     tr_formatter_size_init( size_K,
                             qPrintable( unitStrings[SIZE][KB] ),
                             qPrintable( unitStrings[SIZE][MB] ),
@@ -78,13 +78,13 @@ Formatter :: initUnits( )
 double
 Speed :: KBps( ) const
 {
-    return _Bps / speed_K;
+    return _Bps / (double)speed_K;
 }
 
 Speed
 Speed :: fromKBps( double KBps )
 {
-    return KBps * speed_K;
+    return int( KBps * speed_K );
 }
 
 /***
@@ -92,7 +92,7 @@ Speed :: fromKBps( double KBps )
 ***/
 
 QString
-Formatter :: memToString( double bytes )
+Formatter :: memToString( uint64_t bytes )
 {
     if( !bytes )
         return tr( "None" );
@@ -104,7 +104,7 @@ Formatter :: memToString( double bytes )
 }
 
 QString
-Formatter :: sizeToString( double bytes )
+Formatter :: sizeToString( uint64_t bytes )
 {
     if( !bytes )
         return tr( "None" );

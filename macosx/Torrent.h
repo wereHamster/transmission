@@ -95,8 +95,12 @@
 - (void) setRatioSetting: (tr_ratiolimit) setting;
 - (CGFloat) ratioLimit;
 - (void) setRatioLimit: (CGFloat) limit;
-- (BOOL) seedRatioSet;
 - (CGFloat) progressStopRatio;
+
+- (tr_idlelimit) idleSetting;
+- (void) setIdleSetting: (tr_idlelimit) setting;
+- (NSUInteger) idleLimitMinutes;
+- (void) setIdleLimitMinutes: (NSUInteger) limit;
 
 - (BOOL) usesSpeedLimit: (BOOL) upload;
 - (void) setUseSpeedLimit: (BOOL) use upload: (BOOL) upload;
@@ -150,8 +154,6 @@
 - (CGFloat) progressDone;
 - (CGFloat) progressLeft;
 - (CGFloat) checkingProgress;
-
-- (NSInteger) eta;
 
 - (CGFloat) availableDesired;
 

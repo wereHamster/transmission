@@ -44,6 +44,7 @@
 #define KEY_SPEEDLIMIT_UP       "speed-limit-up"
 #define KEY_SPEEDLIMIT_DOWN     "speed-limit-down"
 #define KEY_RATIOLIMIT          "ratio-limit"
+#define KEY_IDLELIMIT           "idle-limit"
 #define KEY_UPLOADED            "uploaded"
 
 #define KEY_SPEED_KiBps            "speed"
@@ -56,6 +57,8 @@
 #define KEY_SPEEDLIMIT_UP_MODE     "up-mode"
 #define KEY_RATIOLIMIT_RATIO       "ratio-limit"
 #define KEY_RATIOLIMIT_MODE        "ratio-mode"
+#define KEY_IDLELIMIT_MINS         "idle-limit"
+#define KEY_IDLELIMIT_MODE         "idle-mode"
 
 #define KEY_PROGRESS_MTIMES    "mtimes"
 #define KEY_PROGRESS_BITFIELD  "bitfield"
@@ -291,6 +294,14 @@ saveRatioLimits( tr_benc * dict, const tr_torrent * tor )
 }
 
 static void
+saveIdleLimits( tr_benc * dict, const tr_torrent * tor )
+{
+    tr_benc * d = tr_bencDictAddDict( dict, KEY_IDLELIMIT, 2 );
+    tr_bencDictAddInt( d, KEY_IDLELIMIT_MINS, tr_torrentGetIdleLimit( tor ) );
+    tr_bencDictAddInt( d, KEY_IDLELIMIT_MODE, tr_torrentGetIdleMode( tor ) );
+}
+
+static void
 loadSingleSpeedLimit( tr_benc * d, tr_direction dir, tr_torrent * tor )
 {
     int64_t i;
@@ -370,6 +381,27 @@ loadRatioLimits( tr_benc *    dict,
         if( tr_bencDictFindInt( d, KEY_RATIOLIMIT_MODE, &i ) )
             tr_torrentSetRatioMode( tor, i );
       ret = TR_FR_RATIOLIMIT;
+    }
+
+    return ret;
+}
+
+static uint64_t
+loadIdleLimits( tr_benc *    dict,
+                      tr_torrent * tor )
+{
+    uint64_t  ret = 0;
+    tr_benc * d;
+
+    if( tr_bencDictFindDict( dict, KEY_IDLELIMIT, &d ) )
+    {
+        int64_t i;
+        int64_t imin;
+        if( tr_bencDictFindInt( d, KEY_IDLELIMIT_MINS, &imin ) )
+            tr_torrentSetIdleLimit( tor, imin );
+        if( tr_bencDictFindInt( d, KEY_IDLELIMIT_MODE, &i ) )
+            tr_torrentSetIdleMode( tor, i );
+      ret = TR_FR_IDLELIMIT;
     }
 
     return ret;
@@ -538,6 +570,7 @@ tr_torrentSaveResume( tr_torrent * tor )
     }
     saveSpeedLimits( &top, tor );
     saveRatioLimits( &top, tor );
+    saveIdleLimits( &top, tor );
 
     filename = getResumeFilename( tor );
     if(( err = tr_bencToFile( &top, TR_FMT_BENC, filename )))
@@ -672,6 +705,9 @@ loadFromFile( tr_torrent * tor,
 
     if( fieldsToLoad & TR_FR_RATIOLIMIT )
         fieldsLoaded |= loadRatioLimits( &top, tor );
+
+    if( fieldsToLoad & TR_FR_IDLELIMIT )
+        fieldsLoaded |= loadIdleLimits( &top, tor );
 
     /* loading the resume file triggers of a lot of changes,
      * but none of them needs to trigger a re-saving of the

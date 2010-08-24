@@ -170,6 +170,8 @@ const char* tr_getDefaultDownloadDir( void );
 #define TR_PREFS_KEY_LPD_ENABLED                   "lpd-enabled"
 #define TR_PREFS_KEY_DOWNLOAD_DIR                  "download-dir"
 #define TR_PREFS_KEY_ENCRYPTION                    "encryption"
+#define TR_PREFS_KEY_IDLE_LIMIT                    "idle-seeding-limit"
+#define TR_PREFS_KEY_IDLE_LIMIT_ENABLED            "idle-seeding-limit-enabled"
 #define TR_PREFS_KEY_INCOMPLETE_DIR                "incomplete-dir"
 #define TR_PREFS_KEY_INCOMPLETE_DIR_ENABLED        "incomplete-dir-enabled"
 #define TR_PREFS_KEY_LAZY_BITFIELD                 "lazy-bitfield-enabled"
@@ -723,6 +725,12 @@ tr_bool    tr_sessionIsRatioLimited   ( const tr_session * );
 void       tr_sessionSetRatioLimit    ( tr_session *, double desiredRatio );
 double     tr_sessionGetRatioLimit    ( const tr_session * );
 
+void       tr_sessionSetIdleLimited  ( tr_session *, tr_bool isLimited );
+tr_bool    tr_sessionIsIdleLimited   ( const tr_session * );
+
+void       tr_sessionSetIdleLimit ( tr_session *, uint16_t idleMinutes );
+uint16_t   tr_sessionGetIdleLimit ( const tr_session * );
+
 void       tr_sessionSetPeerLimit( tr_session *, uint16_t maxGlobalPeers );
 uint16_t   tr_sessionGetPeerLimit( const tr_session * );
 
@@ -1159,6 +1167,32 @@ double        tr_torrentGetRatioLimit( const tr_torrent  * tor );
 
 tr_bool       tr_torrentGetSeedRatio( const tr_torrent *, double * ratio );
 
+
+/****
+*****  Idle Time Limits
+****/
+
+typedef enum
+{
+    TR_IDLELIMIT_GLOBAL    = 0, /* follow the global settings */
+    TR_IDLELIMIT_SINGLE    = 1, /* override the global settings, seeding until a certain idle time */
+    TR_IDLELIMIT_UNLIMITED = 2  /* override the global settings, seeding regardless of activity */
+}
+tr_idlelimit;
+
+void          tr_torrentSetIdleMode ( tr_torrent         * tor,
+                                      tr_idlelimit         mode );
+
+tr_idlelimit  tr_torrentGetIdleMode ( const tr_torrent   * tor );
+
+void          tr_torrentSetIdleLimit( tr_torrent         * tor,
+                                      uint16_t             idleMinutes );
+
+uint16_t      tr_torrentGetIdleLimit( const tr_torrent   * tor );
+
+
+tr_bool       tr_torrentGetSeedIdle( const tr_torrent *, uint16_t * idleMinutes );
+
 /****
 *****  Peer Limits
 ****/
@@ -1288,6 +1322,10 @@ typedef void ( tr_torrent_completeness_func )( tr_torrent       * torrent,
 typedef void ( tr_torrent_ratio_limit_hit_func )( tr_torrent   * torrent,
                                                   void         * user_data );
 
+typedef void ( tr_torrent_idle_limit_hit_func )( tr_torrent   * torrent,
+                                                 void         * user_data );
+
+
 /**
  * Register to be notified whenever a torrent's "completeness"
  * changes.  This will be called, for example, when a torrent
@@ -1336,6 +1374,20 @@ void tr_torrentSetRatioLimitHitCallback(
      void                           * user_data );
 
 void tr_torrentClearRatioLimitHitCallback( tr_torrent * torrent );
+
+/**
+ * Register to be notified whenever a torrent's idle limit
+ * has been hit. This will be called when the seeding torrent's
+ * idle time has met or exceeded the designated idle limit.
+ *
+ * Has the same restrictions as tr_torrentSetCompletenessCallback
+ */
+void tr_torrentSetIdleLimitHitCallback(
+     tr_torrent                          * torrent,
+     tr_torrent_idle_limit_hit_func        func,
+     void                                * user_data );
+
+void tr_torrentClearIdleLimitHitCallback( tr_torrent * torrent );
 
 
 /**
@@ -1716,11 +1768,11 @@ typedef struct tr_stat
         @see error */
     char errorString[512];
 
-    /** When tr_stat.status is TR_STATUS_CHECK or TR_STATUS_CHECK_WAIT,
+    /** When tr_stat.activity is TR_STATUS_CHECK or TR_STATUS_CHECK_WAIT,
         this is the percentage of how much of the files has been
         verified.  When it gets to 1, the verify process is done.
         Range is [0..1]
-        @see tr_stat.status */
+        @see tr_stat.activity */
     double recheckProgress;
 
     /** How much has been downloaded of the entire torrent.
@@ -1765,6 +1817,8 @@ typedef struct tr_stat
     /** If downloading, estimated number of seconds left until the torrent is done.
         If seeding, estimated number of seconds left until seed ratio is reached. */
     int    eta;
+    /** If seeding, number of seconds left until the idle time limit is reached. */
+    int    etaIdle;
 
     /** Number of peers that the tracker says this torrent has */
     int    peersKnown;
@@ -1846,7 +1900,7 @@ typedef struct tr_stat
     /** Number of seconds since the last activity (or since started).
         -1 if activity is not seeding or downloading. */
     int    idleSecs;
-    
+
     /** A torrent is considered finished if it has met its seed ratio.
         As a result, only paused torrents can be finished. */
     tr_bool   finished;

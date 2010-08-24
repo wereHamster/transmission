@@ -139,20 +139,28 @@
     [fGlobalLimitCheck setState: globalUseSpeedLimit];
     [fGlobalLimitCheck setEnabled: YES];
     
-    //get ratio info
+    //get ratio and idle info
     enumerator = [fTorrents objectEnumerator];
     torrent = [enumerator nextObject]; //first torrent
     
-    NSInteger checkRatio = [torrent ratioSetting];
+    NSInteger checkRatio = [torrent ratioSetting], checkIdle = [torrent idleSetting];
     CGFloat ratioLimit = [torrent ratioLimit];
+    NSUInteger idleLimit = [torrent idleLimitMinutes];
     
-    while ((torrent = [enumerator nextObject]) && (checkRatio != INVALID || ratioLimit != INVALID))
+    while ((torrent = [enumerator nextObject])
+            && (checkRatio != INVALID || ratioLimit != INVALID || checkIdle != INVALID || idleLimit != INVALID))
     {
         if (checkRatio != INVALID && checkRatio != [torrent ratioSetting])
             checkRatio = INVALID;
         
         if (ratioLimit != INVALID && ratioLimit != [torrent ratioLimit])
             ratioLimit = INVALID;
+        
+        if (checkIdle != INVALID && checkIdle != [torrent idleSetting])
+            checkIdle = INVALID;
+        
+        if (idleLimit != INVALID && idleLimit != [torrent idleLimitMinutes])
+            idleLimit = INVALID;
     }
     
     //set ratio view
@@ -173,6 +181,25 @@
         [fRatioLimitField setFloatValue: ratioLimit];
     else
         [fRatioLimitField setStringValue: @""];
+    
+    //set idle view
+    if (checkIdle == TR_IDLELIMIT_SINGLE)
+        index = OPTION_POPUP_LIMIT;
+    else if (checkIdle == TR_IDLELIMIT_UNLIMITED)
+        index = OPTION_POPUP_NO_LIMIT;
+    else if (checkIdle == TR_IDLELIMIT_GLOBAL)
+        index = OPTION_POPUP_GLOBAL;
+    else
+        index = -1;
+    [fIdlePopUp selectItemAtIndex: index];
+    [fIdlePopUp setEnabled: YES];
+    
+    [fIdleLimitField setHidden: checkIdle != TR_IDLELIMIT_SINGLE];
+    if (idleLimit != INVALID)
+        [fIdleLimitField setIntegerValue: idleLimit];
+    else
+        [fIdleLimitField setStringValue: @""];
+    [fIdleLimitLabel setHidden: checkIdle != TR_IDLELIMIT_SINGLE];
     
     //get priority info
     enumerator = [fTorrents objectEnumerator];
@@ -298,10 +325,51 @@
 
 - (void) setRatioLimit: (id) sender
 {
-    CGFloat limit = [sender floatValue];
+    const CGFloat limit = [sender floatValue];
     
     for (Torrent * torrent in fTorrents)
         [torrent setRatioLimit: limit];
+}
+
+- (void) setIdleSetting: (id) sender
+{
+    NSInteger setting;
+    bool single = NO;
+    switch ([sender indexOfSelectedItem])
+    {
+        case OPTION_POPUP_LIMIT:
+            setting = TR_IDLELIMIT_SINGLE;
+            single = YES;
+            break;
+        case OPTION_POPUP_NO_LIMIT:
+            setting = TR_IDLELIMIT_UNLIMITED;
+            break;
+        case OPTION_POPUP_GLOBAL:
+            setting = TR_IDLELIMIT_GLOBAL;
+            break;
+        default:
+            NSAssert1(NO, @"Unknown option selected in idle popup: %d", [sender indexOfSelectedItem]);
+            return;
+    }
+    
+    for (Torrent * torrent in fTorrents)
+        [torrent setIdleSetting: setting];
+    
+    [fIdleLimitField setHidden: !single];
+    [fIdleLimitLabel setHidden: !single];
+    if (single)
+    {
+        [fIdleLimitField selectText: self];
+        [[[self view] window] makeKeyAndOrderFront: self];
+    }
+}
+
+- (void) setIdleLimit: (id) sender
+{
+    const NSUInteger limit = [sender integerValue];
+    
+    for (Torrent * torrent in fTorrents)
+        [torrent setIdleLimitMinutes: limit];
 }
 
 - (void) setPriority: (id) sender
@@ -387,6 +455,12 @@
         [fRatioPopUp selectItemAtIndex: -1];
         [fRatioLimitField setHidden: YES];
         [fRatioLimitField setStringValue: @""];
+        
+        [fIdlePopUp setEnabled: NO];
+        [fIdlePopUp selectItemAtIndex: -1];
+        [fIdleLimitField setHidden: YES];
+        [fIdleLimitField setStringValue: @""];
+        [fIdleLimitLabel setHidden: YES];
         
         [fPeersConnectField setEnabled: NO];
         [fPeersConnectField setStringValue: @""];

@@ -118,8 +118,9 @@ enum
 };
 /* Calculte runs
  *   - Stale runs, runs sitting in cache for a long time or runs not growing, get priority.
+ *     Returns number of runs.
  */
-static void
+static int
 calcRuns( tr_cache * cache, struct run_info * runs )
 {
     const int n = tr_ptrArraySize( &cache->blocks );
@@ -146,13 +147,13 @@ calcRuns( tr_cache * cache, struct run_info * runs )
 //fprintf(stderr,"block run at pos %d of length %d and age %ld adjusted +%d\n",runs[i].pos,runs[i].len,now-runs[i].last_block_time,rank-runs[i].len);
     }
 
-    //fprintf( stderr, "%d block runs\n", i-1 );
+    //fprintf( stderr, "%d block runs\n", i );
     qsort( runs, i, sizeof( struct run_info ), compareRuns );
-    //return i;
+    return i;
 }
 
 static int
-flushContiguous( tr_cache * cache, int pos, int n, int rank )
+flushContiguous( tr_cache * cache, int pos, int n )
 {
     int i;
     int err = 0;
@@ -176,10 +177,12 @@ flushContiguous( tr_cache * cache, int pos, int n, int rank )
     }
     tr_ptrArrayErase( &cache->blocks, pos, pos+n );
 
+#if 0
     tr_tordbg( tor, "Writing to disk piece %d, offset %d, len %d", (int)piece, (int)offset, (int)(walk-buf) );
     tr_ndbg( MY_NAME, "Removing %d blocks from cache, rank: %d - %d left", n, rank, tr_ptrArraySize(&cache->blocks) );
-    //fprintf( stderr, "%s - Writing to disk piece %d, offset %d, len %d\n", tr_torrentName(tor), (int)piece, (int)offset, (int)(walk-buf) );
-    //fprintf( stderr, "%s - Removing %d blocks from cache; %d left\n", MY_NAME, n, tr_ptrArraySize(&cache->blocks) );
+    fprintf( stderr, "%s - Writing to disk piece %d, offset %d, len %d\n", tr_torrentName(tor), (int)piece, (int)offset, (int)(walk-buf) );
+    fprintf( stderr, "%s - Removing %d blocks from cache; %d left\n", MY_NAME, n, tr_ptrArraySize(&cache->blocks) );
+#endif
 
     err = tr_ioWrite( tor, piece, offset, walk-buf, buf );
     tr_free( buf );
@@ -196,7 +199,7 @@ flushRuns( tr_cache * cache, struct run_info * runs, int n )
 
     for( i = 0; !err && i < n; ++i )
     {
-        err = flushContiguous( cache, runs[i].pos, runs[i].len, runs[i].rank );
+        err = flushContiguous( cache, runs[i].pos, runs[i].len );
         for( j = i + 1; j < n; ++j )
             if( runs[j].pos > runs[i].pos )
                 runs[j].pos -= runs[i].len;
@@ -397,11 +400,11 @@ int tr_cacheFlushDone( tr_cache * cache )
 
     if( tr_ptrArraySize( &cache->blocks ) > 0 )
     {
-        struct run_info * runs = tr_new0( struct run_info, tr_ptrArraySize( &cache->blocks ) );
-        int i = 0;
+        struct run_info * runs = tr_new( struct run_info, tr_ptrArraySize( &cache->blocks ) );
+        int i = 0, n;
 
-        calcRuns( cache, runs );
-        while( runs[i].is_piece_done || runs[i].is_multi_piece )
+        n = calcRuns( cache, runs );
+        while( i < n && ( runs[i].is_piece_done || runs[i].is_multi_piece ) )
             runs[i++].rank |= SESSIONFLAG;
         err = flushRuns( cache, runs, i );
         tr_free( runs );
@@ -426,7 +429,7 @@ tr_cacheFlushFile( tr_cache * cache, tr_torrent * torrent, tr_file_index_t i )
         const struct cache_block * b = tr_ptrArrayNth( &cache->blocks, pos );
         if( b->tor != torrent ) break;
         if( ( b->block < begin ) || ( b->block >= end ) ) break;
-        err = flushContiguous( cache, pos, getBlockRun( cache, pos, NULL ), 0 );
+        err = flushContiguous( cache, pos, getBlockRun( cache, pos, NULL ) );
     }
 
     return err;
@@ -443,7 +446,7 @@ tr_cacheFlushTorrent( tr_cache * cache, tr_torrent * torrent )
     {
         const struct cache_block * b = tr_ptrArrayNth( &cache->blocks, pos );
         if( b->tor != torrent ) break;
-        err = flushContiguous( cache, pos, getBlockRun( cache, pos, NULL ), 0 );
+        err = flushContiguous( cache, pos, getBlockRun( cache, pos, NULL ) );
     }
 
     return err;

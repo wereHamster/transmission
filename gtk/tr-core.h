@@ -117,8 +117,7 @@ void     tr_core_add_list( TrCore *    self,
 
 /** @brief Add a torrent. */
 gboolean tr_core_add_metainfo( TrCore      * core,
-                               const char  * payload,
-                               const char  * optional_filename,
+                               const char  * base64_metainfo,
                                gboolean    * setme_success,
                                GError     ** err );
 
@@ -196,7 +195,11 @@ enum
     MC_TORRENT_RAW,
     MC_SPEED_UP,
     MC_SPEED_DOWN,
+    MC_ACTIVE,
     MC_ACTIVITY,
+    MC_FINISHED,
+    MC_PRIORITY,
+    MC_TRACKERS,
     MC_ROW_COUNT
 };
 

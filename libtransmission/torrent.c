@@ -124,6 +124,25 @@ tr_torrentFindFromObfuscatedHash( tr_session * session,
     return NULL;
 }
 
+tr_bool
+tr_torrentIsPieceTransferAllowed( const tr_torrent  * tor,
+                                  tr_direction        direction )
+{
+    int limit;
+    tr_bool allowed = TRUE;
+
+    if( tr_torrentUsesSpeedLimit( tor, direction ) )
+        if( tr_torrentGetSpeedLimit_Bps( tor, direction ) <= 0 )
+            allowed = FALSE;
+
+    if( tr_torrentUsesSessionLimits( tor ) )
+        if( tr_sessionGetActiveSpeedLimit_Bps( tor->session, direction, &limit ) )
+            if( limit <= 0 )
+                allowed = FALSE;
+
+    return allowed;
+}
+
 /***
 ****  PER-TORRENT UL / DL SPEEDS
 ***/
@@ -247,25 +266,6 @@ tr_torrentGetRatioLimit( const tr_torrent * tor )
 }
 
 tr_bool
-tr_torrentIsPieceTransferAllowed( const tr_torrent  * tor,
-                                  tr_direction        direction )
-{
-    int limit;
-    tr_bool allowed = TRUE;
-
-    if( tr_torrentUsesSpeedLimit( tor, direction ) )
-        if( tr_torrentGetSpeedLimit_Bps( tor, direction ) <= 0 )
-            allowed = FALSE;
-
-    if( tr_torrentUsesSessionLimits( tor ) )
-        if( tr_sessionGetActiveSpeedLimit_Bps( tor->session, direction, &limit ) )
-            if( limit <= 0 )
-                allowed = FALSE;
-
-    return allowed;
-}
-
-tr_bool
 tr_torrentGetSeedRatio( const tr_torrent * tor, double * ratio )
 {
     tr_bool isLimited;
@@ -323,13 +323,103 @@ tr_torrentIsSeedRatioDone( tr_torrent * tor )
     return tr_torrentGetSeedRatioBytes( tor, &bytesLeft, NULL ) && !bytesLeft;
 }
 
+/***
+****
+***/
+
 void
-tr_torrentCheckSeedRatio( tr_torrent * tor )
+tr_torrentSetIdleMode( tr_torrent *  tor, tr_idlelimit mode )
+{
+    assert( tr_isTorrent( tor ) );
+    assert( mode==TR_IDLELIMIT_GLOBAL || mode==TR_IDLELIMIT_SINGLE || mode==TR_IDLELIMIT_UNLIMITED  );
+
+    if( mode != tor->idleLimitMode )
+    {
+        tor->idleLimitMode = mode;
+
+        tr_torrentSetDirty( tor );
+    }
+}
+
+tr_idlelimit
+tr_torrentGetIdleMode( const tr_torrent * tor )
 {
     assert( tr_isTorrent( tor ) );
 
+    return tor->idleLimitMode;
+}
+
+void
+tr_torrentSetIdleLimit( tr_torrent * tor, uint16_t idleMinutes )
+{
+    assert( tr_isTorrent( tor ) );
+
+    if( idleMinutes > 0 )
+    {
+        tor->idleLimitMinutes = idleMinutes;
+
+        tr_torrentSetDirty( tor );
+    }
+}
+
+uint16_t
+tr_torrentGetIdleLimit( const tr_torrent * tor )
+{
+    assert( tr_isTorrent( tor ) );
+
+    return tor->idleLimitMinutes;
+}
+
+tr_bool
+tr_torrentGetSeedIdle( const tr_torrent * tor, uint16_t * idleMinutes )
+{
+    tr_bool isLimited;
+
+    switch( tr_torrentGetIdleMode( tor ) )
+    {
+        case TR_IDLELIMIT_SINGLE:
+            isLimited = TRUE;
+            if( idleMinutes )
+                *idleMinutes = tr_torrentGetIdleLimit( tor );
+            break;
+
+        case TR_IDLELIMIT_GLOBAL:
+            isLimited = tr_sessionIsIdleLimited( tor->session );
+            if( isLimited && idleMinutes )
+                *idleMinutes = tr_sessionGetIdleLimit( tor->session );
+            break;
+
+        default: /* TR_IDLELIMIT_UNLIMITED */
+            isLimited = FALSE;
+            break;
+    }
+
+    return isLimited;
+}
+
+static tr_bool
+tr_torrentIsSeedIdleLimitDone( tr_torrent * tor )
+{
+    uint16_t idleMinutes;
+#warning can this use the idleSecs from tr_stat?
+    return tr_torrentGetSeedIdle( tor, &idleMinutes )
+        && difftime(tr_time(), MAX(tor->startDate, tor->activityDate)) >= idleMinutes * 60u;
+}
+
+/***
+****
+***/
+
+void
+tr_torrentCheckSeedLimit( tr_torrent * tor )
+{
+    assert( tr_isTorrent( tor ) );
+
+    if( !tor->isRunning || !tr_torrentIsSeed( tor ) )
+        return;
+
     /* if we're seeding and reach our seed ratio limit, stop the torrent */
-    if( tor->isRunning && tr_torrentIsSeedRatioDone( tor ) )
+    if( tr_torrentIsSeedRatioDone( tor ) )
     {
         tr_torinf( tor, "Seed ratio reached; pausing torrent" );
 
@@ -339,8 +429,18 @@ tr_torrentCheckSeedRatio( tr_torrent * tor )
         if( tor->ratio_limit_hit_func != NULL )
             tor->ratio_limit_hit_func( tor, tor->ratio_limit_hit_func_user_data );
     }
-}
+    /* if we're seeding and reach our inactiviy limit, stop the torrent */
+    else if( tr_torrentIsSeedIdleLimitDone( tor ) )
+    {
+        tr_torinf( tor, "Seeding idle limit reached; pausing torrent" );
 
+        tor->isStopping = TRUE;
+
+        /* maybe notify the client */
+        if( tor->idle_limit_hit_func != NULL )
+            tor->idle_limit_hit_func( tor, tor->idle_limit_hit_func_user_data );
+    }
+}
 
 /***
 ****
@@ -708,6 +808,12 @@ torrentInit( tr_torrent * tor, const tr_ctor * ctor )
         tr_torrentSetRatioLimit( tor, tr_sessionGetRatioLimit( tor->session ) );
     }
 
+    if( !( loaded & TR_FR_IDLELIMIT ) )
+    {
+        tr_torrentSetIdleMode( tor, TR_IDLELIMIT_GLOBAL );
+        tr_torrentSetIdleLimit( tor, tr_sessionGetIdleLimit( tor->session ) );
+    }
+
     {
         tr_torrent * it = NULL;
         tr_torrent * last = NULL;
@@ -950,6 +1056,7 @@ tr_torrentStat( tr_torrent * tor )
     uint64_t                seedRatioBytesLeft;
     uint64_t                seedRatioBytesGoal;
     tr_bool                 seedRatioApplies;
+    uint16_t                seedIdleMinutes;
 
     if( !tor )
         return NULL;
@@ -1002,7 +1109,7 @@ tr_torrentStat( tr_torrent * tor )
     s->startDate    = tor->startDate;
 
     if (s->activity == TR_STATUS_DOWNLOAD || s->activity == TR_STATUS_SEED)
-        s->idleSecs = difftime(tr_time(), tor->anyDate);
+        s->idleSecs = difftime(tr_time(), MAX(s->startDate, s->activityDate));
     else
         s->idleSecs = -1;
 
@@ -1059,6 +1166,8 @@ tr_torrentStat( tr_torrent * tor )
                 s->eta = TR_ETA_UNKNOWN;
             else
                 s->eta = s->leftUntilDone / toSpeedBytes(tor->etaDLSpeed_KBps);
+
+            s->etaIdle = TR_ETA_NOT_AVAIL;
             break;
 
         case TR_STATUS_SEED: {
@@ -1076,14 +1185,21 @@ tr_torrentStat( tr_torrent * tor )
                 else
                     s->eta = seedRatioBytesLeft / toSpeedBytes(tor->etaULSpeed_KBps);
             }
+
+            if( tor->etaULSpeed_KBps < 1 && tr_torrentGetSeedIdle( tor, &seedIdleMinutes ) )
+                s->etaIdle = seedIdleMinutes * 60 - s->idleSecs;
+            else
+                s->etaIdle = TR_ETA_NOT_AVAIL;
             break;
         }
 
         default:
             s->eta = TR_ETA_NOT_AVAIL;
+            s->etaIdle = TR_ETA_NOT_AVAIL;
             break;
     }
 
+    #warning (maybe) do something for idle?
     /* s->haveValid is here to make sure a torrent isn't marked 'finished'
      * when the user hits "uncheck all" prior to starting the torrent... */
     s->finished = seedRatioApplies && !seedRatioBytesLeft && s->haveValid;
@@ -1671,6 +1787,23 @@ void
 tr_torrentClearRatioLimitHitCallback( tr_torrent * torrent )
 {
     tr_torrentSetRatioLimitHitCallback( torrent, NULL, NULL );
+}
+
+void
+tr_torrentSetIdleLimitHitCallback( tr_torrent                    * tor,
+                                   tr_torrent_idle_limit_hit_func  func,
+                                   void                          * user_data )
+{
+    assert( tr_isTorrent( tor ) );
+
+    tor->idle_limit_hit_func = func;
+    tor->idle_limit_hit_func_user_data = user_data;
+}
+
+void
+tr_torrentClearIdleLimitHitCallback( tr_torrent * torrent )
+{
+    tr_torrentSetIdleLimitHitCallback( torrent, NULL, NULL );
 }
 
 static void

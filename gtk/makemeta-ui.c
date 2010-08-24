@@ -32,7 +32,9 @@ typedef struct
 {
     char * target;
     guint progress_tag;
+    GtkWidget * file_radio;
     GtkWidget * file_chooser;
+    GtkWidget * folder_radio;
     GtkWidget * folder_chooser;
     GtkWidget * pieces_lb;
     GtkWidget * destination_chooser;
@@ -296,16 +298,16 @@ updatePiecesLabel( MakeMetaUI * ui )
     {
         char buf[128];
         tr_strlsize( buf, builder->totalSize, sizeof( buf ) );
-        g_string_append_printf( gstr, ngettext( "%1$s; %2$'d File",
-                                                "%1$s; %2$'d Files",
-                                                builder->fileCount ),
+        g_string_append_printf( gstr, gtr_ngettext( "%1$s; %2$'d File",
+                                                    "%1$s; %2$'d Files",
+                                                    builder->fileCount ),
                                 buf, builder->fileCount );
         g_string_append( gstr, "; " );
   
         tr_formatter_mem_B( buf, builder->pieceSize, sizeof( buf ) );
-        g_string_append_printf( gstr, ngettext( "%1$'d Piece @ %2$s",
-                                                "%1$'d Pieces @ %2$s",
-                                                builder->pieceCount ),
+        g_string_append_printf( gstr, gtr_ngettext( "%1$'d Piece @ %2$s",
+                                                    "%1$'d Pieces @ %2$s",
+                                                    builder->pieceCount ),
                                       builder->pieceCount, buf );
     }
     g_string_append( gstr, "</i>" );
@@ -377,6 +379,47 @@ getDefaultSavePath( void )
     return path;
 }
 
+static void
+on_drag_data_received( GtkWidget         * widget           UNUSED,
+                       GdkDragContext    * drag_context,
+                       gint                x                UNUSED,
+                       gint                y                UNUSED,
+                       GtkSelectionData  * selection_data,
+                       guint               info             UNUSED,
+                       guint               time_,
+                       gpointer            user_data )
+{
+    gboolean success = FALSE;
+    MakeMetaUI * ui = user_data;
+    char ** uris = gtk_selection_data_get_uris( selection_data );
+
+    if( uris && uris[0] )
+    {
+        const char * uri = uris[ 0 ];
+        gchar * filename = g_filename_from_uri( uri, NULL, NULL );
+
+        if( g_file_test( filename, G_FILE_TEST_IS_DIR ) )
+        {
+            /* a directory was dragged onto the dialog... */
+            gtk_toggle_button_set_active( GTK_TOGGLE_BUTTON( ui->folder_radio ), TRUE );
+            gtk_file_chooser_set_current_folder( GTK_FILE_CHOOSER( ui->folder_chooser ), filename );
+            success = TRUE;
+        }
+        else if( g_file_test( filename, G_FILE_TEST_IS_REGULAR ) )
+        {
+            /* a file was dragged on to the dialog... */
+            gtk_toggle_button_set_active( GTK_TOGGLE_BUTTON( ui->file_radio ), TRUE );
+            gtk_file_chooser_set_filename( GTK_FILE_CHOOSER( ui->file_chooser ), filename );
+            success = TRUE;
+        }
+
+        g_free( filename );
+    }
+
+    g_strfreev( uris );
+    gtk_drag_finish( drag_context, success, FALSE, time_ );
+}
+
 GtkWidget*
 make_meta_ui( GtkWindow  * parent, TrCore * core )
 {
@@ -415,6 +458,7 @@ make_meta_ui( GtkWindow  * parent, TrCore * core )
         g_signal_connect( l, "toggled", G_CALLBACK( onFolderToggled ), ui );
         g_signal_connect( l, "toggled", G_CALLBACK( onSourceToggled ), w );
         g_signal_connect( w, "selection-changed", G_CALLBACK( onChooserChosen ), ui );
+        ui->folder_radio = l;
         ui->folder_chooser = w;
         gtk_widget_set_sensitive( GTK_WIDGET( w ), FALSE );
         hig_workarea_add_row_w( t, &row, l, w, NULL );
@@ -426,6 +470,7 @@ make_meta_ui( GtkWindow  * parent, TrCore * core )
         g_signal_connect( l, "toggled", G_CALLBACK( onFileToggled ), ui );
         g_signal_connect( l, "toggled", G_CALLBACK( onSourceToggled ), w );
         g_signal_connect( w, "selection-changed", G_CALLBACK( onChooserChosen ), ui );
+        ui->file_radio = l;
         ui->file_chooser = w;
         hig_workarea_add_row_w( t, &row, l, w, NULL );
 
@@ -473,6 +518,10 @@ make_meta_ui( GtkWindow  * parent, TrCore * core )
 
     hig_workarea_finish( t, &row );
     gtk_box_pack_start( GTK_BOX( GTK_DIALOG( d )->vbox ), t, TRUE, TRUE, 0 );
+
+    gtk_drag_dest_set( d, GTK_DEST_DEFAULT_ALL, NULL, 0, GDK_ACTION_COPY );
+    gtk_drag_dest_add_uri_targets( d );
+    g_signal_connect( d, "drag-data-received", G_CALLBACK( on_drag_data_received ), ui );
 
     return d;
 }

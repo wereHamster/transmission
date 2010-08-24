@@ -1,11 +1,11 @@
 /*
- * This file Copyright (C) 2009-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
- * Transmission project are granted a special exemption to clause 2(b)
- * so that the bulk of its code can remain under the MIT license.
- * This exemption does not extend to derived works not owned by
- * the Transmission project.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2
+ * as published by the Free Software Foundation.
+ *
+ * http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  *
  * $Id$
  */
@@ -160,6 +160,8 @@ TorrentDelegate :: progressString( const Torrent& tor ) const
 QString
 TorrentDelegate :: shortTransferString( const Torrent& tor ) const
 {
+    static const QChar upArrow( 0x2191 );
+    static const QChar downArrow( 0x2193 );
     const bool haveMeta( tor.hasMetadata( ) );
     const bool haveDown( haveMeta && tor.peersWeAreDownloadingFrom( ) > 0 );
     const bool haveUp( haveMeta && tor.peersWeAreUploadingTo( ) > 0 );
@@ -171,11 +173,11 @@ TorrentDelegate :: shortTransferString( const Torrent& tor ) const
         upStr = Formatter::speedToString( tor.uploadSpeed( ) );
 
     if( haveDown && haveUp )
-        str = tr( "Down: %1, Up: %2" ).arg(downStr).arg(upStr);
+        str = tr( "%1 %2, %3 %4" ).arg(downArrow).arg(downStr).arg(upArrow).arg(upStr);
     else if( haveDown )
-        str = tr( "Down: %1" ).arg( downStr );
+        str = tr( "%1 %2" ).arg(downArrow).arg(downStr);
     else if( haveUp )
-        str = tr( "Up: %1" ).arg( upStr );
+        str = tr( "%1 %2" ).arg(upArrow).arg(upStr);
     else if( tor.hasMetadata( ) )
         str = tr( "Idle" );
 
@@ -276,18 +278,18 @@ TorrentDelegate :: sizeHint( const QStyleOptionViewItem& option, const Torrent& 
     nameFont.setWeight( QFont::Bold );
     const QFontMetrics nameFM( nameFont );
     const QString nameStr( tor.name( ) );
-    const QSize nameSize( nameFM.size( 0, nameStr ) );
+    const int nameWidth = nameFM.width( nameStr );
     QFont statusFont( option.font );
     statusFont.setPointSize( int( option.font.pointSize( ) * 0.9 ) );
     const QFontMetrics statusFM( statusFont );
     const QString statusStr( statusString( tor ) );
-    const QSize statusSize( statusFM.size( 0, statusStr ) );
+    const int statusWidth = statusFM.width( statusStr );
     QFont progressFont( statusFont );
     const QFontMetrics progressFM( progressFont );
     const QString progressStr( progressString( tor ) );
-    const QSize progressSize( progressFM.size( 0, progressStr ) );
+    const int progressWidth = progressFM.width( progressStr );
     const QSize m( margin( *style ) );
-    return QSize( m.width()*2 + iconSize + GUI_PAD + MAX3( nameSize.width(), statusSize.width(), progressSize.width() ),
+    return QSize( m.width()*2 + iconSize + GUI_PAD + MAX3( nameWidth, statusWidth, progressWidth ),
                   //m.height()*3 + nameFM.lineSpacing() + statusFM.lineSpacing()*2 + progressFM.lineSpacing() );
                   m.height()*3 + nameFM.lineSpacing() + statusFM.lineSpacing() + BAR_HEIGHT + progressFM.lineSpacing() );
 }
@@ -296,7 +298,7 @@ QSize
 TorrentDelegate :: sizeHint( const QStyleOptionViewItem  & option,
                              const QModelIndex           & index ) const
 {
-    const Torrent * tor( index.model()->data( index, TorrentModel::TorrentRole ).value<const Torrent*>() );
+    const Torrent * tor( index.data( TorrentModel::TorrentRole ).value<const Torrent*>() );
     return sizeHint( option, *tor );
 }
 
@@ -305,7 +307,7 @@ TorrentDelegate :: paint( QPainter                    * painter,
                           const QStyleOptionViewItem  & option,
                           const QModelIndex           & index) const
 {
-    const Torrent * tor( index.model()->data( index, TorrentModel::TorrentRole ).value<const Torrent*>() );
+    const Torrent * tor( index.data( TorrentModel::TorrentRole ).value<const Torrent*>() );
     painter->save( );
     painter->setClipRect( option.rect );
     drawBackground( painter, option, index );

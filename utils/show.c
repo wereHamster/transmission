@@ -34,23 +34,24 @@
 #define MEM_G_STR "GiB"
 #define MEM_T_STR "TiB"
 
-#define DISK_K 1000
+#define DISK_K 1024
 #define DISK_B_STR "B"
-#define DISK_K_STR "kB"
-#define DISK_M_STR "MB"
-#define DISK_G_STR "GB"
-#define DISK_T_STR "TB"
+#define DISK_K_STR "KiB"
+#define DISK_M_STR "MiB"
+#define DISK_G_STR "GiB"
+#define DISK_T_STR "TiB"
 
-#define SPEED_K 1000
+#define SPEED_K 1024
 #define SPEED_B_STR "B/s"
-#define SPEED_K_STR "kB/s"
-#define SPEED_M_STR "MB/s"
-#define SPEED_G_STR "GB/s"
-#define SPEED_T_STR "TB/s"
+#define SPEED_K_STR "KiB/s"
+#define SPEED_M_STR "MiB/s"
+#define SPEED_G_STR "GiB/s"
+#define SPEED_T_STR "TiB/s"
 
 static tr_option options[] =
 {
   { 's', "scrape", "Ask the torrent's trackers how many peers are in the torrent's swarm", "s", 0, NULL },
+  { 'V', "version", "Show version number and exit", "V", 0, NULL },
   { 0, NULL, NULL, NULL, 0, NULL }
 };
 
@@ -61,6 +62,7 @@ getUsage( void )
 }
 
 static tr_bool scrapeFlag = FALSE;
+static tr_bool showVersion = FALSE;
 const char * filename = NULL;
 
 static int
@@ -74,6 +76,7 @@ parseCommandLine( int argc, const char ** argv )
         switch( c )
         {
             case 's': scrapeFlag = TRUE; break;
+            case 'V': showVersion = TRUE; break;
             case TR_OPT_UNK: filename = optarg; break;
             default: return 1;
         }
@@ -257,6 +260,12 @@ main( int argc, char * argv[] )
 
     if( parseCommandLine( argc, (const char**)argv ) )
         return EXIT_FAILURE;
+
+    if( showVersion )
+    {
+        fprintf( stderr, MY_NAME" "LONG_VERSION_STRING"\n" );
+        return 0;
+    }
 
     /* make sure the user specified a filename */
     if( !filename )

@@ -1350,11 +1350,11 @@ peerCallbackFunc( tr_peer * peer, const tr_peer_event * e, void * vt )
             const time_t now = tr_time( );
             tr_torrent * tor = t->tor;
 
-            tr_torrentSetActivityDate( tor, now );
-
-            if( e->wasPieceData ) {
+            if( e->wasPieceData )
+            {
                 tor->uploadedCur += e->length;
                 tr_announcerAddBytes( tor, TR_ANN_UP, e->length );
+                tr_torrentSetActivityDate( tor, now );
                 tr_torrentSetDirty( tor );
             }
 
@@ -1397,10 +1397,10 @@ peerCallbackFunc( tr_peer * peer, const tr_peer_event * e, void * vt )
             const time_t now = tr_time( );
             tr_torrent * tor = t->tor;
 
-            tr_torrentSetActivityDate( tor, now );
-
-            if( e->wasPieceData ) {
+            if( e->wasPieceData )
+            {
                 tor->downloadedCur += e->length;
+                tr_torrentSetActivityDate( tor, now );
                 tr_torrentSetDirty( tor );
             }
 
@@ -3165,7 +3165,7 @@ bandwidthPulse( int foo UNUSED, short bar UNUSED, void * vmgr )
     /* possibly stop torrents that have seeded enough */
     tor = NULL;
     while(( tor = tr_torrentNext( mgr->session, tor )))
-        tr_torrentCheckSeedRatio( tor );
+        tr_torrentCheckSeedLimit( tor );
 
     /* run the completeness check for any torrents that need it */
     tor = NULL;

@@ -91,19 +91,6 @@ gboolean gtr_is_magnet_link( const char * str );
 
 gboolean gtr_is_hex_hashcode( const char * str );
 
-
-/* create a copy of a GSList of strings, this dups the actual strings too */
-GSList * dupstrlist( GSList * list );
-
-/* joins a GSList of strings into one string using an optional separator */
-char * joinstrlist( GSList *list, char *  sep );
-
-/* free a GSList of strings */
-void freestrlist( GSList *list );
-
-/* decodes a string that has been urlencoded */
-char * decode_uri( const char * uri );
-
 /***
 ****
 ***/
@@ -152,27 +139,29 @@ void gtr_widget_set_tooltip_text( GtkWidget * w, const char * tip );
 /* backwards-compatible wrapper around gtk_widget_get_realized() */
 gboolean gtr_widget_get_realized( GtkWidget * w );
 
+/* backwards-compatible wrapper around gtk_widget_set_visible() */
+void gtr_widget_set_visible( GtkWidget *, gboolean );
+
 /* backwards-compatible wrapper around g_object_ref_sink() */
 gpointer gtr_object_ref_sink( gpointer object );
 
-/***
-****
-***/
+/* backwards-compatible wrapper around g_strcmp0() */
+int gtr_strcmp0( const char * str1, const char * str2 );
 
-/* create a button with the specified mnemonic and stock icon */
-GtkWidget * gtr_button_new_from_stock( const char * stock,
-                                       const char * mnemonic );
-
+/* backwards-compatible wrapper around g_dngettext() */
+const gchar* gtr_ngettext( const gchar*, const gchar*, gulong );
 
 /***
 ****
 ***/
-
-void gtr_priority_combo_set_value( GtkWidget * w, tr_priority_t );
-
-tr_priority_t gtr_priority_combo_get_value( GtkWidget * w );
 
 GtkWidget * gtr_priority_combo_new( void );
+#define gtr_priority_combo_get_value(w)     gtr_combo_box_get_active_enum(w)
+#define gtr_priority_combo_set_value(w,val) gtr_combo_box_set_active_enum(w,val)
+
+GtkWidget * gtr_combo_box_new_enum        ( const char * text_1, ... );
+int         gtr_combo_box_get_active_enum ( GtkComboBox * );
+void        gtr_combo_box_set_active_enum ( GtkComboBox *, int value );
 
 /***
 ****

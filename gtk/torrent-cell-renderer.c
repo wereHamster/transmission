@@ -170,7 +170,7 @@ getShortTransferString( const tr_torrent  * tor,
         tr_formatter_speed_KBps( upStr, uploadSpeed_KBps, sizeof( upStr ) );
 
     if( haveDown && haveUp )
-        /* 1==down speed, 2==down arrow, 3==up speed, 4==down arrow */
+        /* 1==down arrow, 2==down speed, 3==up arrow, 4==down speed */
         g_snprintf( buf, buflen, _( "%1$s %2$s, %3$s %4$s" ),
                     gtr_get_unicode_string( GTR_UNICODE_DOWN ), downStr,
                     gtr_get_unicode_string( GTR_UNICODE_UP ), upStr );
@@ -182,7 +182,7 @@ getShortTransferString( const tr_torrent  * tor,
         /* bandwidth speed + unicode arrow */
         g_snprintf( buf, buflen, _( "%1$s %2$s" ),
                     gtr_get_unicode_string( GTR_UNICODE_UP ), upStr );
-    else if( tr_torrentHasMetadata( tor ) )
+    else if( haveMeta )
         /* the torrent isn't uploading or downloading */
         g_strlcpy( buf, _( "Idle" ), buflen );
     else
@@ -276,9 +276,9 @@ getStatusString( const tr_torrent  * tor,
             if( tr_torrentHasMetadata( tor ) )
             {
                 g_string_append_printf( gstr,
-                    ngettext( "Downloading from %1$'d of %2$'d connected peer",
-                              "Downloading from %1$'d of %2$'d connected peers",
-                              torStat->peersConnected ),
+                    gtr_ngettext( "Downloading from %1$'d of %2$'d connected peer",
+                                  "Downloading from %1$'d of %2$'d connected peers",
+                                  torStat->peersConnected ),
                     torStat->peersSendingToUs +
                     torStat->webseedsSendingToUs,
                     torStat->peersConnected +
@@ -287,9 +287,9 @@ getStatusString( const tr_torrent  * tor,
             else
             {
                 g_string_append_printf( gstr,
-                    ngettext( "Downloading metadata from %1$'d peer (%2$d%% done)",
-                              "Downloading metadata from %1$'d peers (%2$d%% done)",
-                              torStat->peersConnected ),
+                    gtr_ngettext( "Downloading metadata from %1$'d peer (%2$d%% done)",
+                                  "Downloading metadata from %1$'d peers (%2$d%% done)",
+                                  torStat->peersConnected ),
                     torStat->peersConnected + torStat->webseedsSendingToUs,
                     (int)(100.0*torStat->metadataPercentComplete) );
             }
@@ -298,9 +298,9 @@ getStatusString( const tr_torrent  * tor,
 
         case TR_STATUS_SEED:
             g_string_append_printf( gstr,
-                ngettext( "Seeding to %1$'d of %2$'d connected peer",
-                          "Seeding to %1$'d of %2$'d connected peers",
-                          torStat->peersConnected ),
+                gtr_ngettext( "Seeding to %1$'d of %2$'d connected peer",
+                              "Seeding to %1$'d of %2$'d connected peers",
+                              torStat->peersConnected ),
                 torStat->peersGettingFromUs,
                 torStat->peersConnected );
                 break;
@@ -539,7 +539,6 @@ render_compact( TorrentCellRenderer   * cell,
                 GdkRectangle          * expose_area UNUSED,
                 GtkCellRendererState    flags )
 {
-    int w, h;
     GdkRectangle icon_area;
     GdkRectangle name_area;
     GdkRectangle stat_area;
@@ -561,56 +560,27 @@ render_compact( TorrentCellRenderer   * cell,
     name = tr_torrentInfo( tor )->name;
     status = getShortStatusString( tor, st, p->upload_speed_KBps, p->download_speed_KBps );
 
-    /* get the cell dimensions */
-    g_object_set( p->icon_renderer, "pixbuf", icon, NULL );
-    gtk_cell_renderer_get_size( p->icon_renderer, widget, NULL, NULL, NULL, &w, &h );
-    icon_area.width = w;
-    icon_area.height = h;
-    text_renderer = get_text_renderer( st, cell );
-    g_object_set( text_renderer, "text", name, "ellipsize", PANGO_ELLIPSIZE_NONE, "scale", 1.0, NULL );
-    gtk_cell_renderer_get_size( text_renderer, widget, NULL, NULL, NULL, &w, &h );
-    name_area.width = w;
-    name_area.height = h;
-    g_object_set( text_renderer, "text", status, "scale", SMALL_SCALE, NULL );
-    gtk_cell_renderer_get_size( text_renderer, widget, NULL, NULL, NULL, &w, &h );
-    stat_area.width = w;
-    stat_area.height = h;
-    prog_area.height = p->bar_height;
-
-    h = 1;
-    h = MAX( h, stat_area.height );
-    h = MAX( h, name_area.height );
-    h = MAX( h, icon_area.height );
-    h = MAX( h, prog_area.height );
-
-    /**
-    *** LAYOUT
-    **/
-
     fill_area = *background_area;
     fill_area.x += cell->parent.xpad;
     fill_area.y += cell->parent.ypad;
     fill_area.width -= cell->parent.xpad * 2;
     fill_area.height -= cell->parent.ypad * 2;
+    icon_area = name_area = stat_area = prog_area = fill_area;
 
-    /* icon */
+    g_object_set( p->icon_renderer, "pixbuf", icon, NULL );
+    gtk_cell_renderer_get_size( p->icon_renderer, widget, NULL, NULL, NULL, &icon_area.width, NULL );
+    text_renderer = get_text_renderer( st, cell );
+    g_object_set( text_renderer, "text", name, "ellipsize", PANGO_ELLIPSIZE_NONE, "scale", 1.0, NULL );
+    gtk_cell_renderer_get_size( text_renderer, widget, NULL, NULL, NULL, &name_area.width, NULL );
+    g_object_set( text_renderer, "text", status, "scale", SMALL_SCALE, NULL );
+    gtk_cell_renderer_get_size( text_renderer, widget, NULL, NULL, NULL, &stat_area.width, NULL );
+
     icon_area.x = fill_area.x;
-    icon_area.y = fill_area.y;
-    icon_area.height = h;
-
-    /* progressbar */
     prog_area.x = fill_area.x + fill_area.width - BAR_WIDTH;
-    prog_area.y = fill_area.y;
     prog_area.width = BAR_WIDTH;
-    prog_area.height = h;
-
-    /* short status (right justified) */
     stat_area.x = prog_area.x - GUI_PAD - stat_area.width;
-    stat_area.y = fill_area.y + ( h - stat_area.height ) / 2;
-
-    /* name */
     name_area.x = icon_area.x + icon_area.width + GUI_PAD;
-    name_area.y = fill_area.y + ( h - name_area.height ) / 2;
+    name_area.y = fill_area.y;
     name_area.width = stat_area.x - GUI_PAD - name_area.x;
 
     /**

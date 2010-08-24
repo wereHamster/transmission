@@ -1,18 +1,17 @@
 /*
- * This file Copyright (C) 2009-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
- * Transmission project are granted a special exemption to clause 2(b)
- * so that the bulk of its code can remain under the MIT license.
- * This exemption does not extend to derived works not owned by
- * the Transmission project.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2
+ * as published by the Free Software Foundation.
+ *
+ * http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  *
  * $Id$
  */
 
 #include <cassert>
 #include <ctime>
-#include <iostream>
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -26,12 +25,16 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QInputDialog>
+#include <QItemSelectionModel>
 #include <QLabel>
+#include <QList>
+#include <QMap>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QResizeEvent>
 #include <QSpinBox>
+#include <QStringList>
 #include <QStyle>
 #include <QTabWidget>
 #include <QTextBrowser>
@@ -48,11 +51,13 @@
 #include "formatter.h"
 #include "hig.h"
 #include "prefs.h"
-#include "qticonloader.h"
 #include "session.h"
 #include "squeezelabel.h"
 #include "torrent.h"
 #include "torrent-model.h"
+#include "tracker-delegate.h"
+#include "tracker-model.h"
+#include "tracker-model-filter.h"
 
 class Prefs;
 class Session;
@@ -124,12 +129,12 @@ class PeerItem: public QTreeWidgetItem
 QIcon
 Details :: getStockIcon( const QString& freedesktop_name, int fallback )
 {
-    QIcon fallbackIcon;
+    QIcon icon = QIcon::fromTheme( freedesktop_name );
 
-    if( fallback > 0 )
-        fallbackIcon = style()->standardIcon( QStyle::StandardPixmap( fallback ), 0, this );
+    if( icon.isNull( ) )
+        icon = style()->standardIcon( QStyle::StandardPixmap( fallback ), 0, this );
 
-    return QtIconLoader::icon( freedesktop_name, fallbackIcon );
+    return icon;
 }
 
 Details :: Details( Session& session, Prefs& prefs, TorrentModel& model, QWidget * parent ):
@@ -163,7 +168,14 @@ Details :: Details( Session& session, Prefs& prefs, TorrentModel& model, QWidget
     layout->addWidget( buttons );
     QWidget::setAttribute( Qt::WA_DeleteOnClose, true );
 
+    QList<int> initKeys;
+    initKeys << Prefs :: SHOW_TRACKER_SCRAPES
+             << Prefs :: SHOW_BACKUP_TRACKERS;
+    foreach( int key, initKeys )
+        refreshPref( key );
+
     connect( &myTimer, SIGNAL(timeout()), this, SLOT(onTimer()));
+    connect( &myPrefs, SIGNAL(changed(int)), this, SLOT(refreshPref(int)) );
 
     onTimer( );
     myTimer.setSingleShot( false );
@@ -172,6 +184,9 @@ Details :: Details( Session& session, Prefs& prefs, TorrentModel& model, QWidget
 
 Details :: ~Details( )
 {
+    myTrackerDelegate->deleteLater();
+    myTrackerFilter->deleteLater();
+    myTrackerModel->deleteLater();
 }
 
 void
@@ -190,8 +205,8 @@ Details :: setIds( const QSet<int>& ids )
     }
 
     myFileTreeView->clear( );
-
     myIds = ids;
+    myTrackerModel->refresh( myModel, myIds );
 
     // listen to the new torrents
     foreach( int id, myIds ) {
@@ -206,6 +221,28 @@ Details :: setIds( const QSet<int>& ids )
     onTimer( );
 }
 
+void
+Details :: refreshPref( int key )
+{
+    QString str;
+
+    switch( key )
+    {
+        case Prefs :: SHOW_TRACKER_SCRAPES:
+            myTrackerDelegate->setShowMore( myPrefs.getBool( key ) );
+            myTrackerView->reset( );
+            break;
+
+        case Prefs :: SHOW_BACKUP_TRACKERS:
+            myTrackerFilter->setShowBackupTrackers( myPrefs.getBool( key ) );
+            break;
+
+        default:
+            break;
+    }
+}
+
+
 /***
 ****
 ***/
@@ -219,6 +256,12 @@ Details :: timeToStringRounded( int seconds )
 
 void
 Details :: onTimer( )
+{
+    getNewData( );
+}
+
+void
+Details :: getNewData( )
 {
     if( !myIds.empty( ) )
     {
@@ -381,7 +424,7 @@ Details :: refresh( )
         string = Formatter::ratioToString( torrents.first()->ratio() );
     else {
         bool isMixed = false;
-        int ratioType = torrents.first()->ratio();
+        int ratioType = (int) torrents.first()->ratio();
         if( ratioType > 0 ) ratioType = 0;
         foreach( const Torrent *t, torrents )
         {
@@ -636,224 +679,55 @@ Details :: refresh( )
         myBandwidthPriorityCombo->blockSignals( false );
 
         mySingleDownSpin->blockSignals( true );
-        mySingleDownSpin->setValue( tor->downloadLimit().KBps() );
+        mySingleDownSpin->setValue( (int)tor->downloadLimit().KBps() );
         mySingleDownSpin->blockSignals( false );
 
         mySingleUpSpin->blockSignals( true );
-        mySingleUpSpin->setValue( tor->uploadLimit().KBps() );
+        mySingleUpSpin->setValue( (int)tor->uploadLimit().KBps() );
         mySingleUpSpin->blockSignals( false );
 
         myPeerLimitSpin->blockSignals( true );
         myPeerLimitSpin->setValue( tor->peerLimit() );
         myPeerLimitSpin->blockSignals( false );
+    }
 
-        // ratio radios
-        uniform = true;
-        baselineInt = tor->seedRatioMode( );
+    {
+        const Torrent * tor;
+
+        // ratio
+        bool uniform = true;
+        int baselineInt = torrents[0]->seedRatioMode( );
         foreach( tor, torrents ) if( baselineInt != tor->seedRatioMode( ) ) { uniform = false; break; }
-        if( !uniform ) {
-            mySeedGlobalRadio->setChecked( false );
-            mySeedCustomRadio->setChecked( false );
-            mySeedForeverRadio->setChecked( false );
-        } else {
-            QRadioButton * rb;
-            switch( baselineInt ) {
-                case TR_RATIOLIMIT_GLOBAL:    rb = mySeedGlobalRadio; break;
-                case TR_RATIOLIMIT_SINGLE:    rb = mySeedCustomRadio; break;
-                case TR_RATIOLIMIT_UNLIMITED: rb = mySeedForeverRadio; break;
-            }
-            rb->setChecked( true );
-        }
 
-        mySeedCustomSpin->blockSignals( true );
-        mySeedCustomSpin->setValue( tor->seedRatioLimit( ) );
-        mySeedCustomSpin->blockSignals( false );
+        myRatioCombo->blockSignals( true );
+        myRatioCombo->setCurrentIndex( uniform ? myRatioCombo->findData( baselineInt ) : -1 );
+        myRatioSpin->setVisible( uniform && ( baselineInt == TR_RATIOLIMIT_SINGLE ) );
+        myRatioCombo->blockSignals( false );
+
+        myRatioSpin->blockSignals( true );
+        myRatioSpin->setValue( tor->seedRatioLimit( ) );
+        myRatioSpin->blockSignals( false );
+
+        // idle
+        uniform = true;
+        baselineInt = torrents[0]->seedIdleMode( );
+        foreach( tor, torrents ) if( baselineInt != tor->seedIdleMode( ) ) { uniform = false; break; }
+
+        myIdleCombo->blockSignals( true );
+        myIdleCombo->setCurrentIndex( uniform ? myIdleCombo->findData( baselineInt ) : -1 );
+        myIdleSpin->setVisible( uniform && ( baselineInt == TR_RATIOLIMIT_SINGLE ) );
+        myIdleCombo->blockSignals( false );
+
+        myIdleSpin->blockSignals( true );
+        myIdleSpin->setValue( tor->seedIdleLimit( ) );
+        myIdleSpin->blockSignals( false );
     }
 
-    // tracker tab
-    //
-    QMap<QString,QTreeWidgetItem*> trackerTiers;
-    QMap<QString,QTreeWidgetItem*> trackerItems;
-    const time_t now( time( 0 ) );
-    const bool showScrape = myPrefs.getBool( Prefs::SHOW_TRACKER_SCRAPES );
-    foreach( const Torrent * t, torrents )
-    {
-        const QString idStr( QString::number( t->id( ) ) );
-        const TrackerStatsList trackerStats = t->trackerStats( );
+    ///
+    ///  Tracker tab
+    ///
 
-        foreach( const TrackerStat& trackerStat, trackerStats )
-        {
-            QFont font;
-            QString str;
-            const QString tierKey( QString::number(trackerStat.tier) );
-            QTreeWidgetItem * tier = (QTreeWidgetItem*) myTrackerTiers.value( tierKey, 0 );
-
-            if( tier == 0 ) // check if has tier been created this pass
-                tier = (QTreeWidgetItem*) trackerTiers.value( tierKey, 0 );
-
-            if( tier == 0 ) // new tier
-            {
-                QFont tierFont;
-                tier = new QTreeWidgetItem( myTrackerTree );
-                myTrackerTree->addTopLevelItem( tier );
-                str = "Tier: " + QString::number( trackerStat.tier + 1 );
-                tier->setText( 0, str );
-                tierFont.setBold( true );
-                tier->setFont( 0, tierFont );
-            }
-
-            const QString key( idStr + tierKey + ":" + QString::number( trackerStat.id ) );
-            QTreeWidgetItem * item = (QTreeWidgetItem*) myTrackerItems.value( key, 0 );
-
-            if( item == 0 ) // new tracker
-            {
-                item = new QTreeWidgetItem( tier );
-                tier->addChild( item );
-                if( tier->childCount() == 1 )
-                    tier->setExpanded( true );
-            }
-            str = trackerStat.host;
-
-            if( trackerStat.isBackup )
-            {
-                font.setItalic( true );
-                if( showScrape )
-                {
-                    str += "\n";
-                    str += "Tracker will be used as a backup";
-                }
-            }
-            else
-            {
-                font.setItalic( false );
-                if( trackerStat.hasAnnounced )
-                {
-                    const QString tstr( timeToStringRounded( now - trackerStat.lastAnnounceTime ) );
-                    str += "\n";
-                    if( trackerStat.lastAnnounceSucceeded )
-                    {
-                        str += tr( "Got a list of %1 peers %2 ago" )
-                            .arg( trackerStat.lastAnnouncePeerCount )
-                            .arg( tstr );
-                    }
-                    else if( trackerStat.lastAnnounceTimedOut )
-                    {
-                        str += tr( "Peer list request timed out %1 ago; will retry" )
-                            .arg( tstr );
-                    }
-                    else
-                    {
-                        str += tr( "Got an error %1 ago" )
-                            .arg( tstr );
-                    }
-                }
-                switch( trackerStat.announceState )
-                {
-                    case TR_TRACKER_INACTIVE:
-                        if( trackerStat.hasAnnounced )
-                        {
-                            str += "\n";
-                            str += tr( "No updates scheduled" );
-                        }
-                        break;
-                    case TR_TRACKER_WAITING:
-                        {
-                            const QString tstr( timeToStringRounded( trackerStat.nextAnnounceTime - now ) );
-                            str += "\n";
-                            str += tr( "Asking for more peers in %1" )
-                                .arg( tstr );
-                        }
-                        break;
-                    case TR_TRACKER_QUEUED:
-                        str += "\n";
-                        str += tr( "Queued to ask for more peers" );
-                        break;
-                    case TR_TRACKER_ACTIVE:
-                        {
-                            const QString tstr( timeToStringRounded( now - trackerStat.lastAnnounceStartTime ) );
-                            str += "\n";
-                            str += tr( "Asking for more peers now... %1" )
-                                .arg( tstr );
-                        }
-                        break;
-                }
-                if( showScrape )
-                {
-                    if( trackerStat.hasScraped )
-                    {
-                        const QString tstr( timeToStringRounded( now - trackerStat.lastScrapeTime ) );
-                        str += "\n";
-                        if( trackerStat.lastScrapeSucceeded )
-                        {
-                            str += tr( "Tracker had %1 seeders and %2 leechers %3 ago" )
-                                .arg( trackerStat.seederCount )
-                                .arg( trackerStat.leecherCount )
-                                .arg( tstr );
-                        }
-                        else
-                        {
-                            str += tr( "Got a scrape error %1 ago" )
-                                .arg( tstr );
-                        }
-                    }
-                    switch( trackerStat.scrapeState )
-                    {
-                        case TR_TRACKER_INACTIVE:
-                            break;
-                        case TR_TRACKER_WAITING:
-                            {
-                                const QString tstr( timeToStringRounded( trackerStat.nextScrapeTime - now ) );
-                                str += "\n";
-                                str += tr( "Asking for peer counts in %1" )
-                                    .arg( tstr );
-                            }
-                            break;
-                        case TR_TRACKER_QUEUED:
-                            str += "\n";
-                            str += tr( "Queued to ask for peer counts" );
-                            break;
-                        case TR_TRACKER_ACTIVE:
-                            {
-                                const QString tstr( timeToStringRounded( now - trackerStat.lastScrapeStartTime ) );
-                                str += "\n";
-                                str += tr( "Asking for peer counts now... %1" )
-                                    .arg( tstr );
-                            }
-                            break;
-                    }
-                }
-            }
-            item->setText( 0, str );
-            item->setFont( 0, font );
-            item->setData( 0, TRACKERID, trackerStat.id );
-            item->setData( 0, TRACKERURL, trackerStat.announce );
-            item->setData( 0, TRACKERTIER, trackerStat.tier );
-            item->setData( 0, TORRENTID, t->id() );
-
-            tier->setData( 0, TRACKERID, -1 );
-            tier->setData( 0, TRACKERURL, QString() );
-            tier->setData( 0, TRACKERTIER, trackerStat.tier );
-            tier->setData( 0, TORRENTID, torrents.count() > 1 ? -1 : t->id() );
-
-            trackerTiers.insert( tierKey, tier );
-            trackerItems.insert( key, item );
-        }
-    }
-    QList<QTreeWidgetItem*> tierList = trackerTiers.values();
-    QList<QTreeWidgetItem*> itemList = trackerItems.values();
-    for( int i = 0; i < myTrackerTree->topLevelItemCount(); ++i )
-    {
-        QTreeWidgetItem * tier = myTrackerTree->topLevelItem( i );
-        for( int j = 0; j < tier->childCount(); ++j )
-        {
-            if( !itemList.contains( tier->child( j ) ) ) // tracker has disappeared
-                delete tier->takeChild( j-- );
-        }
-        if( !tierList.contains( tier ) ) // tier has disappeared
-            delete myTrackerTree->takeTopLevelItem( i-- );
-    }
-    myTrackerTiers = trackerTiers;
-    myTrackerItems = trackerItems;
+    myTrackerModel->refresh( myModel, myIds );
 
     ///
     ///  Peers tab
@@ -1001,59 +875,76 @@ Details :: onShowTrackerScrapesToggled( bool val )
 }
 
 void
+Details :: onShowBackupTrackersToggled( bool val )
+{
+    myPrefs.set( Prefs::SHOW_BACKUP_TRACKERS, val );
+}
+
+void
 Details :: onHonorsSessionLimitsToggled( bool val )
 {
     mySession.torrentSet( myIds, "honorsSessionLimits", val );
+    getNewData( );
 }
 void
 Details :: onDownloadLimitedToggled( bool val )
 {
     mySession.torrentSet( myIds, "downloadLimited", val );
+    getNewData( );
 }
 void
 Details :: onDownloadLimitChanged( int val )
 {
     mySession.torrentSet( myIds, "downloadLimit", val );
+    getNewData( );
 }
 void
 Details :: onUploadLimitedToggled( bool val )
 {
     mySession.torrentSet( myIds, "uploadLimited", val );
+    getNewData( );
 }
 void
 Details :: onUploadLimitChanged( int val )
 {
     mySession.torrentSet( myIds, "uploadLimit", val );
-}
-
-#define RATIO_KEY "seedRatioMode"
-
-void
-Details :: onSeedUntilChanged( bool b )
-{
-    if( b )
-        mySession.torrentSet( myIds, RATIO_KEY, sender()->property(RATIO_KEY).toInt() );
+    getNewData( );
 }
 
 void
-Details :: onSeedRatioLimitChanged( double val )
+Details :: onIdleModeChanged( int index )
 {
-    QSet<int> ids;
+    const int val = myIdleCombo->itemData( index ).toInt( );
+    mySession.torrentSet( myIds, "seedIdleMode", val );
+    getNewData( );
+}
 
-    foreach( int id, myIds ) {
-        const Torrent * tor = myModel.getTorrentFromId( id );
-        if( tor && tor->seedRatioLimit( ) )
-            ids.insert( id );
-    }
+void
+Details :: onIdleLimitChanged( int val )
+{
+    mySession.torrentSet( myIds, "seedIdleLimit", val );
+    getNewData( );
+}
 
-    if( !ids.empty( ) )
-        mySession.torrentSet( ids, "seedRatioLimit", val );
+void
+Details :: onRatioModeChanged( int index )
+{
+    const int val = myRatioCombo->itemData( index ).toInt( );
+    mySession.torrentSet( myIds, "seedRatioMode", val );
+}
+
+void
+Details :: onRatioLimitChanged( double val )
+{
+    mySession.torrentSet( myIds, "seedRatioLimit", val );
+    getNewData( );
 }
 
 void
 Details :: onMaxPeersChanged( int val )
 {
     mySession.torrentSet( myIds, "peer-limit", val );
+    getNewData( );
 }
 
 void
@@ -1063,132 +954,124 @@ Details :: onBandwidthPriorityChanged( int index )
     {
         const int priority = myBandwidthPriorityCombo->itemData(index).toInt( );
         mySession.torrentSet( myIds, "bandwidthPriority", priority );
+        getNewData( );
     }
 }
 
 void
 Details :: onTrackerSelectionChanged( )
 {
-    const QList<QTreeWidgetItem*> items = myTrackerTree->selectedItems();
-    if( items.count() == 1 )
-        myEditTrackerButton->setEnabled( items.first()->data( 0, TRACKERID ).toInt() >= 0 );
+    const int selectionCount = myTrackerView->selectionModel()->selectedRows().size();
+    myEditTrackerButton->setEnabled( selectionCount == 1 );
+    myRemoveTrackerButton->setEnabled( selectionCount > 0 );
+}
+
+void
+Details :: onAddTrackerClicked( )
+{
+    bool ok = false;
+    const QString url = QInputDialog::getText( this,
+                                               tr( "Add URL " ),
+                                               tr( "Add tracker announce URL:" ),
+                                               QLineEdit::Normal, QString(), &ok );
+    if( !ok )
+    {
+        // user pressed "cancel" -- noop
+    }
+    else if( !QUrl(url).isValid( ) )
+    {
+        QMessageBox::warning( this, tr( "Error" ), tr( "Invalid URL \"%1\"" ).arg( url ) );
+    }
     else
-        myEditTrackerButton->setEnabled( false );
-    myRemoveTrackerButton->setEnabled( !items.isEmpty() );
-}
-
-bool
-Details :: findTrackerByURL( const QString& url, int torId )
-{
-    bool duplicate = false;
-    foreach( QTreeWidgetItem * tracker, myTrackerItems.values() )
     {
-        if( tracker->data( 0, TRACKERURL ).toString() == url &&
-          ( torId == -1 || tracker->data( 0, TORRENTID ).toInt() == torId ) )
+        QSet<int> ids;
+
+        foreach( int id, myIds )
+            if( myTrackerModel->find( id, url ) == -1 )
+                ids.insert( id );
+
+        if( ids.empty( ) ) // all the torrents already have this tracker
         {
-            duplicate = true;
-            break;
-        }
-    }
-    return duplicate;
-}
-
-void
-Details :: onAddTrackerPushed( )
-{
-    const QString urlString = QInputDialog::getText( this,
-                                                     tr( "Add tracker announce URL " ),
-                                                     NULL );
-    if( !urlString.isEmpty() )
-    {
-        if( !findTrackerByURL( urlString, -1 ) )
-        {
-            QByteArray url = urlString.toUtf8();
-            tr_benc top;
-
-            tr_bencInitDict( &top, 1 );
-            tr_bencDictAddStr( &top, "announce", url );
-
-            mySession.torrentSet( myIds, "trackerAdd", &top );
+            QMessageBox::warning( this, tr( "Error" ), tr( "Tracker already exists." ) );
         }
         else
-            QMessageBox::warning( this, "Error", "Tracker already exists." );
+        {
+            QStringList urls;
+            urls << url;
+            mySession.torrentSet( ids, "trackerAdd", urls );
+            getNewData( );
+        }
     }
 }
 
 void
-Details :: onEditTrackerPushed( )
+Details :: onEditTrackerClicked( )
 {
-    const QTreeWidgetItem * item = myTrackerTree->selectedItems().first();
-    const QString urlString = QInputDialog::getText( this,
-                                                     tr( "Edit tracker announce URL " ),
-                                                     NULL,
-                                                     QLineEdit::Normal,
-                                                     item->data( 0, TRACKERURL ).toString() );
-    if( !urlString.isEmpty() )
+    QItemSelectionModel * selectionModel = myTrackerView->selectionModel( );
+    QModelIndexList selectedRows = selectionModel->selectedRows( );
+    assert( selectedRows.size( ) == 1 );
+    QModelIndex i = selectionModel->currentIndex( );
+    const TrackerInfo trackerInfo = myTrackerView->model()->data( i, TrackerModel::TrackerRole ).value<TrackerInfo>();
+
+    bool ok = false;
+    const QString newval = QInputDialog::getText( this,
+                                                  tr( "Edit URL " ),
+                                                  tr( "Edit tracker announce URL:" ),
+                                                  QLineEdit::Normal,
+                                                  trackerInfo.st.announce, &ok );
+
+    if( !ok )
     {
-        const int torId = item->data( 0, TORRENTID ).toInt();
-        if( !findTrackerByURL( urlString, torId ) )
-        {
-            QByteArray url = urlString.toUtf8();
-            QSet<int> ids;
-            tr_benc top;
+        // user pressed "cancel" -- noop
+    }
+    else if( !QUrl(newval).isValid( ) )
+    {
+        QMessageBox::warning( this, tr( "Error" ), tr( "Invalid URL \"%1\"" ).arg( newval ) );
+    }
+    else
+    {
+        QSet<int> ids;
+        ids << trackerInfo.torrentId;
 
-            ids << torId;
-            tr_bencInitDict( &top, 2 );
-            tr_bencDictAddStr( &top, "announce", item->data( 0, TRACKERURL ).toByteArray() );
-            tr_bencDictAddStr( &top, "announce-new", url );
+        QStringList urls;
+        urls << trackerInfo.st.announce;
+        urls << newval;
 
-            mySession.torrentSet( ids, "trackerEdit", &top );
-        }
-        else
-            QMessageBox::warning( this, "Error", "Tracker already exists." );
+        mySession.torrentSet( ids, "trackerReplace", urls );
+        getNewData( );
     }
 }
 
 void
-Details :: removeTracker( const QTreeWidgetItem * item )
+Details :: onRemoveTrackerClicked( )
 {
-    QByteArray url = item->data( 0, TRACKERURL ).toByteArray();
-    const int torId = item->data( 0, TORRENTID ).toInt();
-    QSet<int> ids;
-    tr_benc top;
+    // make a map of torrentIds to announce URLs to remove
+    QItemSelectionModel * selectionModel = myTrackerView->selectionModel( );
+    QModelIndexList selectedRows = selectionModel->selectedRows( );
+    QMap<int,QStringList> torrentId_to_urls;
+    foreach( QModelIndex i, selectedRows )
+    {
+        const TrackerInfo inf = myTrackerView->model()->data( i, TrackerModel::TrackerRole ).value<TrackerInfo>();
+        torrentId_to_urls[ inf.torrentId ].append( inf.st.announce );
+    }
 
-    ids << torId;
-    tr_bencInitDict( &top, 1 );
-    tr_bencDictAddStr( &top, "announce", url );
-
-    mySession.torrentSet( ids, "trackerRemove", &top );
-}
-
-void
-Details :: onRemoveTrackerPushed( )
-{
-    const QList<QTreeWidgetItem*> items = myTrackerTree->selectedItems();
-    QSet<int> removedTiers;
-    foreach( const QTreeWidgetItem * item, items ) {
-        const bool isTier = item->data( 0, TRACKERID ).toInt() == -1;
-        const int curTier = item->data( 0, TRACKERTIER ).toInt();
-        if( isTier )
-        {
-            removedTiers << curTier;
-            for( int i = 0; i < item->childCount(); ++i )
-                removeTracker( item->child( i ) );
-        }
-        else if( !removedTiers.contains( curTier ) ) // skip trackers removed by clearing a tier
-            removeTracker( item );
+    // batch all of a tracker's torrents into one command
+    foreach( int id, torrentId_to_urls.keys( ) )
+    {
+        QSet<int> ids;
+        ids << id;
+        mySession.torrentSet( ids, "trackerRemove", torrentId_to_urls.value( id ) );
+        getNewData( );
     }
 }
 
 QWidget *
 Details :: createOptionsTab( )
 {
-    //QWidget * l;
     QSpinBox * s;
     QCheckBox * c;
     QComboBox * m;
     QHBoxLayout * h;
-    QRadioButton * r;
     QDoubleSpinBox * ds;
     const QString speed_K_str = Formatter::unitStr( Formatter::SPEED, Formatter::KB );
 
@@ -1203,8 +1086,9 @@ Details :: createOptionsTab( )
     c = new QCheckBox( tr( "Limit &download speed (%1):" ).arg( speed_K_str ) );
     mySingleDownCheck = c;
     s = new QSpinBox( );
-    mySingleDownSpin = s;
+    s->setSingleStep( 5 );
     s->setRange( 0, INT_MAX );
+    mySingleDownSpin = s;
     hig->addRow( c, s );
     enableWhenChecked( c, s );
     connect( c, SIGNAL(clicked(bool)), this, SLOT(onDownloadLimitedToggled(bool)) );
@@ -1213,8 +1097,9 @@ Details :: createOptionsTab( )
     c = new QCheckBox( tr( "Limit &upload speed (%1):" ).arg( speed_K_str ) );
     mySingleUpCheck = c;
     s = new QSpinBox( );
-    mySingleUpSpin = s;
+    s->setSingleStep( 5 );
     s->setRange( 0, INT_MAX );
+    mySingleUpSpin = s;
     hig->addRow( c, s );
     enableWhenChecked( c, s );
     connect( c, SIGNAL(clicked(bool)), this, SLOT(onUploadLimitedToggled(bool)) );
@@ -1229,38 +1114,43 @@ Details :: createOptionsTab( )
     myBandwidthPriorityCombo = m;
 
     hig->addSectionDivider( );
-    hig->addSectionTitle( tr( "Seed-Until Ratio" ) );
-
-    r = new QRadioButton( tr( "Use &global settings" ) );
-    r->setProperty( RATIO_KEY, TR_RATIOLIMIT_GLOBAL );
-    connect( r, SIGNAL(clicked(bool)), this, SLOT(onSeedUntilChanged(bool)));
-    mySeedGlobalRadio = r;
-    hig->addWideControl( r );
-
-    r = new QRadioButton( tr( "Seed &regardless of ratio" ) );
-    r->setProperty( RATIO_KEY, TR_RATIOLIMIT_UNLIMITED );
-    connect( r, SIGNAL(clicked(bool)), this, SLOT(onSeedUntilChanged(bool)));
-    mySeedForeverRadio = r;
-    hig->addWideControl( r );
+    hig->addSectionTitle( tr( "Seeding Limits" ) );
 
     h = new QHBoxLayout( );
     h->setSpacing( HIG :: PAD );
-    r = new QRadioButton( tr( "&Seed torrent until its ratio reaches:" ) );
-    r->setProperty( RATIO_KEY, TR_RATIOLIMIT_SINGLE );
-    connect( r, SIGNAL(clicked(bool)), this, SLOT(onSeedUntilChanged(bool)));
-    mySeedCustomRadio = r;
-    h->addWidget( r );
+    m = new QComboBox;
+    m->addItem( tr( "Use Global Settings" ),      TR_RATIOLIMIT_GLOBAL );
+    m->addItem( tr( "Seed regardless of ratio" ), TR_RATIOLIMIT_UNLIMITED );
+    m->addItem( tr( "Stop seeding at ratio:" ),   TR_RATIOLIMIT_SINGLE );
+    connect( m, SIGNAL(currentIndexChanged(int)), this, SLOT(onRatioModeChanged(int)));
+    h->addWidget( myRatioCombo = m );
     ds = new QDoubleSpinBox( );
     ds->setRange( 0.5, INT_MAX );
-    connect( ds, SIGNAL(valueChanged(double)), this, SLOT(onSeedRatioLimitChanged(double)));
-    mySeedCustomSpin = ds;
-    h->addWidget( ds );
-    hig->addWideControl( h );
+    connect( ds, SIGNAL(valueChanged(double)), this, SLOT(onRatioLimitChanged(double)));
+    h->addWidget( myRatioSpin = ds );
+    hig->addRow( tr( "&Ratio:" ), h, m );
+
+    h = new QHBoxLayout( );
+    h->setSpacing( HIG :: PAD );
+    m = new QComboBox;
+    m->addItem( tr( "Use Global Settings" ),                 TR_IDLELIMIT_GLOBAL );
+    m->addItem( tr( "Seed regardless of activity" ),         TR_IDLELIMIT_UNLIMITED );
+    m->addItem( tr( "Stop seeding if idle for N minutes:" ), TR_IDLELIMIT_SINGLE );
+    connect( m, SIGNAL(currentIndexChanged(int)), this, SLOT(onIdleModeChanged(int)));
+    h->addWidget( myIdleCombo = m );
+    s = new QSpinBox( );
+    s->setSingleStep( 5 );
+    s->setRange( 1, 9999 );
+    connect( s, SIGNAL(valueChanged(int)), this, SLOT(onIdleLimitChanged(int)));
+    h->addWidget( myIdleSpin = s );
+    hig->addRow( tr( "&Idle:" ), h, m );
+
 
     hig->addSectionDivider( );
     hig->addSectionTitle( tr( "Peer Connections" ) );
 
     s = new QSpinBox( );
+    s->setSingleStep( 5 );
     s->setRange( 1, 300 );
     connect( s, SIGNAL(valueChanged(int)), this, SLOT(onMaxPeersChanged(int)));
     myPeerLimitSpin = s;
@@ -1293,25 +1183,27 @@ Details :: createTrackerTab( )
 
     v2->setSpacing( HIG::PAD );
 
-    QStringList headers;
-    headers << tr("Trackers");
-    myTrackerTree = new QTreeWidget;
-    myTrackerTree->setHeaderLabels( headers );
-    myTrackerTree->setSelectionMode( QTreeWidget::ExtendedSelection );
-    myTrackerTree->setRootIsDecorated( false );
-    myTrackerTree->setIndentation( 2 );
-    myTrackerTree->setItemsExpandable( false );
-    myTrackerTree->setTextElideMode( Qt::ElideRight );
-    myTrackerTree->setAlternatingRowColors( true );
-    connect( myTrackerTree, SIGNAL(itemSelectionChanged()), this, SLOT(onTrackerSelectionChanged()));
-    h->addWidget( myTrackerTree, 1 );
+    myTrackerModel = new TrackerModel;
+    myTrackerFilter = new TrackerModelFilter;
+    myTrackerFilter->setSourceModel( myTrackerModel );
+    myTrackerView = new QTreeView;
+    myTrackerView->setModel( myTrackerFilter );
+    myTrackerView->setHeaderHidden( true );
+    myTrackerView->setSelectionMode( QTreeWidget::ExtendedSelection );
+    myTrackerView->setRootIsDecorated( false );
+    myTrackerView->setIndentation( 2 );
+    myTrackerView->setItemsExpandable( false );
+    myTrackerView->setAlternatingRowColors( true );
+    myTrackerView->setItemDelegate( myTrackerDelegate = new TrackerDelegate( ) );
+    connect( myTrackerView->selectionModel(), SIGNAL(selectionChanged(const QItemSelection&, const QItemSelection&)), this, SLOT(onTrackerSelectionChanged()));
+    h->addWidget( myTrackerView, 1 );
 
     p = new QPushButton();
     p->setIcon( getStockIcon( "list-add", QStyle::SP_DialogOpenButton ) );
     p->setToolTip( "Add Tracker" );
     myAddTrackerButton = p;
     v2->addWidget( p, 1 );
-    connect( p, SIGNAL(clicked(bool)), this, SLOT(onAddTrackerPushed()));
+    connect( p, SIGNAL(clicked(bool)), this, SLOT(onAddTrackerClicked()));
 
     p = new QPushButton();
     p->setIcon( getStockIcon( "document-properties", QStyle::SP_DesktopIcon ) );
@@ -1320,7 +1212,7 @@ Details :: createTrackerTab( )
     p->setEnabled( false );
     myEditTrackerButton = p;
     v2->addWidget( p, 1 );
-    connect( p, SIGNAL(clicked(bool)), this, SLOT(onEditTrackerPushed()));
+    connect( p, SIGNAL(clicked(bool)), this, SLOT(onEditTrackerClicked()));
 
     p = new QPushButton();
     p->setIcon( getStockIcon( "list-remove", QStyle::SP_TrashIcon ) );
@@ -1328,7 +1220,7 @@ Details :: createTrackerTab( )
     p->setEnabled( false );
     myRemoveTrackerButton = p;
     v2->addWidget( p, 1 );
-    connect( p, SIGNAL(clicked(bool)), this, SLOT(onRemoveTrackerPushed()));
+    connect( p, SIGNAL(clicked(bool)), this, SLOT(onRemoveTrackerClicked()));
 
     v2->addStretch( 1 );
 
@@ -1342,6 +1234,12 @@ Details :: createTrackerTab( )
     myShowTrackerScrapesCheck = c;
     v->addWidget( c, 1 );
     connect( c, SIGNAL(clicked(bool)), this, SLOT(onShowTrackerScrapesToggled(bool)) );
+
+    c = new QCheckBox( tr( "Show &backup trackers" ) );
+    c->setChecked( myPrefs.getBool( Prefs::SHOW_BACKUP_TRACKERS ) );
+    myShowBackupTrackersCheck = c;
+    v->addWidget( c, 1 );
+    connect( c, SIGNAL(clicked(bool)), this, SLOT(onShowBackupTrackersToggled(bool)) );
 
     return top;
 }
@@ -1415,6 +1313,7 @@ Details :: onFilePriorityChanged( const QSet<int>& indices, int priority )
         default:           key = "priority-normal"; break;
     }
     mySession.torrentSet( myIds, key, indices.toList( ) );
+    getNewData( );
 }
 
 void
@@ -1422,4 +1321,5 @@ Details :: onFileWantedChanged( const QSet<int>& indices, bool wanted )
 {
     QString key( wanted ? "files-wanted" : "files-unwanted" );
     mySession.torrentSet( myIds, key, indices.toList( ) );
+    getNewData( );
 }

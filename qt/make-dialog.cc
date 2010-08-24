@@ -1,11 +1,11 @@
 /*
- * This file Copyright (C) 2009-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
- * Transmission project are granted a special exemption to clause 2(b)
- * so that the bulk of its code can remain under the MIT license.
- * This exemption does not extend to derived works not owned by
- * the Transmission project.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2
+ * as published by the Free Software Foundation.
+ *
+ * http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  *
  * $Id$
  */
@@ -58,7 +58,7 @@ MakeDialog :: onNewButtonBoxClicked( QAbstractButton * button )
     {
         case QDialogButtonBox::Open:
 std::cerr << "calling mySession.addTorrent( " << qPrintable(myTarget) << ", " << qPrintable(QFileInfo(myBuilder->top).dir().path()) << ')' << std::endl;
-            mySession.addTorrent( myTarget, QFileInfo(myBuilder->top).dir().path() );
+            mySession.addNewlyCreatedTorrent( myTarget, QFileInfo(myBuilder->top).dir().path() );
             break;
         case QDialogButtonBox::Abort:
             myBuilder->abortFlag = true;
@@ -177,12 +177,15 @@ MakeDialog :: onFileClicked( )
 void
 MakeDialog :: onFileSelected( const QStringList& list )
 {
-    if( list.size() == 1 )
-    {
-        myFile = list.first( );
-        myFileButton->setText( QFileInfo(myFile).fileName() );
-        onSourceChanged( );
-    }
+    if( !list.empty( ) )
+        onFileSelected( list.front( ) );
+}
+void
+MakeDialog :: onFileSelected( const QString& filename )
+{
+    myFile = filename;
+    myFileButton->setText( QFileInfo(myFile).fileName() );
+    onSourceChanged( );
 }
 
 void
@@ -197,12 +200,15 @@ MakeDialog :: onFolderClicked( )
 void
 MakeDialog :: onFolderSelected( const QStringList& list )
 {
-    if( list.size() == 1 )
-    {
-        myFolder = list.first();
-        myFolderButton->setText( QFileInfo(myFolder).fileName() );
-        onSourceChanged( );
-    }
+    if( !list.empty( ) )
+        onFolderSelected( list.front( ) );
+}
+void
+MakeDialog :: onFolderSelected( const QString& filename )
+{
+    myFolder = filename;
+    myFolderButton->setText( QFileInfo(myFolder).fileName() );
+    onSourceChanged( );
 }
 
 void
@@ -217,11 +223,14 @@ MakeDialog :: onDestinationClicked( )
 void
 MakeDialog :: onDestinationSelected( const QStringList& list )
 {
-    if( list.size() == 1 )
-    {
-        myDestination = list.first( );
-        myDestinationButton->setText( QFileInfo(myDestination).fileName() );
-    }
+    if( !list.empty( ) )
+        onDestinationSelected( list.front() );
+}
+void
+MakeDialog :: onDestinationSelected( const QString& filename )
+{
+    myDestination = filename;
+    myDestinationButton->setText( QFileInfo(myDestination).fileName() );
 }
 
 void
@@ -306,6 +315,8 @@ MakeDialog :: MakeDialog( Session & session, QWidget * parent ):
     mySession( session ),
     myBuilder( 0 )
 {
+    setAcceptDrops( true );
+
     connect( &myTimer, SIGNAL(timeout()), this, SLOT(onProgress()) );
 
     setWindowTitle( tr( "New Torrent" ) );
@@ -395,4 +406,38 @@ MakeDialog :: ~MakeDialog( )
 {
     if( myBuilder )
         tr_metaInfoBuilderFree( myBuilder );
+}
+
+/***
+****
+***/
+
+void
+MakeDialog :: dragEnterEvent( QDragEnterEvent * event )
+{
+    const QMimeData * mime = event->mimeData( );
+
+    if( mime->urls().size() && QFile(mime->urls().front().path()).exists( ) )
+        event->acceptProposedAction();
+}
+
+void
+MakeDialog :: dropEvent( QDropEvent * event )
+{
+    const QString filename = event->mimeData()->urls().front().path();
+    const QFileInfo fileInfo( filename );
+
+    if( fileInfo.exists( ) )
+    {
+        if( fileInfo.isDir( ) )
+        {
+            myFolderRadio->setChecked( true );
+            onFolderSelected( filename  );
+        }
+        else // it's a file
+        {
+            myFileRadio->setChecked( true );
+            onFileSelected( filename );
+        }
+    }
 }

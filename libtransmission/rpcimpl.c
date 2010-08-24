@@ -31,7 +31,7 @@
 #include "version.h"
 #include "web.h"
 
-#define RPC_VERSION     9
+#define RPC_VERSION     10
 #define RPC_VERSION_MIN 1
 
 #define RECENTLY_ACTIVE_SECONDS 60
@@ -484,7 +484,7 @@ addField( const tr_torrent * tor, tr_benc * d, const char * key )
     else if( tr_streq( key, keylen, "downloadedEver" ) )
         tr_bencDictAddInt( d, key, st->downloadedEver );
     else if( tr_streq( key, keylen, "downloadLimit" ) )
-        tr_bencDictAddReal( d, key, tr_torrentGetSpeedLimit_KBps( tor, TR_DOWN ) );
+        tr_bencDictAddInt( d, key, tr_torrentGetSpeedLimit_KBps( tor, TR_DOWN ) );
     else if( tr_streq( key, keylen, "downloadLimited" ) )
         tr_bencDictAddBool( d, key, tr_torrentUsesSpeedLimit( tor, TR_DOWN ) );
     else if( tr_streq( key, keylen, "error" ) )
@@ -574,6 +574,10 @@ addField( const tr_torrent * tor, tr_benc * d, const char * key )
         tr_bencDictAddReal( d, key, st->pieceUploadSpeed_KBps );
     else if( tr_streq( key, keylen, "recheckProgress" ) )
         tr_bencDictAddReal( d, key, st->recheckProgress );
+    else if( tr_streq( key, keylen, "seedIdleLimit" ) )
+        tr_bencDictAddInt( d, key, tr_torrentGetIdleLimit( tor ) );
+    else if( tr_streq( key, keylen, "seedIdleMode" ) )
+        tr_bencDictAddInt( d, key, tr_torrentGetIdleMode( tor ) );
     else if( tr_streq( key, keylen, "seedRatioLimit" ) )
         tr_bencDictAddReal( d, key, tr_torrentGetRatioLimit( tor ) );
     else if( tr_streq( key, keylen, "seedRatioMode" ) )
@@ -753,20 +757,17 @@ setFileDLs( tr_torrent * tor,
 }
 
 static tr_bool
-findTrackerById( const tr_info * inf,
-                 uint32_t id,
-                 int * index )
+findAnnounceUrl( const tr_tracker_info * t, int n, const char * url, int * pos )
 {
     int i;
     tr_bool found = FALSE;
 
-    for( i = 0; i < inf->trackerCount; ++i )
+    for( i=0; i<n; ++i )
     {
-        const tr_tracker_info * t = &inf->trackers[i];
-        if( t->id == id )
+        if( !strcmp( t[i].announce, url ) )
         {
-            if( index ) *index = i;
             found = TRUE;
+            if( pos ) *pos = i;
             break;
         }
     }
@@ -774,196 +775,157 @@ findTrackerById( const tr_info * inf,
     return found;
 }
 
-static tr_bool
-findTrackerByURL( const tr_info * inf,
-                  const char * url,
-                  int * index )
+static int
+copyTrackers( tr_tracker_info * tgt, const tr_tracker_info * src, int n )
 {
     int i;
-    tr_bool found = FALSE;
-
-    for( i = 0; i < inf->trackerCount; ++i )
+    int maxTier = -1;
+   
+    for( i=0; i<n; ++i ) 
     {
-        const tr_tracker_info * t = &inf->trackers[i];
-        if( !strcmp( t->announce, url ) )
-        {
-            if( index ) *index = i;
-            found = TRUE;
-            break;
-        }
+        tgt[i].tier = src[i].tier;
+        tgt[i].announce = tr_strdup( src[i].announce );
+        maxTier = MAX( maxTier, src[i].tier );
     }
 
-    return found;
+    return maxTier;
+}
+
+static void
+freeTrackers( tr_tracker_info * trackers, int n )
+{
+    int i;
+
+    for( i=0; i<n; ++i )
+        tr_free( trackers[i].announce );
+
+    tr_free( trackers );
 }
 
 static const char*
-addTracker( tr_torrent * tor,
-            tr_benc    * tracker )
+addTrackerUrls( tr_torrent * tor, tr_benc * urls )
 {
     int i;
-    int64_t tmp;
-    tr_bool duplicate = FALSE;
-    const char * errmsg = NULL;
-    const char * announce;
+    int n;
+    int tier;
+    tr_benc * val;
+    tr_tracker_info * trackers;
+    tr_bool changed = FALSE;
     const tr_info * inf = tr_torrentInfo( tor );
+    const char * errmsg = NULL;
 
-    if( !tr_bencDictFindStr( tracker, "announce", &announce ) )
-        return "no announce url supplied";
+    /* make a working copy of the existing announce list */
+    n = inf->trackerCount;
+    trackers = tr_new0( tr_tracker_info, n + tr_bencListSize( urls ) );
+    tier = copyTrackers( trackers, inf->trackers, n );
 
-    duplicate = findTrackerByURL( inf, announce, NULL );
-
-    if( !duplicate )
+    /* and add the new ones */
+    i = 0;
+    while(( val = tr_bencListChild( urls, i++ ) ))
     {
-        int tier, trackerCount;
-        tr_tracker_info * trackers = tr_new0( tr_tracker_info, inf->trackerCount + 1 );
+        const char * announce = NULL;
 
-        if( tr_bencDictFindInt( tracker, "tier", &tmp ) )
-            tier = (int)tmp;
-        else
-            tier = -1;
-
-        for( i = 0; i < inf->trackerCount; ++i )
+        if(    tr_bencGetStr( val, &announce )
+            && tr_urlIsValid( announce, -1 )
+            && !findAnnounceUrl( trackers, n, announce, NULL ) )
         {
-            const tr_tracker_info * t = &inf->trackers[i];
-            trackers[i].tier = t->tier;
-            trackers[i].announce = tr_strdup( t->announce );
+            trackers[n].tier = ++tier; /* add a new tier */
+            trackers[n].announce = tr_strdup( announce );
+            ++n;
+            changed = TRUE;
         }
-        trackers[i].tier = tier < 0 ? trackers[i-1].tier + 1 : tier;
-        trackers[i].announce = tr_strdup( announce );
-        trackerCount = inf->trackerCount + 1;
-
-        if( !tr_torrentSetAnnounceList( tor, trackers, trackerCount ) )
-            errmsg = "tracker URL was invalid";
-
-        for( i = 0; i < trackerCount; ++i )
-            tr_free( trackers[i].announce );
-        tr_free( trackers );
     }
-    else
-        errmsg = "tracker already exists";
 
+    if( !changed )
+        errmsg = "invalid argument";
+    else if( !tr_torrentSetAnnounceList( tor, trackers, n ) )
+        errmsg = "error setting announce list";
+
+    freeTrackers( trackers, n );
     return errmsg;
 }
 
 static const char*
-editTracker( tr_torrent * tor,
-             tr_benc    * tracker )
+replaceTrackerUrls( tr_torrent * tor, tr_benc * urls )
 {
-    int trackerIndex;
-    int64_t tmp;
-    tr_bool found = FALSE;
-    const char * errmsg = NULL;
-    const char * announce;
+    int i;
+    tr_benc * pair[2];
+    tr_tracker_info * trackers;
+    tr_bool changed = FALSE;
     const tr_info * inf = tr_torrentInfo( tor );
+    const int n = inf->trackerCount;
+    const char * errmsg = NULL;
 
-    if( tr_bencDictFindInt( tracker, "id", &tmp ) )
-        found = findTrackerById( inf, (uint32_t)tmp, &trackerIndex );
-    else if( tr_bencDictFindStr( tracker, "announce", &announce ) )
-        found = findTrackerByURL( inf, announce, &trackerIndex );
-    else
-        errmsg = "no tracker supplied";
+    /* make a working copy of the existing announce list */
+    trackers = tr_new0( tr_tracker_info, n );
+    copyTrackers( trackers, inf->trackers, n );
 
-    if( found )
+    /* make the substitutions... */
+    i = 0;
+    while(((pair[0] = tr_bencListChild(urls,i))) &&
+          ((pair[1] = tr_bencListChild(urls,i+1))))
     {
-        int tier;
-        const char * new;
-        tr_bool rename = FALSE;
-        tr_bool move = FALSE;
+        const char * oldval;
+        const char * newval;
 
-        if( tr_bencDictFindStr( tracker, "announce-new", &new ) )
+        if(    tr_bencGetStr( pair[0], &oldval )
+            && tr_bencGetStr( pair[1], &newval )
+            && strcmp( oldval, newval )
+            && tr_urlIsValid( newval, -1 )
+            && findAnnounceUrl( trackers, n, oldval, &i ) )
         {
-            rename = !findTrackerByURL( inf, new, NULL );
-            if( !rename )
-                errmsg = "tracker already exists";
-        }
-        if( tr_bencDictFindInt( tracker, "tier", &tmp ) )
-        {
-            tier = (int)tmp;
-            move = TRUE;
+            tr_free( trackers[i].announce );
+            trackers[i].announce = tr_strdup( newval );
+            changed = TRUE;
         }
 
-        if( ( rename || move ) && !errmsg )
-        {
-            int i, trackerCount;
-            tr_tracker_info * trackers = tr_new0( tr_tracker_info, inf->trackerCount );
-
-            for( i = 0; i < inf->trackerCount; ++i )
-            {
-                const tr_tracker_info * t = &inf->trackers[i];
-                if( i != trackerIndex )
-                {
-                    trackers[i].tier = t->tier;
-                    trackers[i].announce = tr_strdup( t->announce );
-                }
-                else
-                {
-                    trackers[i].tier = move ? tier : t->tier;
-                    trackers[i].announce = tr_strdup( rename ? new : t->announce );
-                }
-            }
-            trackerCount = i;
-
-            if( !tr_torrentSetAnnounceList( tor, trackers, trackerCount ) )
-                errmsg = "error setting announce list";
-
-            for( i = 0; i < trackerCount; ++i )
-                tr_free( trackers[i].announce );
-            tr_free( trackers );
-        }
-        else if( !errmsg )
-            errmsg = "no operation supplied";
+        i += 2;
     }
-    else
-        errmsg = "tracker doesn't exists";
 
+    if( !changed )
+        errmsg = "invalid argument";
+    else if( !tr_torrentSetAnnounceList( tor, trackers, n ) )
+        errmsg = "error setting announce list";
+
+    freeTrackers( trackers, n );
     return errmsg;
 }
 
 static const char*
-removeTracker( tr_torrent * tor,
-               tr_benc * tracker  )
+removeTrackerUrls( tr_torrent * tor, tr_benc * urls )
 {
-    int trackerIndex;
-    int64_t tmp;
-    tr_bool found = FALSE;
-    const char * errmsg = NULL;
-    const char * announce;
+    int i;
+    int n;
+    tr_benc * val;
+    tr_tracker_info * trackers;
+    tr_bool changed = FALSE;
     const tr_info * inf = tr_torrentInfo( tor );
+    const char * errmsg = NULL;
 
-    if( tr_bencDictFindInt( tracker, "id", &tmp ) )
-        found = findTrackerById( inf, (uint32_t)tmp, &trackerIndex );
-    else if( tr_bencDictFindStr( tracker, "announce", &announce ) )
-        found = findTrackerByURL( inf, announce, &trackerIndex );
-    else
-        errmsg = "no tracker supplied";
+    /* make a working copy of the existing announce list */
+    n = inf->trackerCount;
+    trackers = tr_new0( tr_tracker_info, n );
+    copyTrackers( trackers, inf->trackers, n );
 
-    if( found )
+    /* remove the ones specified in the urls list */
+    i = 0;
+    while(( val = tr_bencListChild( urls, i++ ))) 
     {
-        int i, j, trackerCount;
-        tr_tracker_info * trackers = tr_new0( tr_tracker_info, inf->trackerCount - 1 );
-
-        for( i = 0, j = 0; i < inf->trackerCount; ++i )
+        int pos;
+        const char * url;
+        if( tr_bencGetStr( val, &url ) && findAnnounceUrl( trackers, n, url, &pos ) )
         {
-            if( i != trackerIndex )
-            {
-                const tr_tracker_info * t = &inf->trackers[i];
-                trackers[j].tier = t->tier;
-                trackers[j].announce = tr_strdup( t->announce );
-                ++j;
-            }
+            tr_removeElementFromArray( trackers, pos, sizeof( tr_tracker_info ), n-- );
+            changed = TRUE;
         }
-        trackerCount = j;
-
-        if( !tr_torrentSetAnnounceList( tor, trackers, trackerCount ) )
-            errmsg = "error setting announce list";
-
-        for( i = 0; i < trackerCount; ++i )
-            tr_free( trackers[i].announce );
-        tr_free( trackers );
     }
-    else
-        errmsg = "tracker doesn't exists";
 
+    if( !changed )
+        errmsg = "invalid argument";
+    else if( !tr_torrentSetAnnounceList( tor, trackers, n ) )
+        errmsg = "error setting announce list";
+
+    freeTrackers( trackers, n );
     return errmsg;
 }
 
@@ -984,7 +946,7 @@ torrentSet( tr_session               * session,
         int64_t      tmp;
         double       d;
         tr_benc *    files;
-        tr_benc *    tracker;
+        tr_benc *    urls;
         tr_bool      boolVal;
         tr_torrent * tor = torrents[i];
 
@@ -1013,16 +975,20 @@ torrentSet( tr_session               * session,
             tr_torrentSetSpeedLimit_KBps( tor, TR_UP, tmp );
         if( tr_bencDictFindBool( args_in, "uploadLimited", &boolVal ) )
             tr_torrentUseSpeedLimit( tor, TR_UP, boolVal );
+        if( tr_bencDictFindInt( args_in, "seedIdleLimit", &tmp ) )
+            tr_torrentSetIdleLimit( tor, tmp );
+        if( tr_bencDictFindInt( args_in, "seedIdleMode", &tmp ) )
+            tr_torrentSetIdleMode( tor, tmp );
         if( tr_bencDictFindReal( args_in, "seedRatioLimit", &d ) )
             tr_torrentSetRatioLimit( tor, d );
         if( tr_bencDictFindInt( args_in, "seedRatioMode", &tmp ) )
             tr_torrentSetRatioMode( tor, tmp );
-        if( !errmsg && tr_bencDictFindDict( args_in, "trackerAdd", &tracker ) )
-            errmsg = addTracker( tor, tracker );
-        if( !errmsg && tr_bencDictFindDict( args_in, "trackerEdit", &tracker ) )
-            errmsg = editTracker( tor, tracker );
-        if( !errmsg && tr_bencDictFindDict( args_in, "trackerRemove", &tracker ) )
-            errmsg = removeTracker( tor, tracker );
+        if( !errmsg && tr_bencDictFindList( args_in, "trackerAdd", &urls ) )
+            errmsg = addTrackerUrls( tor, urls );
+        if( !errmsg && tr_bencDictFindList( args_in, "trackerRemove", &urls ) )
+            errmsg = removeTrackerUrls( tor, urls );
+        if( !errmsg && tr_bencDictFindList( args_in, "trackerReplace", &urls ) )
+            errmsg = replaceTrackerUrls( tor, urls );
         notify( session, TR_RPC_TORRENT_CHANGED, tor );
     }
 
@@ -1453,6 +1419,10 @@ sessionSet( tr_session               * session,
         tr_sessionSetRatioLimit( session, d );
     if( tr_bencDictFindBool( args_in, "seedRatioLimited", &boolVal ) )
         tr_sessionSetRatioLimited( session, boolVal );
+    if( tr_bencDictFindInt( args_in, TR_PREFS_KEY_IDLE_LIMIT, &i ) )
+        tr_sessionSetIdleLimit( session, i );
+    if( tr_bencDictFindBool( args_in, TR_PREFS_KEY_IDLE_LIMIT_ENABLED, &boolVal ) )
+        tr_sessionSetIdleLimited( session, boolVal );
     if( tr_bencDictFindBool( args_in, TR_PREFS_KEY_START, &boolVal ) )
         tr_sessionSetPaused( session, !boolVal );
     if( tr_bencDictFindStr( args_in, TR_PREFS_KEY_SCRIPT_TORRENT_DONE_FILENAME, &str ) )
@@ -1548,7 +1518,7 @@ sessionGet( tr_session               * s,
     tr_bencDictAddInt ( d, TR_PREFS_KEY_ALT_SPEED_TIME_DAY,tr_sessionGetAltSpeedDay(s) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_ALT_SPEED_TIME_ENABLED, tr_sessionUsesAltSpeedTime(s) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_BLOCKLIST_ENABLED, tr_blocklistIsEnabled( s ) );
-    tr_bencDictAddReal( d, TR_PREFS_KEY_MAX_CACHE_SIZE_MB, tr_sessionGetCacheLimit_MB( s ) );
+    tr_bencDictAddInt ( d, TR_PREFS_KEY_MAX_CACHE_SIZE_MB, tr_sessionGetCacheLimit_MB( s ) );
     tr_bencDictAddInt ( d, "blocklist-size", tr_blocklistGetRuleCount( s ) );
     tr_bencDictAddStr ( d, "config-dir", tr_sessionGetConfigDir( s ) );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_DOWNLOAD_DIR, tr_sessionGetDownloadDir( s ) );
@@ -1560,13 +1530,15 @@ sessionGet( tr_session               * s,
     tr_bencDictAddBool( d, TR_PREFS_KEY_DHT_ENABLED, tr_sessionIsDHTEnabled( s ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_LPD_ENABLED, tr_sessionIsLPDEnabled( s ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_PORT, tr_sessionGetPeerPort( s ) );
-    tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_PORT_RANDOM_ON_START, tr_sessionGetPeerPortRandomOnStart( s ) );
+    tr_bencDictAddBool( d, TR_PREFS_KEY_PEER_PORT_RANDOM_ON_START, tr_sessionGetPeerPortRandomOnStart( s ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_PORT_FORWARDING, tr_sessionIsPortForwardingEnabled( s ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_RENAME_PARTIAL_FILES, tr_sessionIsIncompleteFileNamingEnabled( s ) );
     tr_bencDictAddInt ( d, "rpc-version", RPC_VERSION );
     tr_bencDictAddInt ( d, "rpc-version-minimum", RPC_VERSION_MIN );
     tr_bencDictAddReal( d, "seedRatioLimit", tr_sessionGetRatioLimit( s ) );
     tr_bencDictAddBool( d, "seedRatioLimited", tr_sessionIsRatioLimited( s ) );
+    tr_bencDictAddInt ( d, TR_PREFS_KEY_IDLE_LIMIT, tr_sessionGetIdleLimit( s ) );
+    tr_bencDictAddBool( d, TR_PREFS_KEY_IDLE_LIMIT_ENABLED, tr_sessionIsIdleLimited( s ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_START, !tr_sessionGetPaused( s ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_TRASH_ORIGINAL, tr_sessionGetDeleteSource( s ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_USPEED_KBps, tr_sessionGetSpeedLimit_KBps( s, TR_UP ) );

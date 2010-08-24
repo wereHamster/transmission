@@ -1,11 +1,11 @@
 /*
- * This file Copyright (C) 2009-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
- * Transmission project are granted a special exemption to clause 2(b)
- * so that the bulk of its code can remain under the MIT license.
- * This exemption does not extend to derived works not owned by
- * the Transmission project.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2
+ * as published by the Free Software Foundation.
+ *
+ * http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  *
  * $Id$
  */
@@ -45,7 +45,8 @@ Prefs::PrefItem Prefs::myItems[] =
     { FILTERBAR, "show-filterbar", QVariant::Bool },
     { STATUSBAR, "show-statusbar", QVariant::Bool },
     { STATUSBAR_STATS, "statusbar-stats", QVariant::String },
-    { SHOW_TRACKER_SCRAPES, "show-tracker-scrapes", QVariant::Bool },
+    { SHOW_TRACKER_SCRAPES, "show-extra-peer-details", QVariant::Bool },
+    { SHOW_BACKUP_TRACKERS, "show-backup-trackers", QVariant::Bool },
     { TOOLBAR, "show-toolbar" , QVariant::Bool },
     { BLOCKLIST_DATE, "blocklist-date", QVariant::DateTime },
     { BLOCKLIST_UPDATES_ENABLED, "blocklist-updates-enabled" , QVariant::Bool },
@@ -55,6 +56,8 @@ Prefs::PrefItem Prefs::myItems[] =
     { MAIN_WINDOW_X, "main-window-x", QVariant::Int },
     { MAIN_WINDOW_Y, "main-window-y", QVariant::Int },
     { FILTER_MODE, "filter-mode", TrTypes::FilterModeType },
+    { FILTER_TRACKERS, "filter-trackers", QVariant::String },
+    { FILTER_TEXT, "filter-text", QVariant::String },
     { SESSION_IS_REMOTE, "remote-session-enabled", QVariant::Bool },
     { SESSION_REMOTE_HOST, "remote-session-host", QVariant::String },
     { SESSION_REMOTE_PORT, "remote-session-port", QVariant::Int },
@@ -76,6 +79,8 @@ Prefs::PrefItem Prefs::myItems[] =
     { DSPEED_ENABLED, TR_PREFS_KEY_DSPEED_ENABLED, QVariant::Bool },
     { DOWNLOAD_DIR, TR_PREFS_KEY_DOWNLOAD_DIR, QVariant::String },
     { ENCRYPTION, TR_PREFS_KEY_ENCRYPTION, QVariant::Int },
+    { IDLE_LIMIT, TR_PREFS_KEY_IDLE_LIMIT, QVariant::Int },
+    { IDLE_LIMIT_ENABLED, TR_PREFS_KEY_IDLE_LIMIT_ENABLED, QVariant::Bool },
     { INCOMPLETE_DIR, TR_PREFS_KEY_INCOMPLETE_DIR, QVariant::String },
     { INCOMPLETE_DIR_ENABLED, TR_PREFS_KEY_INCOMPLETE_DIR_ENABLED, QVariant::Bool },
     { LAZY_BITFIELD, TR_PREFS_KEY_LAZY_BITFIELD, QVariant::Bool },
@@ -129,6 +134,10 @@ Prefs :: Prefs( const char * configDir ):
     assert( sizeof(myItems) / sizeof(myItems[0]) == PREFS_COUNT );
     for( int i=0; i<PREFS_COUNT; ++i )
         assert( myItems[i].id == i );
+
+    // these are the prefs that don't get saved to settings.json
+    // when the application exits.
+    myTemporaryPrefs << FILTER_TEXT;
 
     tr_benc top;
     tr_bencInitDict( &top, 0 );
@@ -194,10 +203,16 @@ Prefs :: ~Prefs( )
         tr_bencInitDict( &top, PREFS_COUNT );
 
     /* merge our own settings with the ones already in the file */
-    for( int i=0; i<PREFS_COUNT; ++i ) {
+    for( int i=0; i<PREFS_COUNT; ++i )
+    {
+        if( myTemporaryPrefs.contains( i ) )
+            continue;
+
         const char * key = myItems[i].key;
         const QVariant& val = myValues[i];
-        switch( myItems[i].type ) {
+
+        switch( myItems[i].type )
+        {
             case QVariant::Int:
                 tr_bencDictAddInt( &top, key, val.toInt() );
                 break;
@@ -237,33 +252,35 @@ Prefs :: ~Prefs( )
 void
 Prefs :: initDefaults( tr_benc * d )
 {
-    tr_bencDictAddStr( d, keyStr(DIR_WATCH), tr_getDefaultDownloadDir( ) );
-    tr_bencDictAddInt( d, keyStr(DIR_WATCH_ENABLED), false );
-    tr_bencDictAddInt( d, keyStr(INHIBIT_HIBERNATION), false );
-    tr_bencDictAddInt( d, keyStr(BLOCKLIST_DATE), 0 );
-    tr_bencDictAddInt( d, keyStr(BLOCKLIST_UPDATES_ENABLED), true );
-    tr_bencDictAddStr( d, keyStr(OPEN_DIALOG_FOLDER), QDir::home().absolutePath().toLatin1() );
-    tr_bencDictAddInt( d, keyStr(SHOW_TRACKER_SCRAPES), false );
-    tr_bencDictAddInt( d, keyStr(TOOLBAR), true );
-    tr_bencDictAddInt( d, keyStr(FILTERBAR), true );
-    tr_bencDictAddInt( d, keyStr(STATUSBAR), true );
-    tr_bencDictAddInt( d, keyStr(SHOW_TRAY_ICON), false );
-    tr_bencDictAddInt( d, keyStr(SHOW_DESKTOP_NOTIFICATION), true );
-    tr_bencDictAddStr( d, keyStr(STATUSBAR_STATS), "total-ratio" );
-    tr_bencDictAddInt( d, keyStr(OPTIONS_PROMPT), true );
-    tr_bencDictAddInt( d, keyStr(MAIN_WINDOW_HEIGHT), 500 );
-    tr_bencDictAddInt( d, keyStr(MAIN_WINDOW_WIDTH), 300 );
-    tr_bencDictAddInt( d, keyStr(MAIN_WINDOW_X), 50 );
-    tr_bencDictAddInt( d, keyStr(MAIN_WINDOW_Y), 50 );
-    tr_bencDictAddStr( d, keyStr(FILTER_MODE), "all" );
-    tr_bencDictAddStr( d, keyStr(MAIN_WINDOW_LAYOUT_ORDER), "menu,toolbar,filter,list,statusbar" );
-    tr_bencDictAddStr( d, keyStr(DOWNLOAD_DIR), tr_getDefaultDownloadDir( ) );
-    tr_bencDictAddInt( d, keyStr(ASKQUIT), true );
-    tr_bencDictAddStr( d, keyStr(SORT_MODE), "sort-by-name" );
-    tr_bencDictAddInt( d, keyStr(SORT_REVERSED), false );
-    tr_bencDictAddInt( d, keyStr(COMPACT_VIEW), false );
-    tr_bencDictAddStr( d, keyStr(SESSION_REMOTE_HOST), "localhost" );
-    tr_bencDictAddInt( d, keyStr(SESSION_REMOTE_PORT), atoi(TR_DEFAULT_RPC_PORT_STR) );
+    tr_bencDictAddStr ( d, keyStr(DIR_WATCH), tr_getDefaultDownloadDir( ) );
+    tr_bencDictAddBool( d, keyStr(DIR_WATCH_ENABLED), false );
+    tr_bencDictAddBool( d, keyStr(INHIBIT_HIBERNATION), false );
+    tr_bencDictAddInt ( d, keyStr(BLOCKLIST_DATE), 0 );
+    tr_bencDictAddBool( d, keyStr(BLOCKLIST_UPDATES_ENABLED), true );
+    tr_bencDictAddStr ( d, keyStr(OPEN_DIALOG_FOLDER), QDir::home().absolutePath().toLatin1() );
+    tr_bencDictAddInt ( d, keyStr(SHOW_TRACKER_SCRAPES), false );
+    tr_bencDictAddBool( d, keyStr(TOOLBAR), true );
+    tr_bencDictAddBool( d, keyStr(FILTERBAR), true );
+    tr_bencDictAddBool( d, keyStr(STATUSBAR), true );
+    tr_bencDictAddBool( d, keyStr(SHOW_TRAY_ICON), false );
+    tr_bencDictAddBool( d, keyStr(SHOW_DESKTOP_NOTIFICATION), true );
+    tr_bencDictAddStr ( d, keyStr(STATUSBAR_STATS), "total-ratio" );
+    tr_bencDictAddBool( d, keyStr(SHOW_TRACKER_SCRAPES), false );
+    tr_bencDictAddBool( d, keyStr(SHOW_BACKUP_TRACKERS), false );
+    tr_bencDictAddBool( d, keyStr(OPTIONS_PROMPT), true );
+    tr_bencDictAddInt ( d, keyStr(MAIN_WINDOW_HEIGHT), 500 );
+    tr_bencDictAddInt ( d, keyStr(MAIN_WINDOW_WIDTH), 300 );
+    tr_bencDictAddInt ( d, keyStr(MAIN_WINDOW_X), 50 );
+    tr_bencDictAddInt ( d, keyStr(MAIN_WINDOW_Y), 50 );
+    tr_bencDictAddStr ( d, keyStr(FILTER_MODE), "all" );
+    tr_bencDictAddStr ( d, keyStr(MAIN_WINDOW_LAYOUT_ORDER), "menu,toolbar,filter,list,statusbar" );
+    tr_bencDictAddStr ( d, keyStr(DOWNLOAD_DIR), tr_getDefaultDownloadDir( ) );
+    tr_bencDictAddBool( d, keyStr(ASKQUIT), true );
+    tr_bencDictAddStr ( d, keyStr(SORT_MODE), "sort-by-name" );
+    tr_bencDictAddBool( d, keyStr(SORT_REVERSED), false );
+    tr_bencDictAddBool( d, keyStr(COMPACT_VIEW), false );
+    tr_bencDictAddStr ( d, keyStr(SESSION_REMOTE_HOST), "localhost" );
+    tr_bencDictAddInt ( d, keyStr(SESSION_REMOTE_PORT), atoi(TR_DEFAULT_RPC_PORT_STR) );
     tr_bencDictAddBool( d, keyStr(SESSION_IS_REMOTE), false );
     tr_bencDictAddBool( d, keyStr(SESSION_REMOTE_AUTH), false );
     tr_bencDictAddBool( d, keyStr(USER_HAS_GIVEN_INFORMED_CONSENT), false );

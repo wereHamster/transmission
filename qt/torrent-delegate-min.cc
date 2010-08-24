@@ -1,11 +1,11 @@
 /*
- * This file Copyright (C) 2009-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
- * Transmission project are granted a special exemption to clause 2(b)
- * so that the bulk of its code can remain under the MIT license.
- * This exemption does not extend to derived works not owned by
- * the Transmission project.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2
+ * as published by the Free Software Foundation.
+ *
+ * http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  *
  * $Id$
  */
@@ -23,6 +23,9 @@
 #include <QPixmapCache>
 #include <QStyleOptionProgressBarV2>
 
+#include <libtransmission/transmission.h>
+#include <libtransmission/utils.h>
+
 #include "torrent.h"
 #include "torrent-delegate-min.h"
 #include "torrent-model.h"
@@ -30,6 +33,7 @@
 enum
 {
    GUI_PAD = 6,
+   BAR_WIDTH = 50,
    BAR_HEIGHT = 12,
    LINE_SPACING = 4
 };
@@ -37,8 +41,7 @@ enum
 /***
 ****
 ****   +---------+-----------------------------------------------+
-****   |  Icon   |   Title                   shortStatusString   |
-****   |  Icon   |   [ Progressbar.......................... ]   |
+****   |  Icon   |   Title      shortStatusString [Progressbar]  |
 ****   +-------- +-----------------------------------------------+
 ****
 ***/
@@ -53,18 +56,20 @@ TorrentDelegateMin :: sizeHint( const QStyleOptionViewItem& option, const Torren
     const QFontMetrics nameFM( nameFont );
     const bool isMagnet( !tor.hasMetadata( ) );
     const QString nameStr = (isMagnet ? progressString( tor ) : tor.name( ) );
-    const QSize nameSize( nameFM.size( 0, nameStr ) );
+    const int nameWidth = nameFM.width( nameStr );
 
     QFont statusFont( option.font );
     statusFont.setPointSize( int( option.font.pointSize( ) * 0.85 ) );
     const QFontMetrics statusFM( statusFont );
     const QString statusStr( shortStatusString( tor ) );
-    const QSize statusSize( statusFM.size( 0, statusStr ) );
+    const int statusWidth = statusFM.width( statusStr );
 
     const QSize m( margin( *style ) );
 
-    return QSize( m.width() + iconSize + GUI_PAD + nameSize.width() + GUI_PAD + statusSize.width() + m.width(),
-                  m.height() + nameSize.height() + LINE_SPACING + BAR_HEIGHT  + m.height() );
+    return QSize( m.width()*2 + iconSize + GUI_PAD + nameWidth
+                                         + GUI_PAD + statusWidth
+                                         + GUI_PAD + BAR_WIDTH,
+                  m.height()*2 + std::max( nameFM.height(), (int)BAR_HEIGHT ) );
 }
 
 void
@@ -78,7 +83,6 @@ TorrentDelegateMin :: drawTorrent( QPainter * painter, const QStyleOptionViewIte
     const QFontMetrics nameFM( nameFont );
     const bool isMagnet( !tor.hasMetadata( ) );
     const QString nameStr = (isMagnet ? progressString( tor ) : tor.name( ) );
-    const QSize nameSize( nameFM.size( 0, nameStr ) );
 
     QFont statusFont( option.font );
     statusFont.setPointSize( int( option.font.pointSize( ) * 0.85 ) );
@@ -126,18 +130,18 @@ TorrentDelegateMin :: drawTorrent( QPainter * painter, const QStyleOptionViewIte
                           fillArea.y( ) + ( fillArea.height( ) - iconSize ) / 2,
                           iconSize,
                           iconSize );
-    const QRect statusArea( fillArea.width( ) - statusSize.width( ),
-                            fillArea.top( ) + ((nameSize.height()-statusSize.height())/2),
-                            statusSize.width( ),
-                            statusSize.height( ) );
+    const QRect barArea( fillArea.x( ) + fillArea.width( ) - BAR_WIDTH,
+                         fillArea.y( ) + ( fillArea.height( ) - BAR_HEIGHT ) / 2,
+                         BAR_WIDTH,
+                         BAR_HEIGHT );
+    const QRect statusArea( barArea.x( ) - GUI_PAD - statusSize.width( ),
+                            fillArea.y( ) + ( fillArea.height( ) - statusSize.height( ) ) / 2,
+                            fillArea.width( ),
+                            fillArea.height( ) );
     const QRect nameArea( iconArea.x( ) + iconArea.width( ) + GUI_PAD,
                           fillArea.y( ),
-                          fillArea.width( ) - statusArea.width( ) - (GUI_PAD*2) - iconArea.width( ),
-                          nameSize.height( ) );
-    const QRect barArea( nameArea.left( ),
-                         nameArea.bottom( ),
-                         statusArea.right( ) - nameArea.left( ),
-                         BAR_HEIGHT );
+                          statusArea.x( ) - ( iconArea.x( ) + iconArea.width( ) + GUI_PAD * 2 ),
+                          fillArea.height( ) );
 
     // render
     if( tor.hasError( ) )
@@ -154,6 +158,10 @@ TorrentDelegateMin :: drawTorrent( QPainter * painter, const QStyleOptionViewIte
     myProgressBarStyle->palette = option.palette;
     myProgressBarStyle->palette.setCurrentColorGroup( cg );
     myProgressBarStyle->state = progressBarState;
+    char buf[32];
+    tr_snprintf( buf, sizeof( buf ), "%d%%", (int)tr_truncd( 100.0 * tor.percentDone( ), 0 ) );
+    myProgressBarStyle->text = buf;
+    myProgressBarStyle->textVisible = true;
     myProgressBarStyle->progress = int(myProgressBarStyle->minimum + (((isMagnet ? tor.metadataPercentDone() : tor.percentDone()) * (myProgressBarStyle->maximum - myProgressBarStyle->minimum))));
     style->drawControl( QStyle::CE_ProgressBar, myProgressBarStyle, painter );
 

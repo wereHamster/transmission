@@ -25,15 +25,7 @@
 #define DIRTY_KEY          "tr-filter-dirty-key"
 #define SESSION_KEY        "tr-session-key"
 #define TEXT_KEY           "tr-filter-text-key"
-#define TEXT_MODE_KEY      "tr-filter-text-mode-key"
 #define TORRENT_MODEL_KEY  "tr-filter-torrent-model-key"
-
-#if !GTK_CHECK_VERSION( 2,16,0 )
- /* FIXME: when 2.16 has been out long enough, it would be good to
-  * get rid of libsexy because of its makefile strangeness */
- #define USE_SEXY
- #include "sexy-icon-entry.h"
-#endif
 
 /***
 ****
@@ -589,6 +581,7 @@ enum
     ACTIVITY_FILTER_SEEDING,
     ACTIVITY_FILTER_ACTIVE,
     ACTIVITY_FILTER_PAUSED,
+    ACTIVITY_FILTER_FINISHED,
     ACTIVITY_FILTER_QUEUED,
     ACTIVITY_FILTER_VERIFYING,
     ACTIVITY_FILTER_ERROR,
@@ -633,19 +626,20 @@ test_torrent_activity( tr_torrent * tor, int type )
         case ACTIVITY_FILTER_PAUSED:
             return st->activity == TR_STATUS_STOPPED;
 
+        case ACTIVITY_FILTER_FINISHED:
+            return st->finished == TRUE;
+
         case ACTIVITY_FILTER_QUEUED:
-            return FALSE;
+            return st->activity == TR_STATUS_CHECK_WAIT;
 
         case ACTIVITY_FILTER_VERIFYING:
-            return ( st->activity == TR_STATUS_CHECK_WAIT )
-                || ( st->activity == TR_STATUS_CHECK );
+            return st->activity == TR_STATUS_CHECK ;
 
         case ACTIVITY_FILTER_ERROR:
             return st->error != 0;
 
         default: /* ACTIVITY_FILTER_ALL */
             return TRUE;
-
     }
 }
 
@@ -720,6 +714,7 @@ activity_filter_model_new( GtkTreeModel * tmodel )
         { ACTIVITY_FILTER_DOWNLOADING, N_( "Downloading" ), GTK_STOCK_GO_DOWN },
         { ACTIVITY_FILTER_SEEDING, N_( "Seeding" ), GTK_STOCK_GO_UP },
         { ACTIVITY_FILTER_PAUSED, N_( "Paused" ), GTK_STOCK_MEDIA_PAUSE },
+        { ACTIVITY_FILTER_FINISHED, N_( "Finished" ), NULL },
         { ACTIVITY_FILTER_QUEUED, N_( "Queued" ), NULL },
         { ACTIVITY_FILTER_VERIFYING, N_( "Verifying" ), GTK_STOCK_REFRESH },
         { ACTIVITY_FILTER_ERROR, N_( "Error" ), GTK_STOCK_DIALOG_ERROR }
@@ -844,80 +839,36 @@ activity_combo_box_new( GtkTreeModel * tmodel )
 *****
 ****/
 
-enum
-{
-    TEXT_MODE_NAME,
-    TEXT_MODE_FILES,
-    TEXT_MODE_TRACKER,
-    TEXT_MODE_N_TYPES
-};
-
 static gboolean
-testText( const tr_torrent * tor, const char * key, int mode )
+testText( const tr_torrent * tor, const char * key )
 {
-    gboolean ret;
-    tr_file_index_t i;
-    const tr_info * inf = tr_torrentInfo( tor );
+    gboolean ret = FALSE;
 
-    switch( mode )
+    if( !key || !*key )
     {
-        case TEXT_MODE_FILES:
-            for( i=0; i<inf->fileCount && !ret; ++i ) {
-                char * pch = g_utf8_casefold( inf->files[i].name, -1 );
-                ret = !key || strstr( pch, key ) != NULL;
-                g_free( pch );
-            }
-            break;
+        ret = TRUE;
+    }
+    else
+    {
+        tr_file_index_t i;
+        const tr_info * inf = tr_torrentInfo( tor );
 
-        case TEXT_MODE_TRACKER:
-            if( inf->trackerCount > 0 ) {
-                char * pch = g_utf8_casefold( inf->trackers[0].announce, -1 );
-                ret = !key || ( strstr( pch, key ) != NULL );
-                g_free( pch );
-            }
-            break;
-
-        default: /* NAME */
-            if( !inf->name )
-                ret = TRUE;
-            else {
-                char * pch = g_utf8_casefold( inf->name, -1 );
-                ret = !key || ( strstr( pch, key ) != NULL );
-                g_free( pch );
-            }
-            break;
+        for( i=0; i<inf->fileCount && !ret; ++i )
+        {
+            char * pch = g_utf8_casefold( inf->files[i].name, -1 );
+            ret = !key || strstr( pch, key ) != NULL;
+            g_free( pch );
+        }
     }
 
     return ret;
 }
 
-
-#ifdef USE_SEXY
 static void
-entry_icon_released( SexyIconEntry           * entry  UNUSED,
-                     SexyIconEntryPosition     icon_pos,
-                     int                       button UNUSED,
-                     gpointer                  menu )
+entry_clear( GtkEntry * e )
 {
-    if( icon_pos == SEXY_ICON_ENTRY_PRIMARY )
-        gtk_menu_popup( GTK_MENU( menu ), NULL, NULL, NULL, NULL, 0,
-                        gtk_get_current_event_time( ) );
+    gtk_entry_set_text( e, "" );
 }
-#else
-static void
-entry_icon_release( GtkEntry              * entry  UNUSED,
-                    GtkEntryIconPosition    icon_pos,
-                    GdkEventButton        * event  UNUSED,
-                    gpointer                menu )
-{
-    if( icon_pos == GTK_ENTRY_ICON_SECONDARY )
-        gtk_entry_set_text( entry, "" );
-
-    if( icon_pos == GTK_ENTRY_ICON_PRIMARY )
-        gtk_menu_popup( GTK_MENU( menu ), NULL, NULL, NULL, NULL, 0,
-                        gtk_get_current_event_time( ) );
-}
-#endif
 
 static void
 filter_entry_changed( GtkEditable * e, gpointer filter_model )
@@ -927,17 +878,10 @@ filter_entry_changed( GtkEditable * e, gpointer filter_model )
 
     pch = gtk_editable_get_chars( e, 0, -1 );
     folded = g_utf8_casefold( pch, -1 );
+    g_strstrip( folded );
     g_object_set_data_full( filter_model, TEXT_KEY, folded, g_free );
     g_free( pch );
 
-    gtk_tree_model_filter_refilter( GTK_TREE_MODEL_FILTER( filter_model ) );
-}
-
-static void
-filter_text_toggled_cb( GtkCheckMenuItem * menu_item, gpointer filter_model )
-{
-    g_object_set_data( filter_model, TEXT_MODE_KEY,
-                       g_object_get_data( G_OBJECT( menu_item ), TEXT_MODE_KEY ) );
     gtk_tree_model_filter_refilter( GTK_TREE_MODEL_FILTER( filter_model ) );
 }
 
@@ -958,7 +902,6 @@ struct filter_data
 static gboolean
 is_row_visible( GtkTreeModel * model, GtkTreeIter * iter, gpointer vdata )
 {
-    int mode;
     const char * text;
     tr_torrent * tor;
     struct filter_data * data = vdata;
@@ -967,11 +910,10 @@ is_row_visible( GtkTreeModel * model, GtkTreeIter * iter, gpointer vdata )
     gtk_tree_model_get( model, iter, MC_TORRENT_RAW, &tor, -1 );
 
     text = (const char*) g_object_get_data( o, TEXT_KEY );
-    mode = GPOINTER_TO_INT( g_object_get_data( o, TEXT_MODE_KEY ) );
 
     return ( tor != NULL ) && testCategory( data->category, tor )
                            && testActivity( data->activity, tor )
-                           && testText( tor, text, mode );
+                           && testText( tor, text );
 }
 
 static void
@@ -984,21 +926,14 @@ selection_changed_cb( GtkComboBox * combo UNUSED, gpointer vdata )
 GtkWidget *
 gtr_filter_bar_new( tr_session * session, GtkTreeModel * tmodel, GtkTreeModel ** filter_model )
 {
-    int i;
     GtkWidget * l;
     GtkWidget * w;
     GtkWidget * h;
     GtkWidget * s;
-    GtkWidget * menu;
     GtkWidget * activity;
     GtkWidget * category;
-    GSList * sl;
     const char * str;
     struct filter_data * data;
-    const char *  filter_text_names[] = {
-        N_( "Name" ), N_( "Files" ), N_( "Tracker" )
-    };
-
 
     data = g_new( struct filter_data, 1 );
     data->activity = activity = activity_combo_box_new( tmodel );
@@ -1043,45 +978,22 @@ gtr_filter_bar_new( tr_session * session, GtkTreeModel * tmodel, GtkTreeModel **
     gtk_box_pack_start( GTK_BOX( h ), w, FALSE, FALSE, 0 );
 
     /* add the entry field */
-#ifdef USE_SEXY
-    s = sexy_icon_entry_new( );
-    sexy_icon_entry_add_clear_button( SEXY_ICON_ENTRY( s ) );
-    w = gtk_image_new_from_stock( GTK_STOCK_FIND, GTK_ICON_SIZE_MENU );
-    sexy_icon_entry_set_icon( SEXY_ICON_ENTRY( s ),
-                              SEXY_ICON_ENTRY_PRIMARY,
-                              GTK_IMAGE( w ) );
-    g_object_unref( w );
-    sexy_icon_entry_set_icon_highlight( SEXY_ICON_ENTRY( s ),
-                                        SEXY_ICON_ENTRY_PRIMARY, TRUE );
+#if GTK_CHECK_VERSION( 2,16,0 )
+    s = gtk_entry_new( );
+    gtk_entry_set_icon_from_stock( GTK_ENTRY( s ), GTK_ENTRY_ICON_SECONDARY, GTK_STOCK_CLEAR );
+    g_signal_connect( s, "icon-release", G_CALLBACK( entry_clear ), NULL );
+    gtk_box_pack_start( GTK_BOX( h ), s, TRUE, TRUE, 0 );
 #else
     s = gtk_entry_new( );
-    gtk_entry_set_icon_from_stock( GTK_ENTRY( s ),
-                                   GTK_ENTRY_ICON_PRIMARY,
-                                   GTK_STOCK_FIND);
-    gtk_entry_set_icon_from_stock( GTK_ENTRY( s ),
-                                   GTK_ENTRY_ICON_SECONDARY,
-                                   GTK_STOCK_CLEAR );
-#endif
-
-    menu = gtk_menu_new( );
-    sl = NULL;
-    for( i=0; i<TEXT_MODE_N_TYPES; ++i )
-    {
-        const char * name = _( filter_text_names[i] );
-        GtkWidget *  w = gtk_radio_menu_item_new_with_label ( sl, name );
-        sl = gtk_radio_menu_item_get_group( GTK_RADIO_MENU_ITEM( w ) );
-        g_object_set_data( G_OBJECT( w ), TEXT_MODE_KEY, GINT_TO_POINTER( i ) );
-        g_signal_connect( w, "toggled", G_CALLBACK( filter_text_toggled_cb ), data->filter_model );
-        gtk_menu_shell_append( GTK_MENU_SHELL( menu ), w );
-        gtk_widget_show( w );
-    }
-#ifdef USE_SEXY
-    g_signal_connect( s, "icon-released", G_CALLBACK( entry_icon_released ), menu );
-#else
-    g_signal_connect( s, "icon-release", G_CALLBACK( entry_icon_release ), menu );
-#endif
-
     gtk_box_pack_start( GTK_BOX( h ), s, TRUE, TRUE, 0 );
+    w = gtk_button_new( );
+    gtk_button_set_relief( GTK_BUTTON( w ), GTK_RELIEF_NONE );
+    l = gtk_image_new_from_stock( GTK_STOCK_CLEAR, GTK_ICON_SIZE_MENU );
+    gtk_button_set_image( GTK_BUTTON( w ), l );
+    gtk_box_pack_start( GTK_BOX( h ), w, FALSE, FALSE, 0 );
+    g_signal_connect_swapped( w, "clicked", G_CALLBACK( entry_clear ), s );
+#endif
+
     g_signal_connect( s, "changed", G_CALLBACK( filter_entry_changed ), data->filter_model );
 
     *filter_model = data->filter_model;

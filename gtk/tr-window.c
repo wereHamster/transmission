@@ -27,13 +27,6 @@
 #include <gtk/gtk.h>
 #include <glib/gi18n.h>
 
-#if !GTK_CHECK_VERSION( 2,16,0 )
- /* FIXME: when 2.16 has been out long enough, it would be really nice to
-  * get rid of this libsexy usage because of its makefile strangeness */
- #define USE_SEXY
- #include "sexy-icon-entry.h"
-#endif
-
 #include <libtransmission/transmission.h>
 
 #include "actions.h"
@@ -705,33 +698,18 @@ tr_window_new( GtkUIManager * ui_mgr, TrCore * core )
                                          GTK_SHADOW_IN );
     gtk_container_add( GTK_CONTAINER( w ), p->view );
 
-    /* layout the widgets */
-    {
-        const char * str = pref_string_get( PREF_KEY_MAIN_WINDOW_LAYOUT_ORDER );
-        char ** tokens = g_strsplit( str, ",", -1 );
-        for( i=0; tokens && tokens[i]; ++i )
-        {
-            const char * key = tokens[i];
-
-            if( !strcmp( key, "menu" ) )
-                gtk_box_pack_start( GTK_BOX( vbox ), mainmenu, FALSE, FALSE, 0 );
-            else if( !strcmp( key, "toolbar" ) )
-                gtk_box_pack_start( GTK_BOX( vbox ), toolbar, FALSE, FALSE, 0 );
-            else if( !strcmp( key, "filter" ) )
-                gtk_box_pack_start( GTK_BOX( vbox ), filter, FALSE, FALSE, 0 );
-            else if( !strcmp( key, "list" ) )
-                gtk_box_pack_start( GTK_BOX( vbox ), list, TRUE, TRUE, 0 );
-            else if( !strcmp( key, "statusbar" ) )
-                gtk_box_pack_start( GTK_BOX( vbox ), status, FALSE, FALSE, 0 );
-        }
-        g_strfreev( tokens );
-    }
+    /* lay out the widgets */
+    gtk_box_pack_start( GTK_BOX( vbox ), mainmenu, FALSE, FALSE, 0 );
+    gtk_box_pack_start( GTK_BOX( vbox ), toolbar, FALSE, FALSE, 0 );
+    gtk_box_pack_start( GTK_BOX( vbox ), filter, FALSE, FALSE, 0 );
+    gtk_box_pack_start( GTK_BOX( vbox ), list, TRUE, TRUE, 0 );
+    gtk_box_pack_start( GTK_BOX( vbox ), status, FALSE, FALSE, 0 );
 
     {
-        int w=0, h=0;
         /* this is to determine the maximum width/height for the label */
-        PangoLayout * pango_layout =
-            gtk_widget_create_pango_layout( p->ul_lb, _( "999.99 KiB/s" ) );
+        int w=0, h=0;
+        PangoLayout * pango_layout;
+        pango_layout = gtk_widget_create_pango_layout( p->ul_lb, "999.99 KiB/s" );
         pango_layout_get_pixel_size( pango_layout, &w, &h );
         gtk_widget_set_size_request( p->ul_lb, w, h );
         gtk_widget_set_size_request( p->dl_lb, w, h );
@@ -750,7 +728,6 @@ tr_window_new( GtkUIManager * ui_mgr, TrCore * core )
     prefsChanged( core, PREF_KEY_STATUSBAR, self );
     prefsChanged( core, PREF_KEY_STATUSBAR_STATS, self );
     prefsChanged( core, PREF_KEY_TOOLBAR, self );
-    prefsChanged( core, PREF_KEY_FILTER_MODE, self );
     prefsChanged( core, TR_PREFS_KEY_ALT_SPEED_ENABLED, self );
     p->pref_handler_id = g_signal_connect( core, "prefs-changed",
                                            G_CALLBACK( prefsChanged ), self );
@@ -766,22 +743,20 @@ updateTorrentCount( PrivateData * p )
     if( p && p->core )
     {
         char      buf[512];
-        const int torrentCount = gtk_tree_model_iter_n_children(
-            tr_core_model( p->core ), NULL );
-        const int visibleCount = gtk_tree_model_iter_n_children(
-            p->filter_model, NULL );
+        const int torrentCount = gtk_tree_model_iter_n_children( tr_core_model( p->core ), NULL );
+        const int visibleCount = gtk_tree_model_iter_n_children( p->filter_model, NULL );
 
         if( !torrentCount )
             *buf = '\0';
         else if( torrentCount != visibleCount )
             g_snprintf( buf, sizeof( buf ),
-                        ngettext( "%1$'d of %2$'d Torrent",
-                                  "%1$'d of %2$'d Torrents",
-                                  torrentCount ),
+                        gtr_ngettext( "%1$'d of %2$'d Torrent",
+                                      "%1$'d of %2$'d Torrents",
+                                      torrentCount ),
                         visibleCount, torrentCount );
         else
             g_snprintf( buf, sizeof( buf ),
-                        ngettext( "%'d Torrent", "%'d Torrents", torrentCount ),
+                        gtr_ngettext( "%'d Torrent", "%'d Torrents", torrentCount ),
                         torrentCount );
         gtk_label_set_text( GTK_LABEL( p->gutter_lb ), buf );
     }

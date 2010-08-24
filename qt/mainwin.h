@@ -1,11 +1,11 @@
 /*
- * This file Copyright (C) 2009-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
- * Transmission project are granted a special exemption to clause 2(b)
- * so that the bulk of its code can remain under the MIT license.
- * This exemption does not extend to derived works not owned by
- * the Transmission project.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2
+ * as published by the Free Software Foundation.
+ *
+ * http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  *
  * $Id$
  */
@@ -45,6 +45,7 @@ class QLabel;
 class QMenu;
 class QModelIndex;
 class QSortFilterProxyModel;
+class Filterbar;
 
 class TrMainWindow: public QMainWindow
 {
@@ -85,7 +86,6 @@ class TrMainWindow: public QMainWindow
         QIcon getStockIcon( const QString&, int fallback=-1 );
 
     private:
-        void setShowMode( int );
         QSet<int> getSelectedTorrents( ) const;
         void updateNetworkIcon( );
         QWidgetList myHidden;
@@ -97,15 +97,6 @@ class TrMainWindow: public QMainWindow
         void onPrefsDestroyed( );
         void openPreferences( );
         void onDetailsDestroyed( );
-        void onShowModeClicked( );
-        void showAll( );
-        void showActive( );
-        void showDownloading( );
-        void showSeeding( );
-        void showPaused( );
-        void filterByName( );
-        void filterByFiles( );
-        void filterByTracker( );
         void showTotalRatio( );
         void showTotalTransfer( );
         void showSessionRatio( );
@@ -113,6 +104,7 @@ class TrMainWindow: public QMainWindow
         void refreshVisibleCount( );
         void refreshTitle( );
         void refreshStatusBar( );
+        void refreshTrayIcon( );
         void openTorrent( );
         void openURL( );
         void newTorrent( );
@@ -120,6 +112,7 @@ class TrMainWindow: public QMainWindow
         void refreshPref( int key );
         void addTorrents( const QStringList& filenames );
         void removeTorrents( const bool deleteFiles );
+        void openDonate( );
         void openHelp( );
         void openFolder( );
         void copyMagnetLinkToClipboard( );
@@ -148,11 +141,7 @@ class TrMainWindow: public QMainWindow
         void onSortByTrackerToggled  ( bool );
 
     private:
-        QWidget * createFilterBar( void );
         QWidget * myFilterBar;
-        QPushButton * myFilterButtons[FilterMode::NUM_MODES];
-        QPushButton * myFilterTextButton;
-        QLineEdit * myFilterTextLineEdit;
 
     private:
         QMenu * createOptionsMenu( void );
@@ -186,7 +175,6 @@ class TrMainWindow: public QMainWindow
         void setToolbarVisible( bool );
         void setFilterbarVisible( bool );
         void setStatusbarVisible( bool );
-        void setTrayIconVisible( bool );
         void setCompactView( bool );
         void refreshActionSensitivity( );
         void wrongAuthentication( );
@@ -194,6 +182,10 @@ class TrMainWindow: public QMainWindow
     public:
         TrMainWindow( Session&, Prefs&, TorrentModel&, bool minized );
         virtual ~TrMainWindow( );
+
+    protected:
+        virtual void dragEnterEvent( QDragEnterEvent * );
+        virtual void dropEvent( QDropEvent * );
 };
 
 #endif

@@ -40,7 +40,8 @@
 #include "tr-prefs.h"
 #include "util.h"
 
-#define MY_NAME "transmission"
+#define MY_CONFIG_NAME "transmission"
+#define MY_READABLE_NAME "transmission-gtk"
 
 static char * gl_confdir = NULL;
 static char * gl_lockpath = NULL;
@@ -187,7 +188,6 @@ tr_prefs_init_defaults( tr_benc * d )
     tr_bencDictAddInt( d, PREF_KEY_MAIN_WINDOW_WIDTH, 300 );
     tr_bencDictAddInt( d, PREF_KEY_MAIN_WINDOW_X, 50 );
     tr_bencDictAddInt( d, PREF_KEY_MAIN_WINDOW_Y, 50 );
-    tr_bencDictAddStr( d, PREF_KEY_MAIN_WINDOW_LAYOUT_ORDER, "menu,toolbar,filter,list,statusbar" );
 
     str = NULL;
 #if GLIB_CHECK_VERSION( 2, 14, 0 )
@@ -198,7 +198,6 @@ tr_prefs_init_defaults( tr_benc * d )
 
     tr_bencDictAddBool( d, PREF_KEY_ASKQUIT, TRUE );
 
-    tr_bencDictAddStr( d, PREF_KEY_FILTER_MODE, "show-all" );
     tr_bencDictAddStr( d, PREF_KEY_SORT_MODE, "sort-by-name" );
     tr_bencDictAddBool( d, PREF_KEY_SORT_REVERSED, FALSE );
     tr_bencDictAddBool( d, PREF_KEY_COMPACT_VIEW, FALSE );
@@ -221,7 +220,7 @@ getPrefs( void )
     {
         tr_bencInitDict( &settings, 0 );
         tr_prefs_init_defaults( &settings );
-        tr_sessionLoadSettings( &settings, gl_confdir, MY_NAME );
+        tr_sessionLoadSettings( &settings, gl_confdir, MY_CONFIG_NAME );
         loaded = TRUE;
     }
 
@@ -336,25 +335,6 @@ pref_save( tr_session * session )
 /***
 ****
 ***/
-
-#if !GLIB_CHECK_VERSION( 2, 8, 0 )
-static void
-tr_file_set_contents( const char *   filename,
-                      const void *   out,
-                      size_t         len,
-                      GError* unused UNUSED )
-{
-    FILE * fp = fopen( filename, "wb+" );
-
-    if( fp != NULL )
-    {
-        fwrite( out, 1, len, fp );
-        fclose( fp );
-    }
-}
-
- #define g_file_set_contents tr_file_set_contents
-#endif
 
 static char*
 getCompat090PrefsFilename( void )

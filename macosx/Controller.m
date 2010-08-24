@@ -283,8 +283,6 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
                                                                             [fDefaults objectForKey: @"SpeedLimitAutoOffDate"]]);
         tr_bencDictAddInt(&settings, TR_PREFS_KEY_ALT_SPEED_TIME_DAY, [fDefaults integerForKey: @"SpeedLimitAutoDay"]);
         
-        tr_bencDictAddBool(&settings, TR_PREFS_KEY_START, [fDefaults boolForKey: @"AutoStartDownload"]);
-        
         tr_bencDictAddInt(&settings, TR_PREFS_KEY_DSPEED_KBps, [fDefaults integerForKey: @"DownloadLimit"]);
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_DSPEED_ENABLED, [fDefaults boolForKey: @"CheckDownload"]);
         tr_bencDictAddInt(&settings, TR_PREFS_KEY_USPEED_KBps, [fDefaults integerForKey: @"UploadLimit"]);
@@ -300,10 +298,12 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_DHT_ENABLED, [fDefaults boolForKey: @"DHTGlobal"]);
         tr_bencDictAddStr(&settings, TR_PREFS_KEY_DOWNLOAD_DIR, [[[fDefaults stringForKey: @"DownloadFolder"]
                                                                     stringByExpandingTildeInPath] UTF8String]);
+        tr_bencDictAddInt(&settings, TR_PREFS_KEY_IDLE_LIMIT, [fDefaults integerForKey: @"IdleLimitMinutes"]);
+        tr_bencDictAddBool(&settings, TR_PREFS_KEY_IDLE_LIMIT_ENABLED, [fDefaults boolForKey: @"IdleLimitCheck"]);
         tr_bencDictAddStr(&settings, TR_PREFS_KEY_INCOMPLETE_DIR, [[[fDefaults stringForKey: @"IncompleteDownloadFolder"]
                                                                     stringByExpandingTildeInPath] UTF8String]);
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_INCOMPLETE_DIR_ENABLED, [fDefaults boolForKey: @"UseIncompleteDownloadFolder"]);
-        
+        tr_bencDictAddBool(&settings, TR_PREFS_KEY_LPD_ENABLED, [fDefaults boolForKey: @"LocalPeerDiscoveryGlobal"]);
         tr_bencDictAddInt(&settings, TR_PREFS_KEY_MSGLEVEL, TR_MSG_DBG);
         tr_bencDictAddInt(&settings, TR_PREFS_KEY_PEER_LIMIT_GLOBAL, [fDefaults integerForKey: @"PeersTotal"]);
         tr_bencDictAddInt(&settings, TR_PREFS_KEY_PEER_LIMIT_TORRENT, [fDefaults integerForKey: @"PeersTorrent"]);
@@ -332,6 +332,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         tr_bencDictAddInt(&settings, TR_PREFS_KEY_RPC_PORT, [fDefaults integerForKey: @"RPCPort"]);
         tr_bencDictAddStr(&settings, TR_PREFS_KEY_RPC_USERNAME,  [[fDefaults stringForKey: @"RPCUsername"] UTF8String]);
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_RPC_WHITELIST_ENABLED,  [fDefaults boolForKey: @"RPCUseWhitelist"]);
+        tr_bencDictAddBool(&settings, TR_PREFS_KEY_START, [fDefaults boolForKey: @"AutoStartDownload"]);
         
         tr_formatter_size_init(1024, [NSLocalizedString(@"KB", "File size - kilobytes") UTF8String],
                                     [NSLocalizedString(@"MB", "File size - megabytes") UTF8String],
@@ -533,6 +534,9 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     [nc addObserver: self selector: @selector(torrentRestartedDownloading:)
                     name: @"TorrentRestartedDownloading" object: nil];
     
+    [nc addObserver: self selector: @selector(torrentFinishedSeeding:)
+                    name: @"TorrentFinishedSeeding" object: nil];
+    
     //avoids need of setting delegate
     [nc addObserver: self selector: @selector(torrentTableViewSelectionDidChange:)
                     name: NSOutlineViewSelectionDidChangeNotification object: fTableView];
@@ -548,10 +552,6 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     
     [nc addObserver: fWindow selector: @selector(makeKeyWindow)
                     name: @"MakeWindowKey" object: nil];
-    
-    //check if torrent should now start
-    [nc addObserver: self selector: @selector(torrentStoppedForRatio:)
-                    name: @"TorrentStoppedForRatio" object: nil];
     
     [nc addObserver: self selector: @selector(updateTorrentsInQueue)
                     name: @"UpdateQueue" object: nil];
@@ -1955,7 +1955,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     [self updateTorrentsInQueue];
 }
 
-- (void) torrentStoppedForRatio: (NSNotification *) notification
+- (void) torrentFinishedSeeding: (NSNotification *) notification
 {
     Torrent * torrent = [notification object];
     

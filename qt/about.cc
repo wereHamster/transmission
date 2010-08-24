@@ -1,11 +1,11 @@
 /*
- * This file Copyright (C) 2009-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
- * Transmission project are granted a special exemption to clause 2(b)
- * so that the bulk of its code can remain under the MIT license.
- * This exemption does not extend to derived works not owned by
- * the Transmission project.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2
+ * as published by the Free Software Foundation.
+ *
+ * http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  *
  * $Id$
  */
@@ -55,7 +55,7 @@ AboutDialog :: AboutDialog( QWidget * parent ):
     l->setAlignment( Qt::AlignCenter );
     v->addWidget( l );
 
-    l = new QLabel( tr( "Copyright 2005-2009 The Transmission Project" ) );
+    l = new QLabel( tr( "Copyright (c) The Transmission Project" ) );
     l->setAlignment( Qt::AlignCenter );
     v->addWidget( l );
 

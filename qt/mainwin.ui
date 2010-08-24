@@ -96,6 +96,8 @@
     </property>
     <addaction name="action_Statistics"/>
     <addaction name="separator"/>
+    <addaction name="action_Donate"/>
+    <addaction name="separator"/>
     <addaction name="action_Contents"/>
     <addaction name="action_About"/>
    </widget>
@@ -108,7 +110,6 @@
     <addaction name="action_Toolbar"/>
     <addaction name="action_Filterbar"/>
     <addaction name="action_Statusbar"/>
-    <addaction name="action_TrayIcon"/>
     <addaction name="separator"/>
     <addaction name="action_SortByActivity"/>
     <addaction name="action_SortByAge"/>
@@ -158,7 +159,7 @@
     </size>
    </property>
    <property name="toolButtonStyle">
-    <enum>Qt::ToolButtonTextUnderIcon</enum>
+    <enum>Qt::ToolButtonFollowStyle</enum>
    </property>
    <property name="floatable">
     <bool>false</bool>
@@ -179,6 +180,9 @@
   <action name="action_AddFile">
    <property name="text">
     <string>&amp;Add File...</string>
+   </property>
+   <property name="iconText">
+    <string>Add</string>
    </property>
    <property name="toolTip">
     <string>Add a torrent</string>
@@ -230,6 +234,9 @@
    <property name="shortcut">
     <string>Ctrl+S</string>
    </property>
+   <property name="priority">
+    <enum>QAction::LowPriority</enum>
+   </property>
   </action>
   <action name="action_Announce">
    <property name="text">
@@ -249,6 +256,9 @@
    <property name="shortcut">
     <string>Ctrl+P</string>
    </property>
+   <property name="priority">
+    <enum>QAction::LowPriority</enum>
+   </property>
   </action>
   <action name="action_Verify">
    <property name="text">
@@ -267,6 +277,9 @@
    </property>
    <property name="shortcut">
     <string>Del</string>
+   </property>
+   <property name="priority">
+    <enum>QAction::LowPriority</enum>
    </property>
   </action>
   <action name="action_Delete">
@@ -333,7 +346,7 @@
     <string>Compact View</string>
    </property>
    <property name="shortcut">
-    <string>Alt+M</string>
+    <string>Alt+C</string>
    </property>
   </action>
   <action name="action_Toolbar">
@@ -452,6 +465,9 @@
    <property name="text">
     <string>&amp;Contents</string>
    </property>
+   <property name="shortcut">
+    <string>F1</string>
+   </property>
   </action>
   <action name="action_About">
    <property name="text">
@@ -559,6 +575,11 @@
   <action name="action_AddURL">
    <property name="text">
     <string>Add &amp;URL...</string>
+   </property>
+  </action>
+  <action name="action_Donate">
+   <property name="text">
+    <string>&amp;Donate</string>
    </property>
   </action>
  </widget>

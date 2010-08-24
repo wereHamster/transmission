@@ -1,11 +1,11 @@
 /*
- * This file Copyright (C) 2009-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
- * Transmission project are granted a special exemption to clause 2(b)
- * so that the bulk of its code can remain under the MIT license.
- * This exemption does not extend to derived works not owned by
- * the Transmission project.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2
+ * as published by the Free Software Foundation.
+ *
+ * http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  *
  * $Id$
  */
@@ -17,9 +17,12 @@
 #include <QMetaType>
 #include <QVariant>
 
+class QString;
+class QWidget;
 
-struct Prefs;
-struct QString;
+class FilterMode;
+class Prefs;
+class Torrent;
 
 class TorrentFilter: public QSortFilterProxyModel
 {
@@ -31,12 +34,7 @@ class TorrentFilter: public QSortFilterProxyModel
 
     public:
         enum TextMode { FILTER_BY_NAME, FILTER_BY_FILES, FILTER_BY_TRACKER };
-        TextMode getTextMode( ) const { return myTextMode; }
         int hiddenRowCount( ) const;
-
-    public slots:
-        void setTextMode( int textMode );
-        void setText( QString );
 
     private slots:
         void refreshPref( int key );
@@ -46,9 +44,14 @@ class TorrentFilter: public QSortFilterProxyModel
         virtual bool lessThan( const QModelIndex&, const QModelIndex& ) const;
 
     private:
+        bool activityFilterAcceptsTorrent( const Torrent * tor, const FilterMode& mode ) const;
+        bool trackerFilterAcceptsTorrent( const Torrent * tor, const QString& tracker ) const;
+
+    public:
+        int count( const FilterMode& ) const;
+
+    private:
         Prefs& myPrefs;
-        TextMode myTextMode;
-        QString myText;
 };
 
 #endif

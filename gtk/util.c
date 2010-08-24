@@ -13,6 +13,7 @@
 #include <ctype.h> /* isxdigit() */
 #include <errno.h>
 #include <math.h> /* pow() */
+#include <stdarg.h>
 #include <stdlib.h> /* free() */
 #include <string.h> /* strcmp() */
 
@@ -58,11 +59,11 @@ const char * disk_M_str = N_("MiB");
 const char * disk_G_str = N_("GiB");
 const char * disk_T_str = N_("TiB");
 
-const int speed_K = 1000;
-const char * speed_K_str = N_("kB/s");
-const char * speed_M_str = N_("MB/s");
-const char * speed_G_str = N_("GB/s");
-const char * speed_T_str = N_("TB/s");
+const int speed_K = 1024;
+const char * speed_K_str = N_("KiB/s");
+const char * speed_M_str = N_("MiB/s");
+const char * speed_G_str = N_("GiB/s");
+const char * speed_T_str = N_("TiB/s");
 
 /***
 ****
@@ -178,14 +179,10 @@ tr_strltime( char * buf, int seconds, size_t buflen )
     minutes = ( seconds % 3600 ) / 60;
     seconds = ( seconds % 3600 ) % 60;
 
-    g_snprintf( d, sizeof( d ), ngettext( "%'d day", "%'d days",
-                                          days ), days );
-    g_snprintf( h, sizeof( h ), ngettext( "%'d hour", "%'d hours",
-                                          hours ), hours );
-    g_snprintf( m, sizeof( m ),
-                ngettext( "%'d minute", "%'d minutes", minutes ), minutes );
-    g_snprintf( s, sizeof( s ),
-                ngettext( "%'d second", "%'d seconds", seconds ), seconds );
+    g_snprintf( d, sizeof( d ), gtr_ngettext( "%'d day", "%'d days", days ), days );
+    g_snprintf( h, sizeof( h ), gtr_ngettext( "%'d hour", "%'d hours", hours ), hours );
+    g_snprintf( m, sizeof( m ), gtr_ngettext( "%'d minute", "%'d minutes", minutes ), minutes );
+    g_snprintf( s, sizeof( s ), gtr_ngettext( "%'d second", "%'d seconds", seconds ), seconds );
 
     if( days )
     {
@@ -249,69 +246,6 @@ gtr_mkdir_with_parents( const char * path, int mode )
 #else
     return !tr_mkdirp( path, mode );
 #endif
-}
-
-GSList *
-dupstrlist( GSList * l )
-{
-    GSList * ret = NULL;
-
-    for( ; l != NULL; l = l->next )
-        ret = g_slist_prepend( ret, g_strdup( l->data ) );
-    return g_slist_reverse( ret );
-}
-
-char *
-joinstrlist( GSList *list,
-             char *  sep )
-{
-    GSList * l;
-    GString *gstr = g_string_new ( NULL );
-
-    for( l = list; l != NULL; l = l->next )
-    {
-        g_string_append ( gstr, (char*)l->data );
-        if( l->next != NULL )
-            g_string_append ( gstr, ( sep ) );
-    }
-    return g_string_free ( gstr, FALSE );
-}
-
-void
-freestrlist( GSList *list )
-{
-    g_slist_foreach ( list, (GFunc)g_free, NULL );
-    g_slist_free ( list );
-}
-
-char *
-decode_uri( const char * uri )
-{
-    gboolean in_query = FALSE;
-    char *   ret = g_new( char, strlen( uri ) + 1 );
-    char *   out = ret;
-
-    for( ; uri && *uri; )
-    {
-        char ch = *uri;
-        if( ch == '?' )
-            in_query = TRUE;
-        else if( ch == '+' && in_query )
-            ch = ' ';
-        else if( ch == '%' && isxdigit( (unsigned char)uri[1] )
-               && isxdigit( (unsigned char)uri[2] ) )
-        {
-            char buf[3] = { uri[1], uri[2], '\0' };
-            ch = (char) g_ascii_strtoull( buf, NULL, 16 );
-            uri += 2;
-        }
-
-        ++uri;
-        *out++ = ch;
-    }
-
-    *out = '\0';
-    return ret;
 }
 
 /* pattern-matching text; ie, legaltorrents.com */
@@ -480,6 +414,31 @@ gtr_object_ref_sink( gpointer object )
 }
 
 int
+gtr_strcmp0( const char * str1, const char * str2 )
+{
+#if GLIB_CHECK_VERSION( 2, 16, 0 )
+    return g_strcmp0( str1, str2 );
+#else
+    if( str1 && str2 ) return strcmp( str1, str2 );
+    if( str1 ) return 1;
+    if( str2 ) return -1;
+    return 0;
+#endif
+}
+
+const gchar *
+gtr_ngettext( const gchar * msgid,
+              const gchar * msgid_plural,
+              gulong n )
+{
+#if GLIB_CHECK_VERSION( 2, 18, 0 )
+    return g_dngettext( NULL, msgid, msgid_plural, n );
+#else
+    return ngettext( msgid, msgid_plural, n );
+#endif
+}
+
+int
 gtr_file_trash_or_remove( const char * filename )
 {
     if( filename && g_file_test( filename, G_FILE_TEST_EXISTS ) )
@@ -585,7 +544,6 @@ gtr_dbus_add_torrent( const char * filename )
         if( proxy )
             dbus_g_proxy_call( proxy, "AddMetainfo", &err,
                                G_TYPE_STRING, payload,
-                               G_TYPE_STRING, filename,
                                G_TYPE_INVALID,
                                G_TYPE_BOOLEAN, &handled,
                                G_TYPE_INVALID );
@@ -635,34 +593,21 @@ gtr_dbus_present_window( void )
     return success;
 }
 
-GtkWidget *
-gtr_button_new_from_stock( const char * stock,
-                           const char * mnemonic )
-{
-    GtkWidget * image = gtk_image_new_from_stock( stock,
-                                                  GTK_ICON_SIZE_BUTTON );
-    GtkWidget * button = gtk_button_new_with_mnemonic( mnemonic );
-
-    gtk_button_set_image( GTK_BUTTON( button ), image );
-    return button;
-}
-
 /***
 ****
 ***/
 
 void
-gtr_priority_combo_set_value( GtkWidget * w, tr_priority_t value )
+gtr_combo_box_set_active_enum( GtkComboBox * combo_box, int value )
 {
     int i;
     int currentValue;
     const int column = 0;
     GtkTreeIter iter;
-    GtkComboBox * combobox = GTK_COMBO_BOX( w );
-    GtkTreeModel * model = gtk_combo_box_get_model( combobox );
+    GtkTreeModel * model = gtk_combo_box_get_model( combo_box );
 
     /* do the value and current value match? */
-    if( gtk_combo_box_get_active_iter( combobox, &iter ) ) {
+    if( gtk_combo_box_get_active_iter( combo_box, &iter ) ) {
         gtk_tree_model_get( model, &iter, column, &currentValue, -1 );
         if( currentValue == value )
             return;
@@ -673,18 +618,49 @@ gtr_priority_combo_set_value( GtkWidget * w, tr_priority_t value )
     while(( gtk_tree_model_iter_nth_child( model, &iter, NULL, i++ ))) {
         gtk_tree_model_get( model, &iter, column, &currentValue, -1 );
         if( currentValue == value ) {
-            gtk_combo_box_set_active_iter( combobox, &iter );
+            gtk_combo_box_set_active_iter( combo_box, &iter );
             return;
         }
     }
 }
 
-tr_priority_t
-gtr_priority_combo_get_value( GtkWidget * w )
+
+GtkWidget *
+gtr_combo_box_new_enum( const char * text_1, ... )
+{
+    GtkWidget * w;
+    GtkCellRenderer * r;
+    GtkListStore * store;
+    va_list vl;
+    const char * text;
+    va_start( vl, text_1 );
+
+    store = gtk_list_store_new( 2, G_TYPE_INT, G_TYPE_STRING );
+
+    text = text_1;
+    if( text != NULL ) do
+    {
+        const int val = va_arg( vl, int );
+        gtk_list_store_insert_with_values( store, NULL, INT_MAX, 0, val, 1, text, -1 );
+        text = va_arg( vl, const char * );
+    }
+    while( text != NULL );
+
+    w = gtk_combo_box_new_with_model( GTK_TREE_MODEL( store ) );
+    r = gtk_cell_renderer_text_new( );
+    gtk_cell_layout_pack_start( GTK_CELL_LAYOUT( w ), r, TRUE );
+    gtk_cell_layout_set_attributes( GTK_CELL_LAYOUT( w ), r, "text", 1, NULL );
+
+    /* cleanup */
+    g_object_unref( store );
+    return w;
+}
+
+int
+gtr_combo_box_get_active_enum( GtkComboBox * combo_box )
 {
     int value = 0;
     GtkTreeIter iter;
-    GtkComboBox * combo_box = GTK_COMBO_BOX( w );
 
     if( gtk_combo_box_get_active_iter( combo_box, &iter ) )
         gtk_tree_model_get( gtk_combo_box_get_model( combo_box ), &iter, 0, &value, -1 );
@@ -695,36 +671,10 @@ gtr_priority_combo_get_value( GtkWidget * w )
 GtkWidget *
 gtr_priority_combo_new( void )
 {
-    int i;
-    GtkWidget * w;
-    GtkCellRenderer * r;
-    GtkListStore * store;
-    const struct {
-        int value;
-        const char * text;
-    } items[] = {
-        { TR_PRI_HIGH,   N_( "High" )  },
-        { TR_PRI_NORMAL, N_( "Normal" ) },
-        { TR_PRI_LOW,    N_( "Low" )  }
-    };
-
-    store = gtk_list_store_new( 2, G_TYPE_INT, G_TYPE_STRING );
-    for( i=0; i<(int)G_N_ELEMENTS(items); ++i ) {
-        GtkTreeIter iter;
-        gtk_list_store_append( store, &iter );
-        gtk_list_store_set( store, &iter, 0, items[i].value,
-                                          1, _( items[i].text ),
-                                         -1 );
-    }
-
-    w = gtk_combo_box_new_with_model( GTK_TREE_MODEL( store ) );
-    r = gtk_cell_renderer_text_new( );
-    gtk_cell_layout_pack_start( GTK_CELL_LAYOUT( w ), r, TRUE );
-    gtk_cell_layout_set_attributes( GTK_CELL_LAYOUT( w ), r, "text", 1, NULL );
-
-    /* cleanup */
-    g_object_unref( store );
-    return w;
+    return gtr_combo_box_new_enum( _( "High" ),   TR_PRI_HIGH,
+                                   _( "Normal" ), TR_PRI_NORMAL,
+                                   _( "Low" ),    TR_PRI_LOW,
+                                   NULL );
 }
 
 /***
@@ -751,6 +701,19 @@ gtr_widget_get_realized( GtkWidget * w )
     return gtk_widget_get_realized( w );
 #else
     return GTK_WIDGET_REALIZED( w ) != 0;
+#endif
+}
+
+void
+gtr_widget_set_visible( GtkWidget * w, gboolean b )
+{
+#if GTK_CHECK_VERSION( 2,18,0 )
+    gtk_widget_set_visible( w, b );
+#else
+    if( b )
+        gtk_widget_show( w );
+    else
+        gtk_widget_hide( w );
 #endif
 }
 

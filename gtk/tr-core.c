@@ -362,7 +362,8 @@ compareByName( GtkTreeModel *             model,
 
     gtk_tree_model_get( model, a, MC_NAME_COLLATED, &ca, -1 );
     gtk_tree_model_get( model, b, MC_NAME_COLLATED, &cb, -1 );
-    ret = strcmp( ca, cb );
+    ret = gtr_strcmp0( ca, cb );
+
     g_free( cb );
     g_free( ca );
     return ret;
@@ -541,14 +542,29 @@ tr_core_apply_defaults( tr_ctor * ctor )
     }
 }
 
-static int
-tr_strcmp( const void * a,
-           const void * b )
+static char *
+torrentTrackerString( tr_torrent * tor )
 {
-    if( a && b ) return strcmp( a, b );
-    if( a ) return 1;
-    if( b ) return -1;
-    return 0;
+    int i;
+    GString * str = g_string_new( NULL );
+    const tr_info * inf = tr_torrentInfo( tor );
+
+    for( i = 0; i < inf->trackerCount; ++i )
+    {
+        const tr_tracker_info * t = &inf->trackers[i];
+        g_string_append( str, t->announce );
+    }
+
+    return g_string_free( str, FALSE );
+}
+
+static gboolean
+isTorrentActive( tr_torrent * tor )
+{
+    const tr_stat * st = tr_torrentStat( tor );
+    return ( st->peersSendingToUs > 0 )
+        || ( st->peersGettingFromUs > 0 )
+        || ( st->activity == TR_STATUS_CHECK );
 }
 
 #ifdef HAVE_GIO
@@ -701,7 +717,7 @@ updateWatchDir( TrCore * core )
         PREF_KEY_DIR_WATCH_ENABLED );
     struct TrCorePrivate * p = TR_CORE( core )->priv;
 
-    if( p->monitor && ( !isEnabled || tr_strcmp( filename, p->monitor_path ) ) )
+    if( p->monitor && ( !isEnabled || gtr_strcmp0( filename, p->monitor_path ) ) )
     {
         g_signal_handler_disconnect( p->monitor, p->monitor_tag );
         g_free( p->monitor_path );
@@ -778,7 +794,11 @@ tr_core_init( GTypeInstance *  instance,
                       G_TYPE_POINTER,   /* tr_torrent* */
                       G_TYPE_DOUBLE,    /* tr_stat.pieceUploadSpeed_KBps */
                       G_TYPE_DOUBLE,    /* tr_stat.pieceDownloadSpeed_KBps */
-                      G_TYPE_INT };     /* tr_stat.status */
+                      G_TYPE_BOOLEAN,   /* filter.c:ACTIVITY_FILTER_ACTIVE */
+                      G_TYPE_INT,       /* tr_stat.activity */
+                      G_TYPE_UCHAR,     /* tr_stat.finished */
+                      G_TYPE_CHAR,      /* tr_priority_t */
+                      G_TYPE_STRING };  /* concatenated trackers string */
 
     p = self->priv = G_TYPE_INSTANCE_GET_PRIVATE( self,
                                                   TR_CORE_TYPE,
@@ -876,33 +896,6 @@ tr_core_session( TrCore * core )
     return isDisposed( core ) ? NULL : core->priv->session;
 }
 
-static char*
-doCollate( const char * in )
-{
-    char * ret;
-    char * casefold;
-    const char * end = in ? in + strlen( in ) : NULL;
-
-    while( in < end )
-    {
-        const gunichar ch = g_utf8_get_char( in );
-        if( !g_unichar_isalnum ( ch ) ) /* eat everything before the first alnum
-                                          */
-            in += g_unichar_to_utf8( ch, NULL );
-        else
-            break;
-    }
-
-    if( in == end )
-        return g_strdup ( "" );
-
-    casefold = g_utf8_casefold( in, end - in );
-    ret = g_utf8_collate_key( casefold, -1 );
-    g_free( casefold );
-
-    return ret;
-}
-
 void
 tr_core_add_torrent( TrCore     * self,
                      TrTorrent  * gtor,
@@ -910,10 +903,11 @@ tr_core_add_torrent( TrCore     * self,
 {
     const tr_info * inf = tr_torrent_info( gtor );
     const tr_stat * st = tr_torrent_stat( gtor );
-    tr_torrent *    tor = tr_torrent_handle( gtor );
-    char *          collated = doCollate( inf->name );
+    tr_torrent * tor = tr_torrent_handle( gtor );
+    char *  collated = g_utf8_strdown( inf->name ? inf->name : "", -1 );
+    char *  trackers = torrentTrackerString( tor );
     GtkListStore *  store = GTK_LIST_STORE( tr_core_model( self ) );
-    GtkTreeIter     unused;
+    GtkTreeIter  unused;
 
     gtk_list_store_insert_with_values( store, &unused, 0,
                                        MC_NAME,          inf->name,
@@ -922,7 +916,11 @@ tr_core_add_torrent( TrCore     * self,
                                        MC_TORRENT_RAW,   tor,
                                        MC_SPEED_UP,      st->pieceUploadSpeed_KBps,
                                        MC_SPEED_DOWN,    st->pieceDownloadSpeed_KBps,
+                                       MC_ACTIVE,        isTorrentActive( tor ),
                                        MC_ACTIVITY,      st->activity,
+                                       MC_FINISHED,      st->finished,
+                                       MC_PRIORITY,      tr_torrentGetPriority( tor ),
+                                       MC_TRACKERS,      trackers,
                                        -1 );
 
     if( doNotify )
@@ -931,6 +929,7 @@ tr_core_add_torrent( TrCore     * self,
     /* cleanup */
     g_object_unref( G_OBJECT( gtor ) );
     g_free( collated );
+    g_free( trackers );
 }
 
 int
@@ -1028,7 +1027,6 @@ tr_core_add_ctor( TrCore * core, tr_ctor * ctor )
 gboolean
 tr_core_add_metainfo( TrCore      * core,
                       const char  * payload,
-                      const char  * filename,
                       gboolean    * setme_handled,
                       GError     ** gerr UNUSED )
 {
@@ -1043,38 +1041,23 @@ tr_core_add_metainfo( TrCore      * core,
         tr_core_add_from_url( core, payload );
         *setme_handled = TRUE;
     }
-    else
+    else /* base64-encoded metainfo */
     {
+        int file_length;
         tr_ctor * ctor;
-        gboolean has_metainfo = FALSE;
-        const gboolean do_prompt = pref_flag_get( PREF_KEY_OPTIONS_PROMPT );
+        char * file_contents;
+        gboolean do_prompt = pref_flag_get( PREF_KEY_OPTIONS_PROMPT );
 
-        /* create the constructor */
         ctor = tr_ctorNew( session );
         tr_core_apply_defaults( ctor );
 
-        if( !has_metainfo && g_file_test( filename, G_FILE_TEST_IS_REGULAR ) )
-        {
-            /* set the metainfo from a local file */
-            has_metainfo = !tr_ctorSetMetainfoFromFile( ctor, filename );
-        }
+        file_contents = tr_base64_decode( payload, -1, &file_length );
+        tr_ctorSetMetainfo( ctor, (const uint8_t*)file_contents, file_length );
+        add_ctor( core, ctor, do_prompt, TRUE );
 
-        if( !has_metainfo )
-        {
-            /* base64-encoded metainfo */
-            int file_length;
-            char * file_contents = tr_base64_decode( payload, -1, &file_length );
-            has_metainfo = !tr_ctorSetMetainfo( ctor, (const uint8_t*)file_contents, file_length );
-            tr_free( file_contents );
-        }
-
-        if( has_metainfo )
-        {
-            add_ctor( core, ctor, do_prompt, TRUE );
-            tr_core_torrents_added( core );
-        }
-
-        *setme_handled = has_metainfo;
+        tr_free( file_contents );
+        tr_core_torrents_added( core );
+        *setme_handled = TRUE;
     }
 
     return TRUE;
@@ -1237,10 +1220,15 @@ tr_core_add_list( TrCore       * core,
     GSList * l;
 
     for( l = torrentFiles; l != NULL; l = l->next )
-        add_filename( core, l->data, doStart, doPrompt, doNotify );
+    {
+        char * filename = l->data;
+        add_filename( core, filename, doStart, doPrompt, doNotify );
+        g_free( filename );
+    }
 
     tr_core_torrents_added( core );
-    freestrlist( torrentFiles );
+
+    g_slist_free( torrentFiles );
 }
 
 void
@@ -1322,33 +1310,55 @@ update_foreach( GtkTreeModel * model,
                 gpointer       data UNUSED )
 {
     int oldActivity, newActivity;
+    tr_bool oldFinished, newFinished;
+    tr_priority_t oldPriority, newPriority;
+    char * oldTrackers, * newTrackers;
     double oldUpSpeed, newUpSpeed;
     double oldDownSpeed, newDownSpeed;
+    gboolean oldActive, newActive;
     const tr_stat * st;
     TrTorrent * gtor;
+    tr_torrent * tor;
 
     /* get the old states */
     gtk_tree_model_get( model, iter,
                         MC_TORRENT, &gtor,
+                        MC_ACTIVE, &oldActive,
                         MC_ACTIVITY, &oldActivity,
+                        MC_FINISHED, &oldFinished,
+                        MC_PRIORITY, &oldPriority,
+                        MC_TRACKERS, &oldTrackers,
                         MC_SPEED_UP, &oldUpSpeed,
                         MC_SPEED_DOWN, &oldDownSpeed,
                         -1 );
 
     /* get the new states */
-    st = tr_torrentStat( tr_torrent_handle( gtor ) );
+    tor = tr_torrent_handle( gtor );
+    st = tr_torrentStat( tor );
+    newActive = isTorrentActive( tor );
     newActivity = st->activity;
+    newFinished = st->finished;
+    newPriority = tr_torrentGetPriority( tor );
+    newTrackers = torrentTrackerString( tor );
     newUpSpeed = st->pieceUploadSpeed_KBps;
     newDownSpeed = st->pieceDownloadSpeed_KBps;
 
     /* updating the model triggers off resort/refresh,
        so don't do it unless something's actually changed... */
-    if( ( newActivity  != oldActivity  )
+    if( ( newActive != oldActive )
+        || ( newActivity  != oldActivity )
+        || ( newFinished != oldFinished )
+        || ( newPriority != oldPriority )
+        || gtr_strcmp0( oldTrackers, newTrackers )
         || gtr_compare_double( newUpSpeed, oldUpSpeed, 3 )
         || gtr_compare_double( newDownSpeed, oldDownSpeed, 3 ) )
     {
         gtk_list_store_set( GTK_LIST_STORE( model ), iter,
+                            MC_ACTIVE, newActive,
                             MC_ACTIVITY, newActivity,
+                            MC_FINISHED, newFinished,
+                            MC_PRIORITY, newPriority,
+                            MC_TRACKERS, newTrackers,
                             MC_SPEED_UP, newUpSpeed,
                             MC_SPEED_DOWN, newDownSpeed,
                             -1 );
@@ -1356,6 +1366,8 @@ update_foreach( GtkTreeModel * model,
 
     /* cleanup */
     g_object_unref( gtor );
+    g_free( newTrackers );
+    g_free( oldTrackers );
     return FALSE;
 }
 
@@ -1533,7 +1545,7 @@ tr_core_set_pref( TrCore * self, const char * key, const char * newval )
 {
     const char * oldval = pref_string_get( key );
 
-    if( tr_strcmp( oldval, newval ) )
+    if( gtr_strcmp0( oldval, newval ) )
     {
         pref_string_set( key, newval );
         commitPrefsChange( self, key );

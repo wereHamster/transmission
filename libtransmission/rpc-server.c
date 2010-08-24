@@ -232,47 +232,68 @@ handle_upload( struct evhttp_request * req,
 
         if( !hasSessionId )
         {
-            send_simple_response( req, 409, NULL );
+            int code = 409;
+            const char * codetext = tr_webGetResponseStr( code );
+            struct evbuffer * body = evbuffer_new( );
+            evbuffer_add_printf( body, "%s", "{ \"success\": false, \"msg\": \"Bad Session-Id\" }" );;
+            evhttp_send_reply( req, code, codetext, body );
+            evbuffer_free( body );
         }
         else for( i=0; i<n; ++i )
         {
             struct tr_mimepart * p = tr_ptrArrayNth( &parts, i );
-            if( strstr( p->headers, "filename=\"" ) )
+            int body_len = p->body_len;
+            tr_benc top, *args;
+            tr_benc test;
+            tr_bool have_source = FALSE;
+            char * body = p->body;
+
+            if( body_len >= 2 && !memcmp( &body[body_len - 2], "\r\n", 2 ) )
+                body_len -= 2;
+
+            tr_bencInitDict( &top, 2 );
+            tr_bencDictAddStr( &top, "method", "torrent-add" );
+            args = tr_bencDictAddDict( &top, "arguments", 2 );
+            tr_bencDictAddBool( args, "paused", paused );
+
+            if( tr_urlIsValid( body, body_len ) )
             {
-                char * b64;
-                int body_len = p->body_len;
-                tr_benc top, *args;
-                const char * body = p->body;
-                struct evbuffer * json = evbuffer_new( );
-
-                if( body_len >= 2 && !memcmp( &body[body_len - 2], "\r\n", 2 ) )
-                    body_len -= 2;
-
-                tr_bencInitDict( &top, 2 );
-                args = tr_bencDictAddDict( &top, "arguments", 2 );
-                tr_bencDictAddStr( &top, "method", "torrent-add" );
-                b64 = tr_base64_encode( body, body_len, NULL );
+                tr_bencDictAddRaw( args, "filename", body, body_len );
+                have_source = TRUE;
+            }
+            else if( !tr_bencLoad( body, body_len, &test, NULL ) )
+            {
+                char * b64 = tr_base64_encode( body, body_len, NULL );
                 tr_bencDictAddStr( args, "metainfo", b64 );
-                tr_bencDictAddBool( args, "paused", paused );
-                tr_bencToBuf( &top, TR_FMT_JSON_LEAN, json );
+                tr_free( b64 );
+                have_source = TRUE;
+            }
+
+            if( have_source )
+            {
+                struct evbuffer * json = evbuffer_new( );
+                tr_bencToBuf( &top, TR_FMT_JSON, json );
                 tr_rpc_request_exec_json( server->session,
                                           EVBUFFER_DATA( json ),
                                           EVBUFFER_LENGTH( json ),
                                           NULL, NULL );
-
                 evbuffer_free( json );
-                tr_free( b64 );
-                tr_bencFree( &top );
             }
+
+            tr_bencFree( &top );
         }
 
         tr_ptrArrayDestruct( &parts, (PtrArrayForeachFunc)tr_mimepart_free );
 
-        /* use xml here because json responses to file uploads is trouble.
-         * see http://www.malsup.com/jquery/form/#sample7 for details */
-        evhttp_add_header( req->output_headers, "Content-Type",
-                           "text/xml; charset=UTF-8" );
-        send_simple_response( req, HTTP_OK, NULL );
+        /* send "success" response */
+        {
+            int code = HTTP_OK;
+            const char * codetext = tr_webGetResponseStr( code );
+            struct evbuffer * body = evbuffer_new( );
+            evbuffer_add_printf( body, "%s", "{ \"success\": true, \"msg\": \"Torrent Added\" }" );;
+            evhttp_send_reply( req, code, codetext, body );
+            evbuffer_free( body );
+        }
     }
 }
 
@@ -315,9 +336,9 @@ add_response( struct evhttp_request * req,
 #else
     const char * key = "Accept-Encoding";
     const char * encoding = evhttp_find_header( req->input_headers, key );
-    const int do_deflate = encoding && strstr( encoding, "deflate" );
+    const int do_compress = encoding && strstr( encoding, "gzip" );
 
-    if( !do_deflate )
+    if( !do_compress )
     {
         evbuffer_add( out, content, content_len );
     }
@@ -330,11 +351,21 @@ add_response( struct evhttp_request * req,
 
         if( !server->isStreamInitialized )
         {
+            int compressionLevel;
+
             server->isStreamInitialized = TRUE;
             server->stream.zalloc = (alloc_func) Z_NULL;
             server->stream.zfree = (free_func) Z_NULL;
             server->stream.opaque = (voidpf) Z_NULL;
-            deflateInit( &server->stream, Z_BEST_COMPRESSION );
+
+            /* zlib's manual says: "Add 16 to windowBits to write a simple gzip header
+             * and trailer around the compressed data instead of a zlib wrapper." */
+#ifdef TR_EMBEDDED
+            compressionLevel = Z_DEFAULT_COMPRESSION;
+#else
+            compressionLevel = Z_BEST_COMPRESSION;
+#endif
+            deflateInit2( &server->stream, compressionLevel, Z_DEFLATED, 15+16, 8, Z_DEFAULT_STRATEGY );
         }
 
         server->stream.next_in = (Bytef*) content;
@@ -353,23 +384,13 @@ add_response( struct evhttp_request * req,
         {
             EVBUFFER_LENGTH( out ) = content_len - server->stream.avail_out;
 
-            /* http://carsten.codimi.de/gzip.yaws/
-               It turns out that some browsers expect deflated data without
-               the first two bytes (a kind of header) and and the last four
-               bytes (an ADLER32 checksum). This format can of course
-               be produced by simply stripping these off. */
-            if( EVBUFFER_LENGTH( out ) >= 6 ) {
-                EVBUFFER_LENGTH( out ) -= 4;
-                evbuffer_drain( out, 2 );
-            }
-
 #if 0
-            tr_ninf( MY_NAME, _( "Deflated response from %zu bytes to %zu" ),
-                              content_len,
-                              EVBUFFER_LENGTH( out ) );
+            fprintf( stderr, "compressed response is %.2f of original (raw==%zu bytes; compressed==%zu)\n", 
+                             (double)EVBUFFER_LENGTH(out)/content_len,
+                             content_len, EVBUFFER_LENGTH(out) );
 #endif
             evhttp_add_header( req->output_headers,
-                               "Content-Encoding", "deflate" );
+                               "Content-Encoding", "gzip" );
         }
         else
         {

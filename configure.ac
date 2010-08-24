@@ -3,8 +3,8 @@ dnl STATUS: "X" for prerelease beta builds,
 dnl         "Z" for unsupported trunk builds,
 dnl         "0" for stable, supported releases
 dnl these should be the only two lines you need to change
-m4_define([user_agent_prefix],[2.01+])
-m4_define([peer_id_prefix],[-TR201Z-])
+m4_define([user_agent_prefix],[2.04+])
+m4_define([peer_id_prefix],[-TR204Z-])
 
 AC_INIT([transmission],
         [user_agent_prefix],
@@ -384,7 +384,7 @@ if test "x$enable_nls" = "xyes" ; then
     use_nls=yes
     IT_PROG_INTLTOOL([0.35.0],[no-xml])
     AC_CHECK_HEADERS([libintl.h])
-    GETTEXT_PACKAGE=transmission
+    GETTEXT_PACKAGE=transmission-gtk
     AC_SUBST(GETTEXT_PACKAGE)
     AC_DEFINE_UNQUOTED([GETTEXT_PACKAGE],["$GETTEXT_PACKAGE"],[Gettext package])
     AM_GLIB_GNU_GETTEXT
@@ -471,10 +471,10 @@ dnl
 dnl  Generate the output
 
 AC_CONFIG_FILES([Makefile
-                 transmission.spec
+                 transmission-gtk.spec
                  cli/Makefile
                  daemon/Makefile
-                 doc/Makefile
+                 extras/Makefile
                  libtransmission/Makefile
                  utils/Makefile
                  third-party/Makefile
