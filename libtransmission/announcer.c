@@ -1996,6 +1996,10 @@ tr_announcerStats( const tr_torrent * torrent,
             st->tier = i;
             st->isBackup = tracker != tier->currentTracker;
             st->lastScrapeStartTime = tier->lastScrapeStartTime;
+            if( tracker->scrape )
+                tr_strlcpy( st->scrape, tracker->scrape, sizeof( st->scrape ) );
+            else
+                st->scrape[0] = '\0';
 
             st->seederCount = tracker->seederCount;
             st->leecherCount = tracker->leecherCount;

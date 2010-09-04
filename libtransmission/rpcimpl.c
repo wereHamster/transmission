@@ -386,7 +386,7 @@ addTrackerStats( const tr_tracker_stat * st, int n, tr_benc * list )
     for( i=0; i<n; ++i )
     {
         const tr_tracker_stat * s = &st[i];
-        tr_benc * d = tr_bencListAddDict( list, 25 );
+        tr_benc * d = tr_bencListAddDict( list, 26 );
         tr_bencDictAddStr ( d, "announce", s->announce );
         tr_bencDictAddInt ( d, "announceState", s->announceState );
         tr_bencDictAddInt ( d, "downloadCount", s->downloadCount );
@@ -409,6 +409,7 @@ addTrackerStats( const tr_tracker_stat * st, int n, tr_benc * list )
         tr_bencDictAddInt ( d, "leecherCount", s->leecherCount );
         tr_bencDictAddInt ( d, "nextAnnounceTime", s->nextAnnounceTime );
         tr_bencDictAddInt ( d, "nextScrapeTime", s->nextScrapeTime );
+        tr_bencDictAddStr ( d, "scrape", s->scrape );
         tr_bencDictAddInt ( d, "scrapeState", s->scrapeState );
         tr_bencDictAddInt ( d, "seederCount", s->seederCount );
         tr_bencDictAddInt ( d, "tier", s->tier );
@@ -442,8 +443,8 @@ addPeers( const tr_torrent * tor,
         tr_bencDictAddBool( d, "peerIsInterested", peer->peerIsInterested );
         tr_bencDictAddInt ( d, "port", peer->port );
         tr_bencDictAddReal( d, "progress", peer->progress );
-        tr_bencDictAddReal( d, "rateToClient", peer->rateToClient_KBps );
-        tr_bencDictAddReal( d, "rateToPeer", peer->rateToPeer_KBps );
+        tr_bencDictAddInt ( d, "rateToClient", toSpeedBytes( peer->rateToClient_KBps ) );
+        tr_bencDictAddInt ( d, "rateToPeer", toSpeedBytes( peer->rateToPeer_KBps ) );
     }
 
     tr_torrentPeersFree( peers, peerCount );
@@ -569,9 +570,9 @@ addField( const tr_torrent * tor, tr_benc * d, const char * key )
             tr_bencListAddInt( p, inf->files[i].priority );
     }
     else if( tr_streq( key, keylen, "rateDownload" ) )
-        tr_bencDictAddReal( d, key, st->pieceDownloadSpeed_KBps );
+        tr_bencDictAddInt( d, key, toSpeedBytes( st->pieceDownloadSpeed_KBps ) );
     else if( tr_streq( key, keylen, "rateUpload" ) )
-        tr_bencDictAddReal( d, key, st->pieceUploadSpeed_KBps );
+        tr_bencDictAddInt( d, key, toSpeedBytes( st->pieceUploadSpeed_KBps ) );
     else if( tr_streq( key, keylen, "recheckProgress" ) )
         tr_bencDictAddReal( d, key, st->recheckProgress );
     else if( tr_streq( key, keylen, "seedIdleLimit" ) )
