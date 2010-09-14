@@ -836,10 +836,10 @@ printDetails( tr_benc * top )
 
             if( tr_bencDictFindInt( t, "eta", &i ) )
                 printf( "  ETA: %s\n", tr_strltime( buf, i, sizeof( buf ) ) );
-            if( tr_bencDictFindReal( t, "rateDownload", &d ) )
-                printf( "  Download Speed: %s\n", tr_formatter_speed_KBps( buf, d, sizeof( buf ) ) );
-            if( tr_bencDictFindReal( t, "rateUpload", &d ) )
-                printf( "  Upload Speed: %s\n", tr_formatter_speed_KBps( buf, d, sizeof( buf ) ) );
+            if( tr_bencDictFindInt( t, "rateDownload", &i ) )
+                printf( "  Download Speed: %s\n", tr_formatter_speed_KBps( buf, i/(double)tr_speed_K, sizeof( buf ) ) );
+            if( tr_bencDictFindInt( t, "rateUpload", &i ) )
+                printf( "  Upload Speed: %s\n", tr_formatter_speed_KBps( buf, i/(double)tr_speed_K, sizeof( buf ) ) );
             if( tr_bencDictFindInt( t, "haveUnchecked", &i )
               && tr_bencDictFindInt( t, "haveValid", &j ) )
             {
@@ -1201,17 +1201,17 @@ printTorrentList( tr_benc * top )
 
         for( i = 0, n = tr_bencListSize( list ); i < n; ++i )
         {
-            int64_t      id, eta, status;
+            int64_t      id, eta, status, up, down;
             int64_t      sizeWhenDone, leftUntilDone;
-            double       ratio, up, down;
+            double       ratio;
             const char * name;
             tr_benc *   d = tr_bencListChild( list, i );
             if( tr_bencDictFindInt( d, "eta", &eta )
               && tr_bencDictFindInt( d, "id", &id )
               && tr_bencDictFindInt( d, "leftUntilDone", &leftUntilDone )
               && tr_bencDictFindStr( d, "name", &name )
-              && tr_bencDictFindReal( d, "rateDownload", &down )
-              && tr_bencDictFindReal( d, "rateUpload", &up )
+              && tr_bencDictFindInt( d, "rateDownload", &down )
+              && tr_bencDictFindInt( d, "rateUpload", &up )
               && tr_bencDictFindInt( d, "sizeWhenDone", &sizeWhenDone )
               && tr_bencDictFindInt( d, "status", &status )
               && tr_bencDictFindReal( d, "uploadRatio", &ratio ) )
@@ -1244,8 +1244,8 @@ printTorrentList( tr_benc * top )
                     doneStr,
                     haveStr,
                     etaStr,
-                    up,
-                    down,
+                    up/(double)tr_speed_K,
+                    down/(double)tr_speed_K,
                     strlratio2( ratioStr, ratio, sizeof( ratioStr ) ),
                     getStatusString( d, statusStr, sizeof( statusStr ) ),
                     name );
@@ -1258,8 +1258,8 @@ printTorrentList( tr_benc * top )
 
         printf( "Sum:         %9s            %6.1f  %6.1f\n",
                 strlsize( haveStr, total_size, sizeof( haveStr ) ),
-                total_up,
-                total_down );
+                total_up/(double)tr_speed_K,
+                total_down/(double)tr_speed_K );
     }
 }
 
@@ -1276,6 +1276,7 @@ printTrackersImpl( tr_benc * trackerStats )
         tr_bool hasAnnounced;
         tr_bool hasScraped;
         const char * host;
+        int64_t id;
         tr_bool isBackup;
         int64_t lastAnnouncePeerCount;
         const char * lastAnnounceResult;
@@ -1300,6 +1301,7 @@ printTrackersImpl( tr_benc * trackerStats )
             tr_bencDictFindBool( t, "hasAnnounced", &hasAnnounced ) &&
             tr_bencDictFindBool( t, "hasScraped", &hasScraped ) &&
             tr_bencDictFindStr ( t, "host", &host ) &&
+            tr_bencDictFindInt ( t, "id", &id ) &&
             tr_bencDictFindBool( t, "isBackup", &isBackup ) &&
             tr_bencDictFindInt ( t, "announceState", &announceState ) &&
             tr_bencDictFindInt ( t, "scrapeState", &scrapeState ) &&
@@ -1323,7 +1325,7 @@ printTrackersImpl( tr_benc * trackerStats )
             const time_t now = time( NULL );
 
             printf( "\n" );
-            printf( "  Tracker #%d: %s\n", (int)(i+1), host );
+            printf( "  Tracker %d: %s\n", (int)(id), host );
             if( isBackup )
                 printf( "  Backup on tier #%d\n", (int)tier );
             else
@@ -2035,8 +2037,8 @@ processArgs( const char * host, int port, int argc, const char ** argv )
             {
                 case 712:
                     {
-                        tr_benc * trackers = tr_bencDictAddDict( args, "trackerRemove", 1 );
-                        tr_bencDictAddInt( trackers, "id", atoi(optarg) );
+                        tr_benc * trackers = tr_bencDictAddList( args, "trackerRemove", 1 );
+                        tr_bencListAddInt( trackers, atoi(optarg) );
                         break;
                     }
                 case 950: tr_bencDictAddReal( args, "seedRatioLimit", atof(optarg) );
