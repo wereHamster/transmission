@@ -62,10 +62,8 @@ struct DetailsImpl
     GtkWidget * size_lb;
     GtkWidget * state_lb;
     GtkWidget * have_lb;
-    GtkWidget * availability_lb;
     GtkWidget * dl_lb;
     GtkWidget * ul_lb;
-    GtkWidget * ratio_lb;
     GtkWidget * error_lb;
     GtkWidget * date_started_lb;
     GtkWidget * eta_lb;
@@ -617,11 +615,10 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
 {
     int i;
     const char * str;
-    const char * none = _( "None" );
     const char * mixed = _( "Mixed" );
+    const char * no_torrent = _( "No Torrents Selected" );
     const char * stateString;
     char buf[512];
-    uint64_t available = 0;
     uint64_t sizeWhenDone = 0;
     const tr_stat ** stats = g_new( const tr_stat*, n );
     const tr_info ** infos = g_new( const tr_info*, n );
@@ -632,7 +629,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
 
     /* privacy_lb */
     if( n<=0 )
-        str = none;
+        str = no_torrent;
     else {
         const tr_bool baseline = infos[0]->isPrivate;
         for( i=1; i<n; ++i )
@@ -650,7 +647,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
 
     /* origin_lb */
     if( n<=0 )
-        str = none;
+        str = no_torrent;
     else {
         const char * creator = infos[0]->creator ? infos[0]->creator : "";
         const time_t date = infos[0]->dateCreated;
@@ -696,7 +693,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
 
     /* destination_lb */
     if( n<=0 )
-        str = none;
+        str = no_torrent;
     else {
         const char * baseline = tr_torrentGetDownloadDir( torrents[0] );
         for( i=1; i<n; ++i )
@@ -710,8 +707,8 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
     gtr_label_set_text( GTK_LABEL( di->destination_lb ), str );
 
     /* state_lb */
-    if( n < 1 )
-        str = none;
+    if( n<=0 )
+        str = no_torrent;
     else {
         const tr_torrent_activity activity = stats[0]->activity;
         tr_bool allFinished = stats[0]->finished;
@@ -728,8 +725,8 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
 
 
     /* date started */
-    if( n < 1 )
-        str = none;
+    if( n<=0 )
+        str = no_torrent;
     else {
         const time_t baseline = stats[0]->startDate;
         for( i=1; i<n; ++i )
@@ -746,8 +743,8 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
 
 
     /* eta */
-    if( n <= 0 )
-        str = none;
+    if( n<=0 )
+        str = no_torrent;
     else {
         const int baseline = stats[0]->eta;
         for( i=1; i<n; ++i )
@@ -779,7 +776,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
         }
         tr_strlsize( sizebuf, size, sizeof( sizebuf ) );
         if( !size )
-            str = none;
+            str = "";
         else if( pieceSize >= 0 ) {
             char piecebuf[128];
             tr_formatter_mem_B( piecebuf, pieceSize, sizeof( piecebuf ) );
@@ -801,12 +798,13 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
 
     /* have_lb */
     if( n <= 0 )
-        str = none;
+        str = no_torrent;
     else {
         uint64_t leftUntilDone = 0;
         uint64_t haveUnchecked = 0;
         uint64_t haveValid = 0;
         uint32_t verifiedPieces = 0;
+        uint64_t available = 0;
         for( i=0; i<n; ++i ) {
             const tr_stat * st = stats[i];
             const tr_info * inf = infos[i];
@@ -817,38 +815,28 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
             leftUntilDone += st->leftUntilDone;
             available += st->sizeWhenDone - st->leftUntilDone + st->desiredAvailable;
         }
-        if( !haveValid && !haveUnchecked )
-            str = none;
-        else {
-            char buf2[32], unver[64], total[64];
+        {
+            char buf2[32], unver[64], total[64], avail[32];
+            const double d = ( 100.0 * available ) / sizeWhenDone;
             const double ratio = 100.0 * ( leftUntilDone ? ( haveValid + haveUnchecked ) / (double)sizeWhenDone : 1 );
+            tr_strlpercent( avail, d, sizeof( avail ) );
             tr_strlpercent( buf2, ratio, sizeof( buf2 ) );
             tr_strlsize( total, haveUnchecked + haveValid, sizeof( total ) );
             tr_strlsize( unver, haveUnchecked,             sizeof( unver ) );
-            if( haveUnchecked )
-                g_snprintf( buf, sizeof( buf ), _( "%1$s (%2$s%%); %3$s Unverified" ), total, buf2, unver );
-            else
+            if( !haveUnchecked && !leftUntilDone )
                 g_snprintf( buf, sizeof( buf ), _( "%1$s (%2$s%%)" ), total, buf2 );
+            else if( !haveUnchecked )
+                g_snprintf( buf, sizeof( buf ), _( "%1$s (%2$s%% of %3$s%% Available)" ), total, buf2, avail );
+            else
+                g_snprintf( buf, sizeof( buf ), _( "%1$s (%2$s%% of %3$s%% Available) + %4$s Unverified" ), total, buf2, avail, unver );
             str = buf;
         }
     }
     gtr_label_set_text( GTK_LABEL( di->have_lb ), str );
 
-    /* availability_lb */
-    if( !sizeWhenDone  )
-        str = none;
-    else {
-        char buf2[32];
-        const double d = ( 100.0 * available ) / sizeWhenDone;
-        tr_strlpercent( buf2, d, sizeof( buf2 ) );
-        g_snprintf( buf, sizeof( buf ), _( "%1$s%%" ), buf2 );
-        str = buf;
-    }
-    gtr_label_set_text( GTK_LABEL( di->availability_lb ), str );
-
     /* dl_lb */
     if( n <= 0 )
-        str = none;
+        str = no_torrent;
     else {
         char dbuf[64], fbuf[64];
         uint64_t d=0, f=0;
@@ -869,32 +857,26 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
 
     /* ul_lb */
     if( n <= 0 )
-        str = none;
-    else {
-        uint64_t sum = 0;
-        for( i=0; i<n; ++i ) sum += stats[i]->uploadedEver;
-        str = tr_strlsize( buf, sum, sizeof( buf ) );
-    }
-    gtr_label_set_text( GTK_LABEL( di->ul_lb ), str );
-
-
-    /* ratio */
-    if( n <= 0 )
-        str = none;
+        str = no_torrent;
     else {
         uint64_t up = 0;
         uint64_t down = 0;
+        char upstr[64];
+        char ratiostr[64];
         for( i=0; i<n; ++i ) {
             up += stats[i]->uploadedEver;
             down += stats[i]->downloadedEver;
         }
-        str = tr_strlratio( buf, tr_getRatio( up, down ), sizeof( buf ) );
+        tr_strlsize( upstr, up, sizeof( upstr ) );
+        tr_strlratio( ratiostr, tr_getRatio( up, down ), sizeof( ratiostr ) );
+        g_snprintf( buf, sizeof( buf ), _( "%s (Ratio: %s)" ), upstr, ratiostr );
+        str = buf;
     }
-    gtr_label_set_text( GTK_LABEL( di->ratio_lb ), str );
+    gtr_label_set_text( GTK_LABEL( di->ul_lb ), str );
 
     /* hash_lb */
-    if( n<=0 )
-        str = none;
+    if( n <= 0 )
+        str = no_torrent;
     else if ( n==1 )
         str = infos[0]->hashString;
     else
@@ -903,7 +885,7 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
 
     /* error */
     if( n <= 0 )
-        str = none;
+        str = no_torrent;
     else {
         const char * baseline = stats[0]->errorString;
         for( i=1; i<n; ++i )
@@ -915,20 +897,20 @@ refreshInfo( struct DetailsImpl * di, tr_torrent ** torrents, int n )
             str = mixed;
     }
     if( !str || !*str )
-        str = none;
+        str = _( "No errors" );
     gtr_label_set_text( GTK_LABEL( di->error_lb ), str );
 
 
     /* activity date */
     if( n <= 0 )
-        str = none;
+        str = no_torrent;
     else {
         time_t latest = 0;
         for( i=0; i<n; ++i )
             if( latest < stats[i]->activityDate )
                 latest = stats[i]->activityDate;
         if( latest <= 0 )
-            str = none;
+            str = _( "Never" );
         else {
             const int period = time( NULL ) - latest;
             if( period < 5 )
@@ -965,10 +947,6 @@ info_page_new( struct DetailsImpl * di )
         l = di->have_lb = gtk_label_new( NULL );
         hig_workarea_add_row( t, &row, _( "Have:" ), l, NULL );
 
-        /* availability */
-        l = di->availability_lb = gtk_label_new( NULL );
-        hig_workarea_add_row( t, &row, _( "Availability:" ), l, NULL );
-
         /* downloaded */
         l = di->dl_lb = gtk_label_new( NULL );
         hig_workarea_add_row( t, &row, _( "Downloaded:" ), l, NULL );
@@ -976,10 +954,6 @@ info_page_new( struct DetailsImpl * di )
         /* uploaded */
         l = di->ul_lb = gtk_label_new( NULL );
         hig_workarea_add_row( t, &row, _( "Uploaded:" ), l, NULL );
-
-        /* ratio */
-        l = di->ratio_lb = gtk_label_new( NULL );
-        hig_workarea_add_row( t, &row, _( "Ratio:" ), l, NULL );
 
         /* state */
         l = di->state_lb = gtk_label_new( NULL );
@@ -1821,7 +1795,7 @@ buildTrackerSummary( const char * key, const tr_tracker_stat * st, gboolean show
 
     if( !st->isBackup )
     {
-        if( st->hasAnnounced )
+        if( st->hasAnnounced && st->announceState != TR_TRACKER_INACTIVE )
         {
             g_string_append_c( gstr, '\n' );
             tr_strltime_rounded( timebuf, now - st->lastAnnounceTime, sizeof( timebuf ) );
@@ -1840,10 +1814,8 @@ buildTrackerSummary( const char * key, const tr_tracker_stat * st, gboolean show
         switch( st->announceState )
         {
             case TR_TRACKER_INACTIVE:
-                if( !st->hasAnnounced ) {
-                    g_string_append_c( gstr, '\n' );
-                    g_string_append( gstr, _( "No updates scheduled" ) );
-                }
+                g_string_append_c( gstr, '\n' );
+                g_string_append( gstr, _( "No updates scheduled" ) );
                 break;
             case TR_TRACKER_WAITING:
                 tr_strltime_rounded( timebuf, st->nextAnnounceTime - now, sizeof( timebuf ) );
@@ -2015,6 +1987,9 @@ refreshTracker( struct DetailsImpl * di, tr_torrent ** torrents, int n )
         di->trackers_filtered = filter;
 
         gtk_tree_view_set_model( GTK_TREE_VIEW( di->tracker_view ), filter );
+
+        g_object_unref( filter );
+        g_object_unref( store );
     }
 
     if( ( di->tracker_buffer == NULL ) && ( n == 1 ) )

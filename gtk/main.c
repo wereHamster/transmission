@@ -446,9 +446,42 @@ onRPCChanged( tr_session            * session,
             break;
         }
 
-        case TR_RPC_SESSION_CHANGED:
-            tr_sessionGetSettings( session, pref_get_all( ) );
+        case TR_RPC_SESSION_CHANGED: {
+            int i;
+            tr_benc tmp;
+            tr_benc * newval;
+            tr_benc * oldvals = pref_get_all( );
+            const char * key;
+            GSList * l;
+            GSList * changed_keys = NULL;
+            tr_bencInitDict( &tmp, 100 );
+            tr_sessionGetSettings( session, &tmp );
+            for( i=0; tr_bencDictChild( &tmp, i, &key, &newval ); ++i )
+            {
+                tr_bool changed;
+                tr_benc * oldval = tr_bencDictFind( oldvals, key );
+                if( !oldval )
+                    changed = TRUE;
+                else {
+                    char * a = tr_bencToStr( oldval, TR_FMT_BENC, NULL );
+                    char * b = tr_bencToStr( newval, TR_FMT_BENC, NULL );
+                    changed = strcmp( a, b ) != 0;
+                    tr_free( b );
+                    tr_free( a );
+                }
+
+                if( changed )
+                    changed_keys = g_slist_append( changed_keys, (gpointer)key );
+            }
+            tr_sessionGetSettings( session, oldvals );
+
+            for( l=changed_keys; l!=NULL; l=l->next )
+                prefschanged( cbdata->core, key, cbdata );
+
+            g_slist_free( changed_keys );
+            tr_bencFree( &tmp );
             break;
+        }
 
         case TR_RPC_TORRENT_CHANGED:
         case TR_RPC_TORRENT_MOVED:
@@ -1368,11 +1401,9 @@ updatemodel( gpointer gdata )
 }
 
 static void
-aboutDialogActivateLink( GtkAboutDialog * dialog    UNUSED,
-                         const gchar *              link_,
-                         gpointer         user_data UNUSED )
+onUriClicked( GtkAboutDialog * u UNUSED, const gchar * uri, gpointer u2 UNUSED )
 {
-    gtr_open_file( link_ );
+    gtr_open_uri( uri );
 }
 
 static void
@@ -1386,17 +1417,17 @@ about( GtkWindow * parent )
         NULL
     };
 
-    const char *website_url = "http://www.transmissionbt.com/";
+    const char * website_uri = "http://www.transmissionbt.com/";
 
-    gtk_about_dialog_set_url_hook( aboutDialogActivateLink, NULL, NULL );
+    gtk_about_dialog_set_url_hook( onUriClicked, NULL, NULL );
 
     gtk_show_about_dialog( parent,
                            "name", g_get_application_name( ),
                            "comments",
                            _( "A fast and easy BitTorrent client" ),
                            "version", LONG_VERSION_STRING,
-                           "website", website_url,
-                           "website-label", website_url,
+                           "website", website_uri,
+                           "website-label", website_uri,
                            "copyright",
                            _( "Copyright (c) The Transmission Project" ),
                            "logo-icon-name", MY_CONFIG_NAME,
@@ -1589,7 +1620,7 @@ doAction( const char * action_name, gpointer user_data )
     }
     else if( !strcmp( action_name, "donate" ) )
     {
-        gtr_open_file( "http://www.transmissionbt.com/donate.php" );
+        gtr_open_uri( "http://www.transmissionbt.com/donate.php" );
     }
     else if( !strcmp( action_name, "pause-all-torrents" ) )
     {
@@ -1716,9 +1747,7 @@ doAction( const char * action_name, gpointer user_data )
     }
     else if( !strcmp ( action_name, "help" ) )
     {
-        char * url = gtr_get_help_url( );
-        gtr_open_file( url );
-        g_free( url );
+        gtr_open_uri( gtr_get_help_uri( ) );
     }
     else if( !strcmp( action_name, "toggle-main-window" ) )
     {

@@ -1085,20 +1085,20 @@ printPeersImpl( tr_benc * peers )
     {
         double progress;
         const char * address, * client, * flagstr;
-        double rateToClient, rateToPeer;
+        int64_t rateToClient, rateToPeer;
         tr_benc * d = tr_bencListChild( peers, i );
 
         if( tr_bencDictFindStr( d, "address", &address )
           && tr_bencDictFindStr( d, "clientName", &client )
           && tr_bencDictFindReal( d, "progress", &progress )
           && tr_bencDictFindStr( d, "flagStr", &flagstr )
-          && tr_bencDictFindReal( d, "rateToClient", &rateToClient )
-          && tr_bencDictFindReal( d, "rateToPeer", &rateToPeer ) )
+          && tr_bencDictFindInt( d, "rateToClient", &rateToClient )
+          && tr_bencDictFindInt( d, "rateToPeer", &rateToPeer ) )
         {
             printf( "%-20s  %-12s  %-5.1f %6.1f  %6.1f  %s\n",
                     address, flagstr, (progress*100.0),
-                    rateToClient,
-                    rateToPeer,
+                    rateToClient / (double)tr_speed_K,
+                    rateToPeer / (double)tr_speed_K,
                     client );
         }
     }
@@ -1327,13 +1327,13 @@ printTrackersImpl( tr_benc * trackerStats )
             printf( "\n" );
             printf( "  Tracker %d: %s\n", (int)(id), host );
             if( isBackup )
-                printf( "  Backup on tier #%d\n", (int)tier );
+                printf( "  Backup on tier %d\n", (int)tier );
             else
-                printf( "  Active in tier #%d\n", (int)tier );
+                printf( "  Active in tier %d\n", (int)tier );
 
             if( !isBackup )
             {
-                if( hasAnnounced )
+                if( hasAnnounced && announceState != TR_TRACKER_INACTIVE )
                 {
                     tr_strltime( buf, now - lastAnnounceTime, sizeof( buf ) );
                     if( lastAnnounceSucceeded )
@@ -1802,6 +1802,7 @@ processArgs( const char * host, int port, int argc, const char ** argv )
             switch( c )
             {
                 case 'a': /* add torrent */
+                    if( sset != 0 ) status |= flush( host, port, &sset );
                     if( tadd != 0 ) status |= flush( host, port, &tadd );
                     if( tset != 0 ) { addIdArg( tr_bencDictFind( tset, ARGUMENTS ), id ); status |= flush( host, port, &tset ); }
                     tadd = tr_new0( tr_benc, 1 );
@@ -2035,12 +2036,8 @@ processArgs( const char * host, int port, int argc, const char ** argv )
 
             switch( c )
             {
-                case 712:
-                    {
-                        tr_benc * trackers = tr_bencDictAddList( args, "trackerRemove", 1 );
-                        tr_bencListAddInt( trackers, atoi(optarg) );
-                        break;
-                    }
+                case 712: tr_bencListAddInt( tr_bencDictAddList( args, "trackerRemove", 1 ), atoi( optarg ) );
+                          break;
                 case 950: tr_bencDictAddReal( args, "seedRatioLimit", atof(optarg) );
                           tr_bencDictAddInt( args, "seedRatioMode", TR_RATIOLIMIT_SINGLE );
                           break;
@@ -2083,12 +2080,8 @@ processArgs( const char * host, int port, int argc, const char ** argv )
                           break;
                 case 702: tr_bencDictAddInt( args, "bandwidthPriority", -1 );
                           break;
-                case 710:
-                     {
-                         tr_benc * trackers = tr_bencDictAddDict( args, "trackerAdd", 1 );
-                         tr_bencDictAddStr( trackers, "announce", optarg );
-                         break;
-                     }
+                case 710: tr_bencListAddStr( tr_bencDictAddList( args, "trackerAdd", 1 ), optarg );
+                          break;
                 default:  assert( "unhandled value" && 0 );
                           break;
             }

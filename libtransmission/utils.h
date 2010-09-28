@@ -114,8 +114,6 @@ const char * tr_strip_positional_args( const char * fmt );
 *****
 ****/
 
-void tr_msgInit( void );
-
 #define TR_MAX_MSG_LOG 10000
 
 extern tr_msg_level messageLevel;
@@ -590,6 +588,7 @@ static inline char* tr_formatter_mem_MB( char * buf, double MBps, size_t buflen 
 /* format a file size from bytes into a user-readable string. */
 char* tr_formatter_size_B( char * buf, uint64_t bytes, size_t buflen );
 
+void tr_formatter_get_units( struct tr_benc * dict );
 
 /***
 ****

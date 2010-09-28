@@ -872,7 +872,8 @@ replaceTrackers( tr_torrent * tor, tr_benc * urls )
         if(    tr_bencGetInt( pair[0], &pos )
             && tr_bencGetStr( pair[1], &newval )
             && tr_urlIsValid( newval, -1 )
-            && pos < n )
+            && pos < n
+            && pos >= 0 )
         {
             tr_free( trackers[pos].announce );
             trackers[pos].announce = tr_strdup( newval );
@@ -896,8 +897,9 @@ removeTrackers( tr_torrent * tor, tr_benc * ids )
 {
     int i;
     int n;
-    int * tids;
     int t = 0;
+    int dup = -1;
+    int * tids;
     tr_benc * val;
     tr_tracker_info * trackers;
     tr_bool changed = FALSE;
@@ -915,17 +917,22 @@ removeTrackers( tr_torrent * tor, tr_benc * ids )
     while(( val = tr_bencListChild( ids, i++ )))
     {
         int64_t pos;
-        if( tr_bencGetInt( val, &pos ) && pos < n )
+
+        if(    tr_bencGetInt( val, &pos )
+            && pos < n
+            && pos >= 0 )
             tids[t++] = pos;
     }
 
-    /* sort trackerIds because tr_removeElementFromArray changes indices as it removes */
+    /* sort trackerIds and remove from largest to smallest so there is no need to recacluate array indicies */
     qsort( tids, t, sizeof(int), compareInt );
-
-    /* remove from largest trackerId to smallest */
     while( t-- )
     {
+        /* check for duplicates */
+        if( tids[t] == dup )
+            continue;
         tr_removeElementFromArray( trackers, tids[t], sizeof( tr_tracker_info ), n-- );
+        dup = tids[t];
         changed = TRUE;
     }
 
@@ -1488,10 +1495,10 @@ sessionStats( tr_session               * session,
     tr_sessionGetCumulativeStats( session, &cumulativeStats );
 
     tr_bencDictAddInt ( args_out, "activeTorrentCount", running );
-    tr_bencDictAddReal( args_out, "downloadSpeed", tr_sessionGetPieceSpeed_KBps( session, TR_DOWN ) );
+    tr_bencDictAddReal( args_out, "downloadSpeed", tr_sessionGetPieceSpeed_Bps( session, TR_DOWN ) );
     tr_bencDictAddInt ( args_out, "pausedTorrentCount", total - running );
     tr_bencDictAddInt ( args_out, "torrentCount", total );
-    tr_bencDictAddReal( args_out, "uploadSpeed", tr_sessionGetPieceSpeed_KBps( session, TR_UP ) );
+    tr_bencDictAddReal( args_out, "uploadSpeed", tr_sessionGetPieceSpeed_Bps( session, TR_UP ) );
 
     d = tr_bencDictAddDict( args_out, "cumulative-stats", 5 );
     tr_bencDictAddInt( d, "downloadedBytes", cumulativeStats.downloadedBytes );
@@ -1517,7 +1524,7 @@ sessionGet( tr_session               * s,
             struct tr_rpc_idle_data  * idle_data UNUSED )
 {
     const char * str;
-    tr_benc *    d = args_out;
+    tr_benc * d = args_out;
 
     assert( idle_data == NULL );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_ALT_SPEED_UP_KBps, tr_sessionGetAltSpeed_KBps(s,TR_UP) );
@@ -1557,6 +1564,7 @@ sessionGet( tr_session               * s,
     tr_bencDictAddBool( d, TR_PREFS_KEY_DSPEED_ENABLED, tr_sessionIsSpeedLimited( s, TR_DOWN ) );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_SCRIPT_TORRENT_DONE_FILENAME, tr_sessionGetTorrentDoneScript( s ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_SCRIPT_TORRENT_DONE_ENABLED, tr_sessionIsTorrentDoneScriptEnabled( s ) );
+    tr_formatter_get_units( tr_bencDictAddDict( d, "units", 0 ) );
     tr_bencDictAddStr ( d, "version", LONG_VERSION_STRING );
     switch( tr_sessionGetEncryption( s ) ) {
         case TR_CLEAR_PREFERRED: str = "tolerated"; break;

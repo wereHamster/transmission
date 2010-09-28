@@ -45,6 +45,7 @@
 
 #include <libtransmission/transmission.h>
 #include <libtransmission/bencode.h>
+#include <libtransmission/utils.h> // tr_getRatio()
 
 #include "details.h"
 #include "file-tree.h"
@@ -228,10 +229,17 @@ Details :: refreshPref( int key )
 
     switch( key )
     {
-        case Prefs :: SHOW_TRACKER_SCRAPES:
+        case Prefs :: SHOW_TRACKER_SCRAPES: {
+            QItemSelectionModel * selectionModel( myTrackerView->selectionModel( ) );
+            const QItemSelection selection( selectionModel->selection( ) );
+            const QModelIndex currentIndex( selectionModel->currentIndex( ) );
             myTrackerDelegate->setShowMore( myPrefs.getBool( key ) );
+            selectionModel->clear( );
             myTrackerView->reset( );
+            selectionModel->select( selection, QItemSelectionModel::Select );
+            selectionModel->setCurrentIndex( currentIndex, QItemSelectionModel::NoUpdate );
             break;
+        }
 
         case Prefs :: SHOW_BACKUP_TRACKERS:
             myTrackerFilter->setShowBackupTrackers( myPrefs.getBool( key ) );
@@ -362,20 +370,37 @@ Details :: refresh( )
                 available += t->sizeWhenDone() - t->leftUntilDone() + t->desiredAvailable();
             }
         }
-        if( !haveVerified && !haveUnverified )
-            string = none;
-        else {
+        {
             const double d = 100.0 * ( sizeWhenDone ? ( sizeWhenDone - leftUntilDone ) / sizeWhenDone : 1 );
             QString pct = Formatter::percentToString( d );
-            if( !haveUnverified )
+            QString astr;
+
+            if( sizeWhenDone )
+                astr = Formatter::percentToString( ( 100.0 * available ) / sizeWhenDone );
+            else
+                astr = "100";
+
+            if( !haveUnverified && !leftUntilDone )
+            {
                 string = tr( "%1 (%2%)" )
                              .arg( Formatter::sizeToString( haveVerified + haveUnverified ) )
                              .arg( pct );
-            else
-                string = tr( "%1 (%2%); %3 Unverified" )
+            }
+            else if( !haveUnverified )
+            {
+                string = tr( "%1 (%2% of %3% Available)" )
                              .arg( Formatter::sizeToString( haveVerified + haveUnverified ) )
                              .arg( pct )
+                             .arg( astr );
+            }
+            else
+            {
+                string = tr( "%1 (%2% of %3% Available) + %4 Unverified" )
+                             .arg( Formatter::sizeToString( haveVerified + haveUnverified ) )
+                             .arg( pct )
+                             .arg( astr )
                              .arg( Formatter::sizeToString( haveUnverified ) );
+            }
         }
     }
     myHaveLabel->setText( string );
@@ -409,39 +434,20 @@ Details :: refresh( )
     }
     myDownloadedLabel->setText( string );
 
-    uint64_t u = 0;
     if( torrents.empty( ) )
         string = none;
     else {
-        foreach( const Torrent * t, torrents ) u += t->uploadedEver( );
-        string = QString( Formatter::sizeToString( u ) );
+        uint64_t u = 0;
+        uint64_t d = 0;
+        foreach( const Torrent * t, torrents ) {
+            u += t->uploadedEver( );
+            d += t->downloadedEver( );
+        }
+        string = tr( "%1 (Ratio: %2)" )
+                   .arg( Formatter::sizeToString( u ) )
+                   .arg( Formatter::ratioToString( tr_getRatio( u, d ) ) );
     }
     myUploadedLabel->setText( string );
-
-    if( torrents.empty( ) )
-        string = none;
-    else if( torrents.count() == 1 )
-        string = Formatter::ratioToString( torrents.first()->ratio() );
-    else {
-        bool isMixed = false;
-        int ratioType = (int) torrents.first()->ratio();
-        if( ratioType > 0 ) ratioType = 0;
-        foreach( const Torrent *t, torrents )
-        {
-            if( ratioType != ( t->ratio() >= 0 ? 0 : t->ratio() ) )
-            {
-                isMixed = true;
-                break;
-            }
-        }
-        if( isMixed )
-            string = mixed;
-        else if( ratioType < 0 )
-            string = Formatter::ratioToString( ratioType );
-        else
-            string = Formatter::ratioToString( (double)u / d );
-    }
-    myRatioLabel->setText( string );
 
     const QDateTime qdt_now = QDateTime::currentDateTime( );
 
@@ -693,6 +699,7 @@ Details :: refresh( )
         myPeerLimitSpin->blockSignals( false );
     }
 
+    if( !torrents.empty( ) )
     {
         const Torrent * tor;
 
@@ -842,7 +849,6 @@ Details :: createInfoTab( )
     hig->addRow( tr( "Availability:" ), myAvailabilityLabel = new SqueezeLabel );
     hig->addRow( tr( "Downloaded:" ), myDownloadedLabel = new SqueezeLabel );
     hig->addRow( tr( "Uploaded:" ), myUploadedLabel = new SqueezeLabel );
-    hig->addRow( tr( "Ratio:" ), myRatioLabel = new SqueezeLabel );
     hig->addRow( tr( "State:" ), myStateLabel = new SqueezeLabel );
     hig->addRow( tr( "Running time:" ), myRunTimeLabel = new SqueezeLabel );
     hig->addRow( tr( "Remaining time:" ), myETALabel = new SqueezeLabel );

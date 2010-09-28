@@ -2384,6 +2384,30 @@ tr_peerMgrPeerStats( const tr_torrent    * tor,
 ***
 **/
 
+void
+tr_peerMgrClearInterest( tr_torrent * tor )
+{
+    int i;
+    Torrent * t;
+    int peerCount;
+
+    assert( tr_isTorrent( tor ) );
+
+    t = tor->torrentPeers;
+
+    torrentLock( t );
+
+    peerCount = tr_ptrArraySize( &t->peers );
+
+    for( i=0; i<peerCount; ++i )
+    {
+        const tr_peer * peer = tr_ptrArrayNth( &t->peers, i );
+        tr_peerMsgsSetInterested( peer->msgs, FALSE );
+    }
+
+    torrentUnlock( t );
+}
+
 /* do we still want this piece and does the peer have it? */
 static tr_bool
 isPieceInteresting( const tr_torrent * tor, const tr_peer * peer, tr_piece_index_t index )
@@ -2579,8 +2603,8 @@ rechokeDownloads( Torrent * t )
 
 struct ChokeData
 {
-    tr_bool         doUnchoke;
     tr_bool         isInterested;
+    tr_bool         wasChoked;
     tr_bool         isChoked;
     int             rate;
     int             salt;
@@ -2597,8 +2621,8 @@ compareChoke( const void * va,
     if( a->rate != b->rate ) /* prefer higher overall speeds */
         return a->rate > b->rate ? -1 : 1;
 
-    if( a->isChoked != b->isChoked ) /* prefer unchoked */
-        return a->isChoked ? 1 : -1;
+    if( a->wasChoked != b->wasChoked ) /* prefer unchoked */
+        return a->wasChoked ? 1 : -1;
 
     if( a->salt != b->salt ) /* random order */
         return a->salt - b->salt;
@@ -2636,6 +2660,19 @@ getRate( const tr_torrent * tor, struct peer_atom * atom, uint64_t now )
     return Bps;
 }
 
+static inline tr_bool
+isBandwidthMaxedOut( const tr_bandwidth * b,
+                     const uint64_t now_msec, tr_direction dir )
+{
+    if( !tr_bandwidthIsLimited( b, dir ) )
+        return FALSE;
+    else {
+        const int got = tr_bandwidthGetPieceSpeed_Bps( b, now_msec, dir );
+        const int want = tr_bandwidthGetDesiredSpeed_Bps( b, dir );
+        return got >= want;
+    }
+}
+
 static void
 rechokeUploads( Torrent * t, const uint64_t now )
 {
@@ -2645,6 +2682,7 @@ rechokeUploads( Torrent * t, const uint64_t now )
     struct ChokeData * choke = tr_new0( struct ChokeData, peerCount );
     const tr_session * session = t->manager->session;
     const int chokeAll = !tr_torrentIsPieceTransferAllowed( t->tor, TR_CLIENT_TO_PEER );
+    const tr_bool isMaxedOut = isBandwidthMaxedOut( t->tor->bandwidth, now, TR_UP );
 
     assert( torrentIsLocked( t ) );
 
@@ -2671,9 +2709,10 @@ rechokeUploads( Torrent * t, const uint64_t now )
             struct ChokeData * n = &choke[size++];
             n->peer         = peer;
             n->isInterested = peer->peerIsInterested;
-            n->isChoked     = peer->peerIsChoked;
+            n->wasChoked    = peer->peerIsChoked;
             n->rate         = getRate( t->tor, atom, now );
             n->salt         = tr_cryptoWeakRandInt( INT_MAX );
+            n->isChoked     = TRUE;
         }
     }
 
@@ -2691,16 +2730,18 @@ rechokeUploads( Torrent * t, const uint64_t now )
      * downloader with the worst upload rate gets choked. If a client has
      * a complete file, it uses its upload rate rather than its download
      * rate to decide which peers to unchoke.
+     *
+     * If our bandwidth is maxed out, don't unchoke any more peers.
      */
     unchokedInterested = 0;
     for( i=0; i<size && unchokedInterested<session->uploadSlotsPerTorrent; ++i ) {
-        choke[i].doUnchoke = 1;
+        choke[i].isChoked = isMaxedOut ? choke[i].wasChoked : FALSE;
         if( choke[i].isInterested )
             ++unchokedInterested;
     }
 
     /* optimistic unchoke */
-    if( i < size )
+    if( !isMaxedOut && (i<size) )
     {
         int n;
         struct ChokeData * c;
@@ -2721,7 +2762,7 @@ rechokeUploads( Torrent * t, const uint64_t now )
         if(( n = tr_ptrArraySize( &randPool )))
         {
             c = tr_ptrArrayNth( &randPool, tr_cryptoWeakRandInt( n ));
-            c->doUnchoke = 1;
+            c->isChoked = FALSE;
             t->optimistic = c->peer;
         }
 
@@ -2729,7 +2770,7 @@ rechokeUploads( Torrent * t, const uint64_t now )
     }
 
     for( i=0; i<size; ++i )
-        tr_peerMsgsSetChoke( choke[i].peer->msgs, !choke[i].doUnchoke );
+        tr_peerMsgsSetChoke( choke[i].peer->msgs, choke[i].isChoked );
 
     /* cleanup */
     tr_free( choke );
@@ -3235,13 +3276,11 @@ compareAtomPtrsByShelfDate( const void * va, const void *vb )
 static int
 getMaxAtomCount( const tr_torrent * tor )
 {
-    /* FIXME: this curve should be smoother... */
     const int n = tor->maxConnectedPeers;
-    if( n >= 200 ) return n * 1.5;
-    if( n >= 100 ) return n * 2;
-    if( n >=  50 ) return n * 3;
-    if( n >=  20 ) return n * 5;
-    return n * 10;
+    /* approximate fit of the old jump discontinuous function */
+    if( n >= 55 ) return     n + 150;
+    if( n >= 20 ) return 2 * n + 95;
+    return               4 * n + 55;
 }
 
 static void
@@ -3311,19 +3350,6 @@ atomPulse( int foo UNUSED, short bar UNUSED, void * vmgr )
 ****
 ****
 ***/
-
-static inline tr_bool
-isBandwidthMaxedOut( const tr_bandwidth * b,
-                     const uint64_t now_msec, tr_direction dir )
-{
-    if( !tr_bandwidthIsLimited( b, dir ) )
-        return FALSE;
-    else {
-        const int got = tr_bandwidthGetPieceSpeed_Bps( b, now_msec, dir );
-        const int want = tr_bandwidthGetDesiredSpeed_Bps( b, dir );
-        return got >= want;
-    }
-}
 
 /* is this atom someone that we'd want to initiate a connection to? */
 static tr_bool

@@ -50,6 +50,7 @@
 #endif
 
 #include "transmission.h"
+#include "bencode.h"
 #include "fdlimit.h"
 #include "ConvertUTF.h"
 #include "list.h"
@@ -61,8 +62,7 @@
 
 time_t transmission_now = 0;
 
-tr_msg_level messageLevel = TR_MSG_INF;
-static tr_lock *      messageLock = NULL;
+tr_msg_level messageLevel = TR_MSG_ERR;
 static tr_bool        messageQueuing = FALSE;
 static tr_msg_list *  messageQueue = NULL;
 static tr_msg_list ** messageQueueTail = &messageQueue;
@@ -78,15 +78,15 @@ static int            messageQueueCount = 0;
 ****
 ***/
 
-void
-tr_msgInit( void )
+static tr_lock*
+getMessageLock( void )
 {
-    const char * env = getenv( "TR_DEBUG" );
-    messageLevel = ( env ? atoi( env ) : 0 ) + 1;
-    messageLevel = MAX( 1, messageLevel );
+    static tr_lock * l = NULL;
 
-    if( messageLock == NULL )
-        messageLock = tr_lockNew( );
+    if( !l )
+        l = tr_lockNew( );
+
+    return l;
 }
 
 FILE*
@@ -146,7 +146,7 @@ tr_msg_list *
 tr_getQueuedMessages( void )
 {
     tr_msg_list * ret;
-    tr_lockLock( messageLock );
+    tr_lockLock( getMessageLock( ) );
 
     ret = messageQueue;
     messageQueue = NULL;
@@ -154,7 +154,7 @@ tr_getQueuedMessages( void )
 
     messageQueueCount = 0;
 
-    tr_lockUnlock( messageLock );
+    tr_lockUnlock( getMessageLock( ) );
     return ret;
 }
 
@@ -267,9 +267,7 @@ tr_msg( const char * file, int line,
     const int err = errno; /* message logging shouldn't affect errno */
     char buf[1024];
     va_list ap;
-
-    if( messageLock != NULL )
-        tr_lockLock( messageLock );
+    tr_lockLock( getMessageLock( ) );
 
     /* build the text message */
     *buf = '\0';
@@ -327,9 +325,7 @@ tr_msg( const char * file, int line,
         }
     }
 
-    if( messageLock != NULL )
-        tr_lockUnlock( messageLock );
-
+    tr_lockUnlock( getMessageLock( ) );
     errno = err;
 }
 
@@ -1389,8 +1385,9 @@ tr_parseNumberRange( const char * str_in, int len, int * setmeCount )
 double
 tr_truncd( double x, int decimal_places )
 {
-    const int i = (int) pow( 10, decimal_places );  
-    const double x2 = (int64_t)(x * i);
+    const int i = (int) pow( 10, decimal_places );
+    const double xup = x * i;
+    const double x2 = (int64_t)(xup);
     return x2 / i;
 }
 
@@ -1398,7 +1395,6 @@ char*
 tr_strtruncd( char * buf, double x, int precision, size_t buflen )
 {
     tr_snprintf( buf, buflen, "%.*f", precision, tr_truncd( x, precision ) );
-
     return buf;
 }
 
@@ -1686,3 +1682,25 @@ tr_formatter_mem_B( char * buf, uint64_t bytes_per_second, size_t buflen )
 {
     return formatter_get_size_str( &mem_units, buf, bytes_per_second, buflen );
 }
+
+void
+tr_formatter_get_units( tr_benc * d )
+{
+    int i;
+    tr_benc * l;
+
+    tr_bencDictReserve( d, 6 );
+
+    tr_bencDictAddInt( d, "memory-bytes", mem_units.units[TR_FMT_KB].value );
+    l = tr_bencDictAddList( d, "memory-units", 4 );
+    for( i=0; i<4; i++ ) tr_bencListAddStr( l, mem_units.units[i].name );
+
+    tr_bencDictAddInt( d, "size-bytes",   size_units.units[TR_FMT_KB].value );
+    l = tr_bencDictAddList( d, "size-units", 4 );
+    for( i=0; i<4; i++ ) tr_bencListAddStr( l, size_units.units[i].name );
+
+    tr_bencDictAddInt( d, "speed-bytes",  speed_units.units[TR_FMT_KB].value );
+    l = tr_bencDictAddList( d, "speed-units", 4 );
+    for( i=0; i<4; i++ ) tr_bencListAddStr( l, speed_units.units[i].name );
+}
+
