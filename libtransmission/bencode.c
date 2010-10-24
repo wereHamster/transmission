@@ -27,7 +27,7 @@
 #include <sys/types.h> /* stat() */
 #include <sys/stat.h> /* stat() */
 #include <locale.h>
-#include <unistd.h> /* stat(), close() */
+#include <unistd.h> /* stat() */
 
 #include <event.h> /* struct evbuffer */
 
@@ -35,6 +35,7 @@
 
 #include "transmission.h"
 #include "bencode.h"
+#include "fdlimit.h" /* tr_close_file() */
 #include "json.h"
 #include "list.h"
 #include "platform.h" /* TR_PATH_MAX */
@@ -1681,10 +1682,13 @@ tr_bencToFile( const tr_benc * top, tr_fmt_mode mode, const char * filename )
 
         if( write( fd, str, len ) == (ssize_t)len )
         {
-            tr_fsync( fd );
-            close( fd );
+            struct stat sb;
+            const tr_bool already_exists = !stat( filename, &sb ) && S_ISREG( sb.st_mode );
 
-            if( !unlink( filename ) || ( errno == ENOENT ) )
+            tr_fsync( fd );
+            tr_close_file( fd );
+
+            if( !already_exists || !unlink( filename ) )
             {
                 tr_dbg( "Renaming \"%s\" as \"%s\"", tmp, filename );
 
@@ -1710,7 +1714,7 @@ tr_bencToFile( const tr_benc * top, tr_fmt_mode mode, const char * filename )
         {
             err = errno;
             tr_err( _( "Couldn't save temporary file \"%1$s\": %2$s" ), tmp, tr_strerror( err ) );
-            close( fd );
+            tr_close_file( fd );
             unlink( tmp );
         }
 

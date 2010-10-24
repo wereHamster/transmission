@@ -821,14 +821,14 @@ toggleMainWindow( struct cbdata * cbdata )
         cbdata->isIconified = 0;
         gtk_window_set_skip_taskbar_hint( window, FALSE );
         gtk_window_move( window, x, y );
-        gtk_widget_show( GTK_WIDGET( window ) );
+        gtr_widget_set_visible( GTK_WIDGET( window ), TRUE );
         tr_window_present( window );
     }
     else
     {
         gtk_window_get_position( window, &x, &y );
         gtk_window_set_skip_taskbar_hint( window, TRUE );
-        gtk_widget_hide( GTK_WIDGET( window ) );
+        gtr_widget_set_visible( GTK_WIDGET( window ), FALSE );
         cbdata->isIconified = 1;
     }
 }
@@ -910,7 +910,7 @@ on_drag_data_received( GtkWidget         * widget          UNUSED,
             filenames = g_slist_append( filenames, g_strdup( filename ) );
             success = TRUE;
         }
-        else if( tr_urlIsValid( uri, -1 ) )
+        else if( tr_urlIsValid( uri, -1 ) || gtr_is_magnet_link( uri ) )
         {
             tr_core_add_from_url( data->core, uri );
             success = TRUE;
@@ -1409,39 +1409,37 @@ onUriClicked( GtkAboutDialog * u UNUSED, const gchar * uri, gpointer u2 UNUSED )
 static void
 about( GtkWindow * parent )
 {
-    const char *authors[] =
-    {
+    GtkWidget * d;
+    const char * website_uri = "http://www.transmissionbt.com/";
+    const char * authors[] = {
         "Charles Kerr (Backend; GTK+)",
         "Mitchell Livingston (Backend; OS X)",
-        "Kevin Glowacz (Web client)",
         NULL
     };
 
-    const char * website_uri = "http://www.transmissionbt.com/";
-
     gtk_about_dialog_set_url_hook( onUriClicked, NULL, NULL );
 
-    gtk_show_about_dialog( parent,
-                           "name", g_get_application_name( ),
-                           "comments",
-                           _( "A fast and easy BitTorrent client" ),
-                           "version", LONG_VERSION_STRING,
-                           "website", website_uri,
-                           "website-label", website_uri,
-                           "copyright",
-                           _( "Copyright (c) The Transmission Project" ),
-                           "logo-icon-name", MY_CONFIG_NAME,
+    d = g_object_new( GTK_TYPE_ABOUT_DIALOG,
+                      "authors", authors,
+                      "comments", _( "A fast and easy BitTorrent client" ),
+                      "copyright", _( "Copyright (c) The Transmission Project" ),
+                      "logo-icon-name", MY_CONFIG_NAME,
+                      "name", g_get_application_name( ),
+                      /* Translators: translate "translator-credits" as your name
+                         to have it appear in the credits in the "About"
+                         dialog */
+                      "translator-credits", _( "translator-credits" ),
+                      "version", LONG_VERSION_STRING,
+                      "website", website_uri,
+                      "website-label", website_uri,
 #ifdef SHOW_LICENSE
-                           "license", LICENSE,
-                           "wrap-license", TRUE,
+                      "license", LICENSE,
+                      "wrap-license", TRUE,
 #endif
-                           "authors", authors,
-                           /* Translators: translate "translator-credits" as
-                              your name
-                              to have it appear in the credits in the "About"
-                              dialog */
-                           "translator-credits", _( "translator-credits" ),
-                           NULL );
+                      NULL );
+    gtk_window_set_transient_for( GTK_WINDOW( d ), parent );
+    g_signal_connect_swapped( d, "response", G_CALLBACK (gtk_widget_destroy), d );
+    gtk_widget_show_all( d );
 }
 
 static void
@@ -1729,9 +1727,8 @@ doAction( const char * action_name, gpointer user_data )
     {
         if( !data->msgwin )
         {
-            GtkWidget * win = msgwin_new( data->core );
-            g_signal_connect( win, "destroy", G_CALLBACK( msgwinclosed ),
-                              NULL );
+            GtkWidget * win = msgwin_new( data->core, data->wind );
+            g_signal_connect( win, "destroy", G_CALLBACK( msgwinclosed ), NULL );
             data->msgwin = win;
         }
         else

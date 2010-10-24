@@ -605,21 +605,71 @@ div#inspector_header {
 	padding-right: 10px;
 }
 div#inspector_tabs {
-	width: 303px;
-	margin: 0 auto;
-	padding-top: 10px;
+	width: 283px;
+	margin: 10px auto 0 auto;
 }
 .inspector_tab {
 	float: left;
 	height: 17px;
-	background: transparent url('../images/buttons/tab_backgrounds.png') left -1px repeat-x;
-	border: 1px solid #888;
-	margin: 0px 1px;
+	background: transparent url('../images/buttons/tab_backgrounds_highlight.png') left -1px repeat-x;
+	margin: 0px;
 	padding: 3px 15px; /* 3px == ((bg image height - fg image height) / 2) */
 	cursor: pointer;
 }
 #inspector_tabs .selected {
 	background-position: left -26px; /* the highlighted part of the image */
+}
+
+#inspector_tab_info {
+	background: transparent url('../images/buttons/tab_backgrounds.png') left -1px repeat-x;
+	border: 1px solid #aaa;
+	-webkit-border-top-left-radius: 5px;
+	-webkit-border-top-right-radius: 0px;
+	-webkit-border-bottom-right-radius: 0px;
+	-webkit-border-bottom-left-radius: 5px;
+	-moz-border-radius-topleft: 5px;
+	-moz-border-radius-topright: 0px;
+	-moz-border-radius-bottomright: 0px;
+	-moz-border-radius-bottomleft: 5px;
+	border-top-left-radius: 5px;
+	border-top-right-radius: 0px;
+	border-bottom-right-radius: 0px;
+	border-bottom-left-radius: 5px;
+}
+
+#inspector_tab_info .selected {
+	background: transparent url('../images/buttons/tab_backgrounds.png') left -26px repeat-x;
+}
+
+#inspector_tabs #inspector_tab_info .selected {
+	background: transparent url('../images/buttons/tab_backgrounds.png') left -26px repeat-x !important;
+}
+
+#inspector_tabs #inspector_tab_activity, #inspector_tabs #inspector_tab_peers {
+	border-top: 1px solid #aaa;
+	border-bottom: 1px solid #aaa;
+	border-right: 1px solid #aaa;
+}
+
+#inspector_tabs #inspector_tab_activity, #inspector_tabs #inspector_tab_trackers {
+	border-top: 1px solid #aaa;
+	border-bottom: 1px solid #aaa;
+}
+
+#inspector_tabs #inspector_tab_files {
+	border: 1px solid #aaa;
+	-webkit-border-top-left-radius: 0px;
+	-webkit-border-top-right-radius: 5px;
+	-webkit-border-bottom-right-radius: 5px;
+	-webkit-border-bottom-left-radius: 0px;
+	-moz-border-radius-topleft: 0px;
+	-moz-border-radius-topright: 5px;
+	-moz-border-radius-bottomright: 5px;
+	-moz-border-radius-bottomleft: 0px;
+	border-top-left-radius: 0px;
+	border-top-right-radius: 5px;
+	border-bottom-right-radius: 5px;
+	border-bottom-left-radius: 0px;
 }
 .inspector_container {
 	margin: 0 3%;

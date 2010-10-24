@@ -167,8 +167,7 @@ readOrWriteBytes( tr_session       * session,
 }
 
 static int
-compareOffsetToFile( const void * a,
-                     const void * b )
+compareOffsetToFile( const void * a, const void * b )
 {
     const uint64_t  offset = *(const uint64_t*)a;
     const tr_file * file = b;
@@ -188,9 +187,14 @@ tr_ioFindFileLocation( const tr_torrent * tor,
     const uint64_t  offset = tr_pieceOffset( tor, pieceIndex, pieceOffset, 0 );
     const tr_file * file;
 
+    assert( tr_isTorrent( tor ) );
+    assert( offset < tor->info.totalSize );
+
     file = bsearch( &offset,
                     tor->info.files, tor->info.fileCount, sizeof( tr_file ),
                     compareOffsetToFile );
+
+    assert( file != NULL );
 
     *fileIndex = file - tor->info.files;
     *fileOffset = offset - file->offset;
@@ -289,7 +293,7 @@ recalculateHash( tr_torrent       * tor,
     size_t   bytesLeft;
     uint32_t offset = 0;
     tr_bool  success = TRUE;
-    const size_t buflen = MAX_BLOCK_SIZE;
+    const size_t buflen = tor->blockSize;
     void * buffer = tr_valloc( buflen );
     SHA_CTX  sha;
 

@@ -98,11 +98,12 @@ didWriteWrapper( tr_peerIo * io, unsigned int bytes_transferred )
 
         const unsigned int payload = MIN( next->length, bytes_transferred );
         const unsigned int overhead = guessPacketOverhead( payload );
+        const uint64_t now = tr_time_msec( );
 
-        tr_bandwidthUsed( &io->bandwidth, TR_UP, payload, next->isPieceData );
+        tr_bandwidthUsed( &io->bandwidth, TR_UP, payload, next->isPieceData, now );
 
         if( overhead > 0 )
-            tr_bandwidthUsed( &io->bandwidth, TR_UP, overhead, FALSE );
+            tr_bandwidthUsed( &io->bandwidth, TR_UP, overhead, FALSE, now );
 
         if( io->didWrite )
             io->didWrite( io, payload, next->isPieceData, io->userData );
@@ -149,11 +150,16 @@ canReadWrapper( tr_peerIo * io )
 
             assert( tr_isPeerIo( io ) );
 
-            if( piece )
-                tr_bandwidthUsed( &io->bandwidth, TR_DOWN, piece, TRUE );
+            if( piece || (piece!=used) )
+            {
+                const uint64_t now = tr_time_msec( );
 
-            if( used != piece )
-                tr_bandwidthUsed( &io->bandwidth, TR_DOWN, used - piece, FALSE );
+                if( piece )
+                    tr_bandwidthUsed( &io->bandwidth, TR_DOWN, piece, TRUE, now );
+
+                if( used != piece )
+                    tr_bandwidthUsed( &io->bandwidth, TR_DOWN, used - piece, FALSE, now );
+            }
 
             switch( ret )
             {
@@ -612,6 +618,11 @@ tr_peerIoAddrStr( const tr_address * addr, tr_port port )
     return buf;
 }
 
+const char* tr_peerIoGetAddrStr( const tr_peerIo * io )
+{
+    return tr_isPeerIo( io ) ? tr_peerIoAddrStr( &io->addr, io->port ) : "error";
+}
+
 void
 tr_peerIoSetIOFuncs( tr_peerIo        * io,
                      tr_can_read_cb     readcb,
@@ -820,6 +831,24 @@ tr_peerIoWriteBuf( tr_peerIo         * io,
     evbuffer_drain( buf, n );
 }
 
+void
+tr_peerIoWriteUint16( tr_peerIo        * io,
+                      struct evbuffer  * outbuf,
+                      uint16_t           writeme )
+{
+    const uint16_t tmp = htons( writeme );
+    tr_peerIoWriteBytes( io, outbuf, &tmp, sizeof( uint16_t ) );
+}
+
+void
+tr_peerIoWriteUint32( tr_peerIo        * io,
+                      struct evbuffer  * outbuf,
+                      uint32_t           writeme )
+{
+    const uint32_t tmp = htonl( writeme );
+    tr_peerIoWriteBytes( io, outbuf, &tmp, sizeof( uint32_t ) );
+}
+
 /***
 ****
 ***/
@@ -849,6 +878,25 @@ tr_peerIoReadBytes( tr_peerIo       * io,
         default:
             assert( 0 );
     }
+}
+
+void
+tr_peerIoReadUint16( tr_peerIo        * io,
+                     struct evbuffer  * inbuf,
+                     uint16_t         * setme )
+{
+    uint16_t tmp;
+    tr_peerIoReadBytes( io, inbuf, &tmp, sizeof( uint16_t ) );
+    *setme = ntohs( tmp );
+}
+
+void tr_peerIoReadUint32( tr_peerIo        * io,
+                          struct evbuffer  * inbuf,
+                          uint32_t         * setme )
+{
+    uint32_t tmp;
+    tr_peerIoReadBytes( io, inbuf, &tmp, sizeof( uint32_t ) );
+    *setme = ntohl( tmp );
 }
 
 void

@@ -306,7 +306,7 @@ pokeBatchPeriod( tr_peermsgs * msgs,
     }
 }
 
-static inline void
+static void
 dbgOutMessageLen( tr_peermsgs * msgs )
 {
     dbgmsg( msgs, "outMessage size is now %zu", EVBUFFER_LENGTH( msgs->outMessages ) );
@@ -1213,8 +1213,11 @@ prefetchPieces( tr_peermsgs *msgs )
     for( i=msgs->prefetchCount; i<msgs->peer->pendingReqsToClient && i<12; ++i )
     {
         const struct peer_request * req = msgs->peerAskedFor + i;
-        tr_cachePrefetchBlock( getSession(msgs)->cache, msgs->torrent, req->index, req->offset, req->length );
-        ++msgs->prefetchCount;
+        if( requestIsValid( msgs, req ) )
+        {
+            tr_cachePrefetchBlock( getSession(msgs)->cache, msgs->torrent, req->index, req->offset, req->length );
+            ++msgs->prefetchCount;
+        }
     }
 }
 
@@ -1356,7 +1359,7 @@ readBtPiece( tr_peermsgs      * msgs,
     }
 }
 
-static void updateDesiredRequestCount( tr_peermsgs * msgs, uint64_t now );
+static void updateDesiredRequestCount( tr_peermsgs * msgs );
 
 static int
 readBtMessage( tr_peermsgs * msgs, struct evbuffer * inbuf, size_t inlen )
@@ -1395,7 +1398,7 @@ readBtMessage( tr_peermsgs * msgs, struct evbuffer * inbuf, size_t inlen )
         case BT_UNCHOKE:
             dbgmsg( msgs, "got Unchoke" );
             msgs->peer->clientIsChoked = 0;
-            updateDesiredRequestCount( msgs, tr_time_msec( ) );
+            updateDesiredRequestCount( msgs );
             break;
 
         case BT_INTERESTED:
@@ -1682,7 +1685,7 @@ tr_peerMsgsIsReadingBlock( const tr_peermsgs * msgs, tr_block_index_t block )
 **/
 
 static void
-updateDesiredRequestCount( tr_peermsgs * msgs, uint64_t now )
+updateDesiredRequestCount( tr_peermsgs * msgs )
 {
     const tr_torrent * const torrent = msgs->torrent;
 
@@ -1705,6 +1708,7 @@ updateDesiredRequestCount( tr_peermsgs * msgs, uint64_t now )
         int irate_Bps;
         const int floor = 4;
         const int seconds = REQUEST_BUF_SECS;
+        const uint64_t now = tr_time_msec( );
 
         /* Get the rate limit we should use.
          * FIXME: this needs to consider all the other peers as well... */
@@ -1972,7 +1976,7 @@ peerPulse( void * vmsgs )
     const time_t  now = tr_time( );
 
     if ( tr_isPeerIo( msgs->peer->io ) ) {
-        updateDesiredRequestCount( msgs, tr_time_msec( ) );
+        updateDesiredRequestCount( msgs );
         updateBlockRequests( msgs );
         updateMetadataRequests( msgs, now );
     }
@@ -2360,7 +2364,7 @@ tr_peerMsgsNew( struct tr_torrent    * torrent,
     }
 
     tr_peerIoSetIOFuncs( m->peer->io, canRead, didWrite, gotError, m );
-    updateDesiredRequestCount( m, tr_time_msec( ) );
+    updateDesiredRequestCount( m );
 
     return m;
 }

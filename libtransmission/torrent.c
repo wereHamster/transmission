@@ -401,7 +401,6 @@ static tr_bool
 tr_torrentIsSeedIdleLimitDone( tr_torrent * tor )
 {
     uint16_t idleMinutes;
-#warning can this use the idleSecs from tr_stat?
     return tr_torrentGetSeedIdle( tor, &idleMinutes )
         && difftime(tr_time(), MAX(tor->startDate, tor->activityDate)) >= idleMinutes * 60u;
 }
@@ -1485,7 +1484,7 @@ checkAndStartImpl( void * vtor )
         stop the torrent and log an error. */
     if( tor->preVerifyTotal && !tr_cpHaveTotal( &tor->completion ) )
     {
-        tr_torrentSetLocalError( tor, _( "No data found!  Reconnect any disconnected drives, use \"Set Location\", or restart the torrent to re-download." ) );
+        tr_torrentSetLocalError( tor, "%s", _( "No data found!  Reconnect any disconnected drives, use \"Set Location\", or restart the torrent to re-download." ) );
     }
     else
     {
@@ -1568,7 +1567,7 @@ torrentRecheckDoneImpl( void * vtor )
 
     if( tor->preVerifyTotal && !tr_cpHaveTotal( &tor->completion ) )
     {
-        tr_torrentSetLocalError( tor, _( "Can't find local data.  Try \"Set Location\" to find it, or restart the torrent to re-download." ) );
+        tr_torrentSetLocalError( tor, "%s", _( "Can't find local data.  Try \"Set Location\" to find it, or restart the torrent to re-download." ) );
     }
     else if( tor->startAfterVerify )
     {
@@ -1681,7 +1680,7 @@ closeTorrent( void * vtor )
     tr_bencDictAddInt( d, "id", tor->uniqueId );
     tr_bencDictAddInt( d, "date", tr_time( ) );
 
-    tr_torinf( tor, _( "Removing torrent" ) );
+    tr_torinf( tor, "%s", _( "Removing torrent" ) );
 
     stopTorrent( tor );
 

@@ -1,6 +1,7 @@
 AM_CPPFLAGS = -I@top_srcdir@
 
 AM_CFLAGS = \
+    @LIBEVENT_CFLAGS@ \
     @LIBCURL_CFLAGS@ \
     @OPENSSL_CFLAGS@ \
     @ZLIB_CFLAGS@ \
@@ -27,6 +28,7 @@ transmission_create_LDADD = \
     $(top_builddir)/libtransmission/libtransmission.a \
     $(top_builddir)/third-party/miniupnp/libminiupnp.a \
     $(top_builddir)/third-party/libnatpmp/libnatpmp.a \
+    @INTLLIBS@ \
     @DHT_LIBS@ \
     @LIBEVENT_LIBS@ \
     @LIBCURL_LIBS@ \

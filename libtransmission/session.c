@@ -87,9 +87,9 @@ tr_peerIdNew( void )
 
     memcpy( buf, PEERID_PREFIX, 8 );
 
-    for( i = 8; i < 19; ++i )
-    {
-        val = tr_cryptoRandInt( base );
+    tr_cryptoRandBuf( buf+8, 11 );
+    for( i=8; i<19; ++i ) {
+        val = buf[i] % base;
         total += val;
         buf[i] = pool[val];
     }
@@ -1161,7 +1161,7 @@ tr_sessionGetActiveSpeedLimit_KBps( const tr_session  * session,
                                     tr_direction        dir,
                                     double            * setme_KBps )
 {
-    int Bps;
+    int Bps = 0;
     const tr_bool is_active = tr_sessionGetActiveSpeedLimit_Bps( session, dir, &Bps );
     *setme_KBps = toSpeedKBps( Bps );
     return is_active;

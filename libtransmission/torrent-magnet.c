@@ -7,7 +7,7 @@
  * This exemption does not extend to derived works not owned by
  * the Transmission project.
  *
- * $Id:$
+ * $Id$
  */
 
 #include <assert.h>
@@ -268,7 +268,7 @@ tr_torrentSetMetadataPiece( tr_torrent  * tor, int piece, const void  * data, in
 
                     if( success && !tr_getBlockSize( info.pieceSize ) )
                     {
-                        tr_torrentSetLocalError( tor, _( "Magnet torrent's metadata is not usable" ) );
+                        tr_torrentSetLocalError( tor, "%s", _( "Magnet torrent's metadata is not usable" ) );
                         success = FALSE;
                     }
 
