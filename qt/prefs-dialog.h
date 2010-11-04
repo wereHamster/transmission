@@ -70,7 +70,7 @@ class PrefsDialog: public QDialog
         QTimeEdit * timeEditNew( int key );
         QLineEdit * lineEditNew( int key, int mode = 0 );
         void enableBuddyWhenChecked( QCheckBox *, QWidget * );
-        void updateBlocklistCheckBox( );
+        void updateBlocklistLabel( );
 
     public:
         PrefsDialog( Session&, Prefs&, QWidget * parent = 0 );
@@ -85,7 +85,6 @@ class PrefsDialog: public QDialog
         QWidget * createNetworkTab( );
         QWidget * createDesktopTab( );
         QWidget * createWebTab( Session& );
-        QWidget * createTrackerTab( );
 
     private:
         typedef QMap<int,QWidget*> key2widget_t;
@@ -114,6 +113,7 @@ class PrefsDialog: public QDialog
         int myBlocklistHttpTag;
         QHttp * myBlocklistHttp;
         QMessageBox * myBlocklistDialog;
+        QLabel * myBlocklistLabel;
 };
 
 #endif

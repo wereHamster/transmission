@@ -295,7 +295,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         if ([fDefaults objectForKey: @"BindAddressIPv6"])
             tr_bencDictAddStr(&settings, TR_PREFS_KEY_BIND_ADDRESS_IPV6, [[fDefaults stringForKey: @"BindAddressIPv6"] UTF8String]);
         
-        tr_bencDictAddBool(&settings, TR_PREFS_KEY_BLOCKLIST_ENABLED, [fDefaults boolForKey: @"Blocklist"]);
+        tr_bencDictAddBool(&settings, TR_PREFS_KEY_BLOCKLIST_ENABLED, [fDefaults boolForKey: @"BlocklistNew"]);
+        tr_bencDictAddBool(&settings, TR_PREFS_KEY_BLOCKLIST_URL, [[fDefaults stringForKey: @"BlocklistURL"] UTF8String]);
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_DHT_ENABLED, [fDefaults boolForKey: @"DHTGlobal"]);
         tr_bencDictAddStr(&settings, TR_PREFS_KEY_DOWNLOAD_DIR, [[[fDefaults stringForKey: @"DownloadFolder"]
                                                                     stringByExpandingTildeInPath] UTF8String]);
@@ -320,11 +321,6 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_PEX_ENABLED, [fDefaults boolForKey: @"PEXGlobal"]);
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_PORT_FORWARDING, [fDefaults boolForKey: @"NatTraversal"]);
-        tr_bencDictAddBool(&settings, TR_PREFS_KEY_PROXY_AUTH_ENABLED, [fDefaults boolForKey: @"ProxyAuthorize"]);
-        tr_bencDictAddBool(&settings, TR_PREFS_KEY_PROXY_ENABLED, [fDefaults boolForKey: @"Proxy"]);
-        tr_bencDictAddInt(&settings, TR_PREFS_KEY_PROXY_PORT, [fDefaults integerForKey: @"ProxyPort"]);
-        tr_bencDictAddStr(&settings, TR_PREFS_KEY_PROXY, [[fDefaults stringForKey: @"ProxyAddress"] UTF8String]);
-        tr_bencDictAddStr(&settings, TR_PREFS_KEY_PROXY_USERNAME,  [[fDefaults stringForKey: @"ProxyUsername"] UTF8String]);
         tr_bencDictAddReal(&settings, TR_PREFS_KEY_RATIO, [fDefaults floatForKey: @"RatioLimit"]);
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_RATIO_ENABLED, [fDefaults boolForKey: @"RatioCheck"]);
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_RENAME_PARTIAL_FILES, [fDefaults boolForKey: @"RenamePartialFiles"]);
@@ -408,6 +404,12 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     //set table size
     if ([fDefaults boolForKey: @"SmallView"])
         [fTableView setRowHeight: ROW_HEIGHT_SMALL];
+    
+    #warning remove once localizations are updated for 2.2
+    [fActionButton setBordered: NO];
+    [fActionButton setFrame: NSMakeRect(6.0, 2.0, 36.0, 18.0)];
+    [fSpeedLimitButton setBordered: NO];
+    [fSpeedLimitButton setFrame: NSMakeRect(45.0, 2.0, 36.0, 18.0)];
     
     //window min height
     NSSize contentMinSize = [fWindow contentMinSize];

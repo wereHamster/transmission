@@ -27,8 +27,7 @@
 #import "BlocklistScheduler.h"
 #import "PrefsController.h"
 
-#define LIST_URL @"http://update.transmissionbt.com/level1.gz"
-#define FILE_NAME @"level1.gz"
+#define FILE_NAME @"blocklist.temp"
 
 @interface BlocklistDownloader (Private)
 
@@ -118,8 +117,11 @@ BlocklistDownloader * fDownloader = nil;
 
 - (void) download: (NSURLDownload *) download didFailWithError: (NSError *) error
 {
-    [fViewController setFailed: [error localizedDescription]];
+    const BOOL blankURL = [[[[download request] URL] absoluteString] isEqualToString: @""];
+    [fViewController setFailed: blankURL ? NSLocalizedString(@"An address of a blocklist is needed.", "blocklist fail message")
+                                    : [error localizedDescription]];
     
+    [[NSUserDefaults standardUserDefaults] setObject: [NSDate date] forKey: @"BlocklistNewLastUpdate"];
     [[BlocklistScheduler scheduler] updateSchedule];
     
     fDownloader = nil;
@@ -142,10 +144,16 @@ BlocklistDownloader * fDownloader = nil;
     
     [[BlocklistScheduler scheduler] cancelSchedule];
     
-    NSURLRequest * request = [NSURLRequest requestWithURL: [NSURL URLWithString: LIST_URL]];
+    NSString * urlString = [[NSUserDefaults standardUserDefaults] stringForKey: @"BlocklistURL"];
+    if (!urlString)
+        urlString = @"";
+    else if (![urlString isEqualToString: @""] && [urlString rangeOfString: @"://"].location == NSNotFound)
+        urlString = [@"http://" stringByAppendingString: urlString];
+    
+    NSURLRequest * request = [NSURLRequest requestWithURL: [NSURL URLWithString: urlString]];
     
     fDownload = [[NSURLDownload alloc] initWithRequest: request delegate: self];
-    [fDownload setDestination: [NSTemporaryDirectory() stringByAppendingPathComponent: FILE_NAME] allowOverwrite: YES];
+    [fDownload setDestination: [NSTemporaryDirectory() stringByAppendingPathComponent: FILE_NAME] allowOverwrite: NO];
 }
 
 - (void) finishDownloadSuccess
@@ -156,15 +164,21 @@ BlocklistDownloader * fDownloader = nil;
     
     //process data
     NSAssert(fDestination != nil, @"the blocklist file destination has not been specified");
-    tr_blocklistSetContent([PrefsController handle], [fDestination UTF8String]);
+    const int count = tr_blocklistSetContent([PrefsController handle], [fDestination UTF8String]);
     
     //delete downloaded file
     [[NSFileManager defaultManager] removeItemAtPath: fDestination error: NULL];
     
-    [fViewController setFinished];
+    if (count > 0)
+        [fViewController setFinished];
+    else
+        [fViewController setFailed: NSLocalizedString(@"The specified blocklist file did not contain any valid rules.",
+                                        "blocklist fail message")];
     
     //update last updated date for schedule
-    [[NSUserDefaults standardUserDefaults] setObject: [NSDate date] forKey: @"BlocklistLastUpdate"];
+    NSDate * date = [NSDate date];
+    [[NSUserDefaults standardUserDefaults] setObject: date forKey: @"BlocklistNewLastUpdate"];
+    [[NSUserDefaults standardUserDefaults] setObject: date forKey: @"BlocklistNewLastUpdateSuccess"];
     [[BlocklistScheduler scheduler] updateSchedule];
     
     [[NSNotificationCenter defaultCenter] postNotificationName: @"BlocklistUpdated" object: nil];

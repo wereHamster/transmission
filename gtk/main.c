@@ -1196,6 +1196,10 @@ prefschanged( TrCore * core UNUSED, const char * key, gpointer data )
     {
         tr_blocklistSetEnabled( tr, pref_flag_get( key ) );
     }
+    else if( !strcmp( key, TR_PREFS_KEY_BLOCKLIST_URL ) )
+    {
+        tr_blocklistSetURL( tr, pref_string_get( key ) );
+    }
     else if( !strcmp( key, PREF_KEY_SHOW_TRAY_ICON ) )
     {
         const int show = pref_flag_get( key );
@@ -1285,34 +1289,6 @@ prefschanged( TrCore * core UNUSED, const char * key, gpointer data )
     else if( !strcmp( key, TR_PREFS_KEY_RPC_AUTH_REQUIRED ) )
     {
         tr_sessionSetRPCPasswordEnabled( tr, pref_flag_get( key ) );
-    }
-    else if( !strcmp( key, TR_PREFS_KEY_PROXY ) )
-    {
-        tr_sessionSetProxy( tr, pref_string_get( key ) );
-    }
-    else if( !strcmp( key, TR_PREFS_KEY_PROXY_TYPE ) )
-    {
-        tr_sessionSetProxyType( tr, pref_int_get( key ) );
-    }
-    else if( !strcmp( key, TR_PREFS_KEY_PROXY_ENABLED ) )
-    {
-        tr_sessionSetProxyEnabled( tr, pref_flag_get( key ) );
-    }
-    else if( !strcmp( key, TR_PREFS_KEY_PROXY_AUTH_ENABLED ) )
-    {
-        tr_sessionSetProxyAuthEnabled( tr, pref_flag_get( key ) );
-    }
-    else if( !strcmp( key, TR_PREFS_KEY_PROXY_USERNAME ) )
-    {
-        tr_sessionSetProxyUsername( tr, pref_string_get( key ) );
-    }
-    else if( !strcmp( key, TR_PREFS_KEY_PROXY_PASSWORD ) )
-    {
-        tr_sessionSetProxyPassword( tr, pref_string_get( key ) );
-    }
-    else if( !strcmp( key, TR_PREFS_KEY_PROXY_PORT ) )
-    {
-        tr_sessionSetProxyPort( tr, pref_int_get( key ) );
     }
     else if( !strcmp( key, TR_PREFS_KEY_ALT_SPEED_UP_KBps ) )
     {

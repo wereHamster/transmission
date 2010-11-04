@@ -43,8 +43,8 @@
                         * fSpeedLimitUploadField, * fSpeedLimitDownloadField;
     IBOutlet NSPopUpButton * fAutoSpeedDayTypePopUp;
     
-    IBOutlet NSTextField * fPeersGlobalField, * fPeersTorrentField, * fBlocklistMessageField, * fBlocklistDateField;
-    IBOutlet NSButton * fBlocklistEnableCheck;
+    IBOutlet NSTextField * fPeersGlobalField, * fPeersTorrentField,
+                        * fBlocklistURLField, * fBlocklistMessageField, * fBlocklistDateField;
     
     PortChecker * fPortChecker;
     IBOutlet NSTextField * fPortField, * fPortStatusField;
@@ -53,9 +53,6 @@
     IBOutlet NSProgressIndicator * fPortStatusProgress;
     NSTimer * fPortStatusTimer;
     int fPeerPort, fNatStatus;
-    
-    IBOutlet NSTextField * fProxyAddressField, * fProxyPortField, * fProxyPasswordField;
-    IBOutlet NSPopUpButton * fProxyTypePopUp;
     
     IBOutlet NSTextField * fRPCPortField, * fRPCPasswordField;
     IBOutlet NSTableView * fRPCWhitelistTable;
@@ -89,6 +86,7 @@
 - (void) setEncryptionMode: (id) sender;
 
 - (void) setBlocklistEnabled: (id) sender;
+- (void) setBlocklistURL: (id) sender;
 - (void) updateBlocklist: (id) sender;
 - (void) setBlocklistAutoUpdate: (id) sender;
 - (void) updateBlocklistFields;
@@ -138,16 +136,6 @@
 - (void) importFolderSheetShow: (id) sender;
 
 - (void) setAutoSize: (id) sender;
-
-- (void) setProxyEnabled: (id) sender;
-- (void) setProxyAddress: (id) sender;
-- (void) setProxyPort: (id) sender;
-- (void) setProxyType: (id) sender;
-- (void) updateProxyType;
-- (void) setProxyAuthorize: (id) sender;
-- (void) setProxyUsername: (id) sender;
-- (void) setProxyPassword: (id) sender;
-- (void) updateProxyPassword;
 
 - (void) setRPCEnabled: (id) sender;
 - (void) linkWebUI: (id) sender;

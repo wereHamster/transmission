@@ -245,8 +245,7 @@ new_file_chooser_button( const char * key, gpointer core )
 }
 
 static void
-target_cb( GtkWidget * tb,
-           gpointer    target )
+target_cb( GtkWidget * tb, gpointer target )
 {
     const gboolean b = gtk_toggle_button_get_active( GTK_TOGGLE_BUTTON( tb ) );
 
@@ -383,6 +382,7 @@ struct blocklist_data
     gulong      updateBlocklistTag;
     GtkWidget * updateBlocklistButton;
     GtkWidget * updateBlocklistDialog;
+    GtkWidget * label;
     GtkWidget * check;
     TrCore    * core;
 };
@@ -390,12 +390,14 @@ struct blocklist_data
 static void
 updateBlocklistText( GtkWidget * w, TrCore * core )
 {
+    char buf1[512];
+    char buf2[512];
     const int n = tr_blocklistGetRuleCount( tr_core_session( core ) );
-    char      buf[512];
-    g_snprintf( buf, sizeof( buf ),
-                gtr_ngettext( "Enable _blocklist (contains %'d rule)",
-                              "Enable _blocklist (contains %'d rules)", n ), n );
-    gtk_button_set_label( GTK_BUTTON( w ), buf );
+    g_snprintf( buf1, sizeof( buf1 ),
+                gtr_ngettext( "Blocklist contains %'d rule",
+                              "Blocklist contains %'d rules", n ), n );
+    g_snprintf( buf2, sizeof( buf2 ), "<i>%s</i>", buf1 );
+    gtk_label_set_markup( GTK_LABEL( w ), buf2 );
 }
 
 /* prefs dialog is being destroyed, so stop listening to blocklist updates */
@@ -429,7 +431,7 @@ onBlocklistUpdated( TrCore * core, int n, gpointer gdata )
     gtk_widget_set_sensitive( data->updateBlocklistButton, TRUE );
     gtk_message_dialog_set_markup( d, _( "<b>Update succeeded!</b>" ) );
     gtk_message_dialog_format_secondary_text( d, s, n );
-    updateBlocklistText( data->check, core );
+    updateBlocklistText( data->label, core );
 }
 
 /* user pushed a button to update the blocklist */
@@ -476,12 +478,13 @@ new_encryption_combo( GObject * core, const char * key )
 static GtkWidget*
 privacyPage( GObject * core )
 {
-    int                     row = 0;
-    const char *            s;
-    GtkWidget *             t;
-    GtkWidget *             w;
-    GtkWidget *             b;
-    GtkWidget *             h;
+    int row = 0;
+    const char * s;
+    GtkWidget * t;
+    GtkWidget * w;
+    GtkWidget * b;
+    GtkWidget * h;
+    GtkWidget * e;
     struct blocklist_data * data;
 
     data = g_new0( struct blocklist_data, 1 );
@@ -490,25 +493,32 @@ privacyPage( GObject * core )
     t = hig_workarea_create( );
     hig_workarea_add_section_title( t, &row, _( "Blocklist" ) );
 
-    w = new_check_button( "", TR_PREFS_KEY_BLOCKLIST_ENABLED, core );
+    b = new_check_button( _( "Enable _blocklist:" ), TR_PREFS_KEY_BLOCKLIST_ENABLED, core );
+    e = new_entry( TR_PREFS_KEY_BLOCKLIST_URL, core );
+    gtk_widget_set_size_request( e, 300, -1 );
+    hig_workarea_add_row_w( t, &row, b, e, NULL );
+    data->check = b;
+    g_signal_connect( b, "toggled", G_CALLBACK( target_cb ), e );
+    target_cb( b, e );
+
+    w = gtk_label_new( "" );
+    gtk_misc_set_alignment( GTK_MISC( w ), 0.0f, 0.5f );
     updateBlocklistText( w, TR_CORE( core ) );
+    data->label = w;
     h = gtk_hbox_new( FALSE, GUI_PAD_BIG );
     gtk_box_pack_start( GTK_BOX( h ), w, TRUE, TRUE, 0 );
     b = data->updateBlocklistButton = gtk_button_new_with_mnemonic( _( "_Update" ) );
-    data->check = w;
-    g_object_set_data( G_OBJECT( b ), "session",
-                      tr_core_session( TR_CORE( core ) ) );
+    g_object_set_data( G_OBJECT( b ), "session", tr_core_session( TR_CORE( core ) ) );
     g_signal_connect( b, "clicked", G_CALLBACK( onBlocklistUpdate ), data );
+    g_signal_connect( data->check, "toggled", G_CALLBACK( target_cb ), b ); target_cb( data->check, b );
     gtk_box_pack_start( GTK_BOX( h ), b, FALSE, FALSE, 0 );
-    g_signal_connect( w, "toggled", G_CALLBACK( target_cb ), b );
-    target_cb( w, b );
+    g_signal_connect( data->check, "toggled", G_CALLBACK( target_cb ), w ); target_cb( data->check, w );
     hig_workarea_add_wide_control( t, &row, h );
 
     s = _( "Enable _automatic updates" );
     w = new_check_button( s, PREF_KEY_BLOCKLIST_UPDATES_ENABLED, core );
     hig_workarea_add_wide_control( t, &row, w );
-    g_signal_connect( data->check, "toggled", G_CALLBACK( target_cb ), w );
-    target_cb( data->check, w );
+    g_signal_connect( data->check, "toggled", G_CALLBACK( target_cb ), w ); target_cb( data->check, w );
 
     hig_workarea_add_section_divider( t, &row );
     hig_workarea_add_section_title ( t, &row, _( "Privacy" ) );
@@ -872,121 +882,6 @@ webPage( GObject * core )
 }
 
 /****
-*****  Proxy Tab
-****/
-
-struct ProxyPage
-{
-    GSList *  proxy_widgets;
-    GSList *  proxy_auth_widgets;
-};
-
-static void
-refreshProxySensitivity( struct ProxyPage * p )
-{
-    GSList *       l;
-    const gboolean proxy_enabled = pref_flag_get( TR_PREFS_KEY_PROXY_ENABLED );
-    const gboolean proxy_auth_enabled = pref_flag_get( TR_PREFS_KEY_PROXY_AUTH_ENABLED );
-
-    for( l = p->proxy_widgets; l != NULL; l = l->next )
-        gtk_widget_set_sensitive( GTK_WIDGET( l->data ), proxy_enabled );
-
-    for( l = p->proxy_auth_widgets; l != NULL; l = l->next )
-        gtk_widget_set_sensitive( GTK_WIDGET( l->data ),
-                                  proxy_enabled && proxy_auth_enabled );
-}
-
-static void
-onProxyToggled( GtkToggleButton * tb UNUSED,
-                gpointer             user_data )
-{
-    refreshProxySensitivity( user_data );
-}
-
-static void
-proxyPageFree( gpointer gpage )
-{
-    struct ProxyPage * page = gpage;
-
-    g_slist_free( page->proxy_widgets );
-    g_slist_free( page->proxy_auth_widgets );
-    g_free( page );
-}
-
-static GtkWidget*
-proxy_combo_box_new( GObject * core, const char * key )
-{
-    GtkWidget * w =  gtr_combo_box_new_enum( "HTTP",   TR_PROXY_HTTP,
-                                             "SOCKS4", TR_PROXY_SOCKS4,
-                                             "SOCKS5", TR_PROXY_SOCKS5,
-                                             NULL );
-    gtr_combo_box_set_active_enum( GTK_COMBO_BOX( w ), pref_int_get( key ) );
-    g_object_set_data_full( G_OBJECT( w ), PREF_KEY, tr_strdup( key ), g_free );
-    g_signal_connect( w, "changed", G_CALLBACK( onIntComboChanged ), core );
-    return w;
-}
-
-static GtkWidget*
-trackerPage( GObject * core )
-{
-    int                row = 0;
-    const char *       s;
-    GtkWidget *        t;
-    GtkWidget *        w;
-    struct ProxyPage * page = tr_new0( struct ProxyPage, 1 );
-
-    t = hig_workarea_create( );
-    hig_workarea_add_section_title ( t, &row, _( "Tracker" ) );
-
-    s = _( "Connect to tracker via a pro_xy" );
-    w = new_check_button( s, TR_PREFS_KEY_PROXY_ENABLED, core );
-    g_signal_connect( w, "toggled", G_CALLBACK( onProxyToggled ), page );
-    hig_workarea_add_wide_control( t, &row, w );
-
-    s = _( "Proxy _server:" );
-    w = new_entry( TR_PREFS_KEY_PROXY, core );
-    page->proxy_widgets = g_slist_append( page->proxy_widgets, w );
-    w = hig_workarea_add_row( t, &row, s, w, NULL );
-    page->proxy_widgets = g_slist_append( page->proxy_widgets, w );
-
-    w = new_spin_button( TR_PREFS_KEY_PROXY_PORT, core, 0, USHRT_MAX, 1 );
-    page->proxy_widgets = g_slist_append( page->proxy_widgets, w );
-    w = hig_workarea_add_row( t, &row, _( "Proxy _port:" ), w, NULL );
-    page->proxy_widgets = g_slist_append( page->proxy_widgets, w );
-
-    s = _( "Proxy _type:" );
-    w = proxy_combo_box_new( core, TR_PREFS_KEY_PROXY_TYPE );
-    page->proxy_widgets = g_slist_append( page->proxy_widgets, w );
-    w = hig_workarea_add_row( t, &row, s, w, NULL );
-    page->proxy_widgets = g_slist_append( page->proxy_widgets, w );
-
-    s = _( "Use _authentication" );
-    w = new_check_button( s, TR_PREFS_KEY_PROXY_AUTH_ENABLED, core );
-    g_signal_connect( w, "toggled", G_CALLBACK( onProxyToggled ), page );
-    hig_workarea_add_wide_control( t, &row, w );
-    page->proxy_widgets = g_slist_append( page->proxy_widgets, w );
-
-    s = _( "_Username:" );
-    w = new_entry( TR_PREFS_KEY_PROXY_USERNAME, core );
-    page->proxy_auth_widgets = g_slist_append( page->proxy_auth_widgets, w );
-    w = hig_workarea_add_row( t, &row, s, w, NULL );
-    page->proxy_auth_widgets = g_slist_append( page->proxy_auth_widgets, w );
-
-    s = _( "Pass_word:" );
-    w = new_entry( TR_PREFS_KEY_PROXY_PASSWORD, core );
-    gtk_entry_set_visibility( GTK_ENTRY( w ), FALSE );
-    page->proxy_auth_widgets = g_slist_append( page->proxy_auth_widgets, w );
-    w = hig_workarea_add_row( t, &row, s, w, NULL );
-    page->proxy_auth_widgets = g_slist_append( page->proxy_auth_widgets, w );
-
-    hig_workarea_finish( t, &row );
-    g_object_set_data_full( G_OBJECT( t ), "page", page, proxyPageFree );
-
-    refreshProxySensitivity( page );
-    return t;
-}
-
-/****
 *****  Bandwidth Tab
 ****/
 
@@ -1346,9 +1241,6 @@ tr_prefs_dialog_new( GObject *   core,
     gtk_notebook_append_page( GTK_NOTEBOOK( n ),
                               webPage( core ),
                               gtk_label_new ( _( "Web" ) ) );
-    gtk_notebook_append_page( GTK_NOTEBOOK( n ),
-                              trackerPage( core ),
-                              gtk_label_new ( _( "Proxy" ) ) );
 
     g_signal_connect( d, "response", G_CALLBACK( response_cb ), core );
     gtk_box_pack_start( GTK_BOX( GTK_DIALOG( d )->vbox ), n, TRUE, TRUE, 0 );

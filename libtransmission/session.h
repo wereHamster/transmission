@@ -88,8 +88,6 @@ struct tr_session
     tr_bool                      isDHTEnabled;
     tr_bool                      isLPDEnabled;
     tr_bool                      isBlocklistEnabled;
-    tr_bool                      isProxyEnabled;
-    tr_bool                      isProxyAuthEnabled;
     tr_bool                      isTorrentDoneScriptEnabled;
     tr_bool                      isClosed;
     tr_bool                      useLazyBitfield;
@@ -137,7 +135,6 @@ struct tr_session
     tr_port                      randomPortLow;
     tr_port                      randomPortHigh;
 
-    int                          proxyPort;
     int                          peerSocketTOS;
     char *                       peer_congestion_algorithm;
 
@@ -153,10 +150,7 @@ struct tr_session
     char *                       torrentDir;
     char *                       incompleteDir;
 
-    tr_proxy_type                proxyType;
-    char *                       proxy;
-    char *                       proxyUsername;
-    char *                       proxyPassword;
+    char *                       blocklist_url;
 
     struct tr_list *             blocklists;
     struct tr_peerMgr *          peerMgr;

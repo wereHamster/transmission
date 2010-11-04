@@ -3,7 +3,7 @@ http://www.transmissionbt.com/
 
 Lead Developers <dev@transmissionbt.com>
   Charles Kerr <charles@transmissionbt.com>  (Daemon, Backend, GTK+ client)
-  Mitchell Livingston <livings124@transmissionbt.com>  (Mac OS X client)
+  Mitchell Livingston, Digital Ignition LLC <livings124@transmissionbt.com>  (Mac OS X client)
   Kevin Glowacz <kjg@transmissionbt.com> (Web client)
 
 Project Contributors
@@ -16,6 +16,7 @@ Project Contributors
   Malcolm Jarvis <mjarvis@transmissionbt.com>  (Web client)
   Rashid Eissing  (Mac OS X Transfers preferences icon)
   Hugo van Heuven, madebysofa  (Main icon design)
+  Dean Ostetto  (Mac OS X Turtle image)
   Rick Patrick  (Mac OS X images)
   Jonas Rask  (Mac OS X Globe icon)
   Erick Turnquist  (IPv6 code, support)
