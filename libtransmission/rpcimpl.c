@@ -36,7 +36,7 @@
 #include "version.h"
 #include "web.h"
 
-#define RPC_VERSION     10
+#define RPC_VERSION     11
 #define RPC_VERSION_MIN 1
 
 #define RECENTLY_ACTIVE_SECONDS 60
@@ -786,8 +786,8 @@ copyTrackers( tr_tracker_info * tgt, const tr_tracker_info * src, int n )
 {
     int i;
     int maxTier = -1;
-   
-    for( i=0; i<n; ++i ) 
+
+    for( i=0; i<n; ++i )
     {
         tgt[i].tier = src[i].tier;
         tgt[i].announce = tr_strdup( src[i].announce );

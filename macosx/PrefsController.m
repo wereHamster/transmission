@@ -62,6 +62,7 @@
 - (void) folderSheetClosed: (NSOpenPanel *) openPanel returnCode: (int) code contextInfo: (void *) info;
 - (void) incompleteFolderSheetClosed: (NSOpenPanel *) openPanel returnCode: (int) code contextInfo: (void *) info;
 - (void) importFolderSheetClosed: (NSOpenPanel *) openPanel returnCode: (int) code contextInfo: (void *) info;
+- (void) doneScriptSheetClosed: (NSOpenPanel *) openPanel returnCode: (int) code contextInfo: (void *) info;
 
 - (void) setKeychainPassword: (const char *) password forService: (const char *) service username: (const char *) username;
 
@@ -215,9 +216,18 @@ tr_session * fHandle;
     [fStalledField setIntValue: [fDefaults integerForKey: @"StalledMinutes"]];
     
     //set blocklist
+    NSString * blocklistURL = [fDefaults stringForKey: @"BlocklistURL"];
+    if (blocklistURL)
+        [fBlocklistURLField setStringValue: blocklistURL];
+    
+    [self updateBlocklistButton];
     [self updateBlocklistFields];
+    
     [[NSNotificationCenter defaultCenter] addObserver: self selector: @selector(updateBlocklistFields)
         name: @"BlocklistUpdated" object: nil];
+    
+    [[NSNotificationCenter defaultCenter] addObserver: self selector: @selector(updateBlocklistURLField)
+        name: NSControlTextDidChangeNotification object: fBlocklistURLField];
     
     //set rpc port
     [fRPCPortField setIntValue: [fDefaults integerForKey: @"RPCPort"]];
@@ -480,11 +490,8 @@ tr_session * fHandle;
     tr_blocklistSetEnabled(fHandle, [fDefaults boolForKey: @"BlocklistNew"]);
     
     [[BlocklistScheduler scheduler] updateSchedule];
-}
-
-- (void) setBlocklistURL: (id) sender
-{
-    tr_blocklistSetURL(fHandle, [[fDefaults stringForKey: @"BlocklistURL"] UTF8String]);
+    
+    [self updateBlocklistButton];
 }
 
 - (void) updateBlocklist: (id) sender
@@ -503,12 +510,7 @@ tr_session * fHandle;
     
     if (exists)
     {
-        NSNumberFormatter * numberFormatter = [[NSNumberFormatter alloc] init];
-        [numberFormatter setNumberStyle: NSNumberFormatterDecimalStyle];
-        [numberFormatter setMaximumFractionDigits: 0];
-        NSString * countString = [numberFormatter stringFromNumber: [NSNumber numberWithInt: tr_blocklistGetRuleCount(fHandle)]];
-        [numberFormatter release];
-        
+        NSString * countString = [NSString formattedUInteger: tr_blocklistGetRuleCount(fHandle)];
         [fBlocklistMessageField setStringValue: [NSString stringWithFormat: NSLocalizedString(@"%@ IP address rules in list",
             "Prefs -> blocklist -> message"), countString]];
     }
@@ -544,6 +546,24 @@ tr_session * fHandle;
     
     [fBlocklistDateField setStringValue: [NSString stringWithFormat: @"%@: %@",
         NSLocalizedString(@"Last updated", "Prefs -> blocklist -> message"), updatedDateString]];
+}
+
+- (void) updateBlocklistURLField
+{
+    NSString * blocklistString = [fBlocklistURLField stringValue];
+    
+    [fDefaults setObject: blocklistString forKey: @"BlocklistURL"];
+    tr_blocklistSetURL(fHandle, [blocklistString UTF8String]);
+    
+    [self updateBlocklistButton];
+}
+
+- (void) updateBlocklistButton
+{
+    NSString * blocklistString = [fDefaults objectForKey: @"BlocklistURL"];
+    const BOOL enable = (blocklistString && ![blocklistString isEqualToString: @""])
+                            && [fDefaults boolForKey: @"BlocklistNew"];
+    [fBlocklistButton setEnabled: enable];
 }
 
 - (void) setAutoStartDownloads: (id) sender
@@ -762,6 +782,21 @@ tr_session * fHandle;
         @selector(incompleteFolderSheetClosed:returnCode:contextInfo:) contextInfo: nil];
 }
 
+- (void) doneScriptSheetShow:(id)sender
+{
+    NSOpenPanel * panel = [NSOpenPanel openPanel];
+    
+    [panel setPrompt: NSLocalizedString(@"Select", "Preferences -> Open panel prompt")];
+    [panel setAllowsMultipleSelection: NO];
+    [panel setCanChooseFiles: YES];
+    [panel setCanChooseDirectories: NO];
+    [panel setCanCreateDirectories: NO];
+    
+    [panel beginSheetForDirectory: nil file: nil types: nil
+                   modalForWindow: [self window] modalDelegate: self didEndSelector:
+     @selector(doneScriptSheetClosed:returnCode:contextInfo:) contextInfo: nil];
+}
+
 - (void) setUseIncompleteFolder: (id) sender
 {
     tr_sessionSetIncompleteDirEnabled(fHandle, [fDefaults boolForKey: @"UseIncompleteDownloadFolder"]);
@@ -770,6 +805,20 @@ tr_session * fHandle;
 - (void) setRenamePartialFiles: (id) sender
 {
     tr_sessionSetIncompleteFileNamingEnabled(fHandle, [fDefaults boolForKey: @"RenamePartialFiles"]);
+}
+
+- (void) setDoneScriptEnabled: (id) sender
+{
+    if ([fDefaults boolForKey: @"DoneScriptEnabled"] && !fopen([[fDefaults stringForKey:@"DoneScriptPath"] UTF8String], "r"))
+    {
+        // enabled is set but script file doesn't exist, so prompt for one and disable until they pick one
+        [fDefaults setBool: NO forKey: @"DoneScriptEnabled"];
+        [self doneScriptSheetShow: sender];
+    }
+    else
+    {
+        tr_sessionSetTorrentDoneScriptEnabled(fHandle, [fDefaults boolForKey: @"DoneScriptEnabled"]);
+    }
 }
 
 - (void) setAutoImport: (id) sender
@@ -1130,6 +1179,13 @@ tr_session * fHandle;
     const NSUInteger idleLimitMin = tr_sessionGetIdleLimit(fHandle);
     [fDefaults setInteger: idleLimitMin forKey: @"IdleLimitMinutes"];
     
+    //done script
+    const BOOL doneScriptEnabled = tr_sessionIsTorrentDoneScriptEnabled(fHandle);
+    [fDefaults setBool: doneScriptEnabled forKey: @"DoneScriptEnabled"];
+    
+    NSString * doneScriptPath = [NSString stringWithUTF8String: tr_sessionGetTorrentDoneScript(fHandle)];
+    [fDefaults setObject: doneScriptPath forKey: @"DoneScriptPath"];
+    
     //update gui if loaded
     if (fHasLoaded)
     {
@@ -1164,6 +1220,8 @@ tr_session * fHandle;
         
         //speed limit schedule times and day handled by bindings
         
+        [fBlocklistURLField setStringValue: blocklistURL];
+        [self updateBlocklistButton];
         [self updateBlocklistFields];
         
         //ratio limit enabled handled by bindings
@@ -1292,6 +1350,28 @@ tr_session * fHandle;
         [fDefaults setBool: NO forKey: @"AutoImport"];
     
     [fImportFolderPopUp selectItemAtIndex: 0];
+}
+
+- (void) doneScriptSheetClosed: (NSOpenPanel *) openPanel returnCode: (int) code contextInfo: (void *) info
+{
+    if (code == NSOKButton)
+    {
+        NSString * filePath = [[openPanel filenames] objectAtIndex: 0];
+        
+        if (fopen([filePath UTF8String], "r")) // script file exists
+        {
+            [fDefaults setObject: filePath forKey: @"DoneScriptPath"];
+            [fDefaults setBool: YES forKey: @"DoneScriptEnabled"];
+        }
+        else // script file doesn't exist so don't enable
+        {
+            [fDefaults setObject: nil forKey:@"DoneScriptPath"];
+            [fDefaults setBool: NO forKey: @"DoneScriptEnabled"];
+        }
+        tr_sessionSetTorrentDoneScript(fHandle, [[fDefaults stringForKey:@"DoneScriptPath"] UTF8String]);
+        tr_sessionSetTorrentDoneScriptEnabled(fHandle, [fDefaults boolForKey:@"DoneScriptEnabled"]);
+    }
+    [fDoneScriptPopUp selectItemAtIndex: 0];
 }
 
 - (void) setKeychainPassword: (const char *) password forService: (const char *) service username: (const char *) username

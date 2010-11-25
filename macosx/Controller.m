@@ -266,7 +266,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         }
         
         tr_benc settings;
-        tr_bencInitDict(&settings, 37);
+        tr_bencInitDict(&settings, 41);
         const char * configDir = tr_getDefaultConfigDir("Transmission");
         tr_sessionGetDefaultSettings(configDir, &settings);
         
@@ -296,7 +296,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
             tr_bencDictAddStr(&settings, TR_PREFS_KEY_BIND_ADDRESS_IPV6, [[fDefaults stringForKey: @"BindAddressIPv6"] UTF8String]);
         
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_BLOCKLIST_ENABLED, [fDefaults boolForKey: @"BlocklistNew"]);
-        tr_bencDictAddBool(&settings, TR_PREFS_KEY_BLOCKLIST_URL, [[fDefaults stringForKey: @"BlocklistURL"] UTF8String]);
+        if ([fDefaults objectForKey: @"BlocklistURL"])
+            tr_bencDictAddStr(&settings, TR_PREFS_KEY_BLOCKLIST_URL, [[fDefaults stringForKey: @"BlocklistURL"] UTF8String]);
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_DHT_ENABLED, [fDefaults boolForKey: @"DHTGlobal"]);
         tr_bencDictAddStr(&settings, TR_PREFS_KEY_DOWNLOAD_DIR, [[[fDefaults stringForKey: @"DownloadFolder"]
                                                                     stringByExpandingTildeInPath] UTF8String]);
@@ -330,6 +331,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         tr_bencDictAddStr(&settings, TR_PREFS_KEY_RPC_USERNAME,  [[fDefaults stringForKey: @"RPCUsername"] UTF8String]);
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_RPC_WHITELIST_ENABLED,  [fDefaults boolForKey: @"RPCUseWhitelist"]);
         tr_bencDictAddBool(&settings, TR_PREFS_KEY_START, [fDefaults boolForKey: @"AutoStartDownload"]);
+        tr_bencDictAddBool(&settings, TR_PREFS_KEY_SCRIPT_TORRENT_DONE_ENABLED, [fDefaults boolForKey: @"DoneScriptEnabled"]);
+        tr_bencDictAddStr(&settings, TR_PREFS_KEY_SCRIPT_TORRENT_DONE_FILENAME, [[fDefaults stringForKey: @"DoneScriptPath"] UTF8String]);
         
         tr_formatter_size_init([NSApp isOnSnowLeopardOrBetter] ? 1000 : 1024,
                                     [NSLocalizedString(@"KB", "File size - kilobytes") UTF8String],
@@ -1318,6 +1321,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     
     [self updateUI];
     [self applyFilter: nil];
+    [[fWindow toolbar] validateVisibleItems];
     [self updateTorrentHistory];
 }
 
@@ -1341,6 +1345,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     
     [self updateUI];
     [self applyFilter: nil];
+    [[fWindow toolbar] validateVisibleItems];
     [self updateTorrentHistory];
 }
 
@@ -1673,6 +1678,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
             [[QLPreviewPanelSL sharedPreviewPanel] reloadData];
         
     }
+    
+    [[fWindow toolbar] validateVisibleItems];
 }
 
 - (void) resetInfo
@@ -1782,20 +1789,21 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
 - (void) setBottomCountText: (BOOL) filtering
 {
     NSString * totalTorrentsString;
-    NSInteger totalCount = [fTorrents count];
+    NSUInteger totalCount = [fTorrents count];
     if (totalCount != 1)
-        totalTorrentsString = [NSString stringWithFormat: NSLocalizedString(@"%d transfers", "Status bar transfer count"), totalCount];
+        totalTorrentsString = [NSString stringWithFormat: NSLocalizedString(@"%@ transfers", "Status bar transfer count"),
+                                [NSString formattedUInteger: totalCount]];
     else
         totalTorrentsString = NSLocalizedString(@"1 transfer", "Status bar transfer count");
     
     if (filtering)
     {
-        NSInteger count = [fTableView numberOfRows]; //have to factor in collapsed rows
+        NSUInteger count = [fTableView numberOfRows]; //have to factor in collapsed rows
         if (count > 0 && ![[fDisplayedTorrents objectAtIndex: 0] isKindOfClass: [Torrent class]])
             count -= [fDisplayedTorrents count];
         
-        totalTorrentsString = [NSString stringWithFormat: NSLocalizedString(@"%d of %@", "Status bar transfer count"),
-                                count, totalTorrentsString];
+        totalTorrentsString = [NSString stringWithFormat: NSLocalizedString(@"%@ of %@", "Status bar transfer count"),
+                                [NSString formattedUInteger: count], totalTorrentsString];
     }
     
     [fTotalTorrentsField setStringValue: totalTorrentsString];
@@ -1876,6 +1884,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     
     [self updateUI];
     [self applyFilter: nil];
+    [[fWindow toolbar] validateVisibleItems];
     [self updateTorrentHistory];
 }
 
@@ -2928,6 +2937,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
 - (void) torrentTableViewSelectionDidChange: (NSNotification *) notification
 {
     [self resetInfo];
+    [[fWindow toolbar] validateVisibleItems];
 }
 
 - (NSDragOperation) draggingEntered: (id <NSDraggingInfo>) info
@@ -3205,6 +3215,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
 
     [self showFilterBar: [fFilterBar isHidden] animate: YES];
     [fDefaults setBool: ![fFilterBar isHidden] forKey: @"FilterBar"];
+    [[fWindow toolbar] validateVisibleItems];
 }
 
 //doesn't save shown state

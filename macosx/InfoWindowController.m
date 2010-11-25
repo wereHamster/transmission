@@ -390,8 +390,9 @@ typedef enum
         {
             [fImageView setImage: [NSImage imageNamed: NSImageNameMultipleDocuments]];
             
-            [fNameField setStringValue: [NSString stringWithFormat: NSLocalizedString(@"%d Torrents Selected",
-                                            "Inspector -> selected torrents"), numberSelected]];
+            [fNameField setStringValue: [NSString stringWithFormat: NSLocalizedString(@"%@ Torrents Selected",
+                                            "Inspector -> selected torrents"),
+                                            [NSString formattedUInteger: numberSelected]]];
         
             uint64_t size = 0;
             NSUInteger fileCount = 0, magnetCount = 0;
@@ -410,7 +411,8 @@ typedef enum
                 if (fileCount == 1)
                     fileString = NSLocalizedString(@"1 file", "Inspector -> selected torrents");
                 else
-                    fileString = [NSString stringWithFormat: NSLocalizedString(@"%d files", "Inspector -> selected torrents"), fileCount];
+                    fileString = [NSString stringWithFormat: NSLocalizedString(@"%@ files", "Inspector -> selected torrents"),
+                                    [NSString formattedUInteger: fileCount]];
                 [fileStrings addObject: fileString];
             }
             if (magnetCount > 0)
@@ -419,8 +421,8 @@ typedef enum
                 if (magnetCount == 1)
                     magnetString = NSLocalizedString(@"1 magnetized transfer", "Inspector -> selected torrents");
                 else
-                    magnetString = [NSString stringWithFormat: NSLocalizedString(@"%d magnetized transfers",
-                                    "Inspector -> selected torrents"), magnetCount];
+                    magnetString = [NSString stringWithFormat: NSLocalizedString(@"%@ magnetized transfers",
+                                    "Inspector -> selected torrents"), [NSString formattedUInteger: magnetCount]];
                 [fileStrings addObject: magnetString];
             }
             
@@ -431,8 +433,8 @@ typedef enum
                 [fBasicInfoField setStringValue: [NSString stringWithFormat: @"%@, %@", fileString,
                     [NSString stringWithFormat: NSLocalizedString(@"%@ total", "Inspector -> selected torrents"),
                         [NSString stringForFileSize: size]]]];
-                [fBasicInfoField setToolTip: [NSString stringWithFormat: NSLocalizedString(@"%llu bytes",
-                                                "Inspector -> selected torrents"), size]];
+                [fBasicInfoField setToolTip: [NSString stringWithFormat: NSLocalizedString(@"%@ bytes",
+                                                "Inspector -> selected torrents"), [NSString formattedUInteger: size]]];
             }
             else
             {
@@ -475,16 +477,17 @@ typedef enum
             if ([torrent isFolder])
             {
                 NSString * fileString;
-                const NSInteger fileCount = [torrent fileCount];
+                const NSUInteger fileCount = [torrent fileCount];
                 if (fileCount == 1)
                     fileString = NSLocalizedString(@"1 file", "Inspector -> selected torrents");
                 else
-                    fileString= [NSString stringWithFormat: NSLocalizedString(@"%d files", "Inspector -> selected torrents"), fileCount];
+                    fileString= [NSString stringWithFormat: NSLocalizedString(@"%@ files", "Inspector -> selected torrents"),
+                                    [NSString formattedUInteger: fileCount]];
                 basicString = [NSString stringWithFormat: @"%@, %@", fileString, basicString];
             }
             [fBasicInfoField setStringValue: basicString];
-            [fBasicInfoField setToolTip: [NSString stringWithFormat: NSLocalizedString(@"%llu bytes", "Inspector -> selected torrents"),
-                                            [torrent size]]];
+            [fBasicInfoField setToolTip: [NSString stringWithFormat: NSLocalizedString(@"%@ bytes", "Inspector -> selected torrents"),
+                                            [NSString formattedUInteger: [torrent size]]]];
         }
         else
         {

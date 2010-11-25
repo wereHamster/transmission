@@ -36,7 +36,10 @@
     
     NSString * fInitialString;
     
-    IBOutlet NSPopUpButton * fFolderPopUp, * fIncompleteFolderPopUp, * fImportFolderPopUp;
+    IBOutlet NSTextField * fCheckForUpdatesLabel;
+    IBOutlet NSButton * fCheckForUpdatesButton, * fCheckForUpdatesBetaButton;
+    
+    IBOutlet NSPopUpButton * fFolderPopUp, * fIncompleteFolderPopUp, * fImportFolderPopUp, * fDoneScriptPopUp;
     IBOutlet NSTextField * fRatioStopField, * fIdleStopField, * fQueueDownloadField, * fQueueSeedField, * fStalledField;
 
     IBOutlet NSTextField * fUploadField, * fDownloadField,
@@ -45,6 +48,7 @@
     
     IBOutlet NSTextField * fPeersGlobalField, * fPeersTorrentField,
                         * fBlocklistURLField, * fBlocklistMessageField, * fBlocklistDateField;
+    IBOutlet NSButton * fBlocklistButton;
     
     PortChecker * fPortChecker;
     IBOutlet NSTextField * fPortField, * fPortStatusField;
@@ -86,10 +90,11 @@
 - (void) setEncryptionMode: (id) sender;
 
 - (void) setBlocklistEnabled: (id) sender;
-- (void) setBlocklistURL: (id) sender;
 - (void) updateBlocklist: (id) sender;
 - (void) setBlocklistAutoUpdate: (id) sender;
 - (void) updateBlocklistFields;
+- (void) updateBlocklistURLField;
+- (void) updateBlocklistButton;
 
 - (void) setAutoStartDownloads: (id) sender;
 
@@ -111,6 +116,9 @@
 - (void) setUseIncompleteFolder: (id) sender;
 
 - (void) setRenamePartialFiles: (id) sender;
+
+- (void) setDoneScriptEnabled: (id) sender;
+- (void) doneScriptSheetShow: (id) sender;
 
 - (void) applyRatioSetting: (id) sender;
 - (void) setRatioStop: (id) sender;
