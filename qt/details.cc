@@ -71,6 +71,8 @@ namespace
 {
     const int REFRESH_INTERVAL_MSEC = 4000;
 
+    const char * PREF_KEY( "pref-key" );
+
     enum // peer columns
     {
         COL_LOCK,
@@ -294,6 +296,38 @@ Details :: onTorrentChanged( )
     }
 }
 
+namespace
+{
+    void setIfIdle( QComboBox * box, int i )
+    {
+        if( !box->hasFocus( ) )
+        {
+            box->blockSignals( true );
+            box->setCurrentIndex( i );
+            box->blockSignals( false );
+        }
+    }
+
+    void setIfIdle( QDoubleSpinBox * spin, double value )
+    {
+        if( !spin->hasFocus( ) )
+        {
+            spin->blockSignals( true );
+            spin->setValue( value );
+            spin->blockSignals( false );
+        }
+    }
+
+    void setIfIdle( QSpinBox * spin, int value )
+    {
+        if( !spin->hasFocus( ) )
+        {
+            spin->blockSignals( true );
+            spin->setValue( value );
+            spin->blockSignals( false );
+        }
+    }
+}
 
 void
 Details :: refresh( )
@@ -364,7 +398,8 @@ Details :: refresh( )
                 haveUnverified += t->haveUnverified( );
                 const uint64_t v = t->haveVerified( );
                 haveVerified += v;
-                verifiedPieces += v / t->pieceSize( );
+                if( t->pieceSize( ) )
+                    verifiedPieces += v / t->pieceSize( );
                 sizeWhenDone += t->sizeWhenDone( );
                 leftUntilDone += t->leftUntilDone( );
                 available += t->sizeWhenDone() - t->leftUntilDone() + t->desiredAvailable();
@@ -677,21 +712,11 @@ Details :: refresh( )
             i = myBandwidthPriorityCombo->findData( baselineInt );
         else
             i = -1;
-        myBandwidthPriorityCombo->blockSignals( true );
-        myBandwidthPriorityCombo->setCurrentIndex( i );
-        myBandwidthPriorityCombo->blockSignals( false );
+        setIfIdle( myBandwidthPriorityCombo, i );
 
-        mySingleDownSpin->blockSignals( true );
-        mySingleDownSpin->setValue( (int)tor->downloadLimit().KBps() );
-        mySingleDownSpin->blockSignals( false );
-
-        mySingleUpSpin->blockSignals( true );
-        mySingleUpSpin->setValue( (int)tor->uploadLimit().KBps() );
-        mySingleUpSpin->blockSignals( false );
-
-        myPeerLimitSpin->blockSignals( true );
-        myPeerLimitSpin->setValue( tor->peerLimit() );
-        myPeerLimitSpin->blockSignals( false );
+        setIfIdle( mySingleDownSpin, int(tor->downloadLimit().KBps()) );
+        setIfIdle( mySingleUpSpin, int(tor->uploadLimit().KBps()) );
+        setIfIdle( myPeerLimitSpin, tor->peerLimit() );
     }
 
     if( !torrents.empty( ) )
@@ -703,28 +728,20 @@ Details :: refresh( )
         int baselineInt = torrents[0]->seedRatioMode( );
         foreach( tor, torrents ) if( baselineInt != tor->seedRatioMode( ) ) { uniform = false; break; }
 
-        myRatioCombo->blockSignals( true );
-        myRatioCombo->setCurrentIndex( uniform ? myRatioCombo->findData( baselineInt ) : -1 );
+        setIfIdle( myRatioCombo, uniform ? myRatioCombo->findData( baselineInt ) : -1 );
         myRatioSpin->setVisible( uniform && ( baselineInt == TR_RATIOLIMIT_SINGLE ) );
-        myRatioCombo->blockSignals( false );
 
-        myRatioSpin->blockSignals( true );
-        myRatioSpin->setValue( tor->seedRatioLimit( ) );
-        myRatioSpin->blockSignals( false );
+        setIfIdle( myRatioSpin, tor->seedRatioLimit( ) );
 
         // idle
         uniform = true;
         baselineInt = torrents[0]->seedIdleMode( );
         foreach( tor, torrents ) if( baselineInt != tor->seedIdleMode( ) ) { uniform = false; break; }
 
-        myIdleCombo->blockSignals( true );
-        myIdleCombo->setCurrentIndex( uniform ? myIdleCombo->findData( baselineInt ) : -1 );
+        setIfIdle( myIdleCombo, uniform ? myIdleCombo->findData( baselineInt ) : -1 );
         myIdleSpin->setVisible( uniform && ( baselineInt == TR_RATIOLIMIT_SINGLE ) );
-        myIdleCombo->blockSignals( false );
 
-        myIdleSpin->blockSignals( true );
-        myIdleSpin->setValue( tor->seedIdleLimit( ) );
-        myIdleSpin->blockSignals( false );
+        setIfIdle( myIdleSpin, tor->seedIdleLimit( ) );
     }
 
     ///
@@ -896,21 +913,22 @@ Details :: onDownloadLimitedToggled( bool val )
     getNewData( );
 }
 void
-Details :: onDownloadLimitChanged( int val )
+Details :: onSpinBoxEditingFinished( )
 {
-    mySession.torrentSet( myIds, "downloadLimit", val );
+    const QObject * spin = sender();
+    const QString key = spin->property( PREF_KEY ).toString( );
+    const QDoubleSpinBox * d = qobject_cast<const QDoubleSpinBox*>( spin );
+    if( d )
+        mySession.torrentSet( myIds, key, d->value( ) );
+    else
+        mySession.torrentSet( myIds, key, qobject_cast<const QSpinBox*>(spin)->value( ) );
     getNewData( );
 }
+
 void
 Details :: onUploadLimitedToggled( bool val )
 {
     mySession.torrentSet( myIds, "uploadLimited", val );
-    getNewData( );
-}
-void
-Details :: onUploadLimitChanged( int val )
-{
-    mySession.torrentSet( myIds, "uploadLimit", val );
     getNewData( );
 }
 
@@ -923,31 +941,10 @@ Details :: onIdleModeChanged( int index )
 }
 
 void
-Details :: onIdleLimitChanged( int val )
-{
-    mySession.torrentSet( myIds, "seedIdleLimit", val );
-    getNewData( );
-}
-
-void
 Details :: onRatioModeChanged( int index )
 {
     const int val = myRatioCombo->itemData( index ).toInt( );
     mySession.torrentSet( myIds, "seedRatioMode", val );
-}
-
-void
-Details :: onRatioLimitChanged( double val )
-{
-    mySession.torrentSet( myIds, "seedRatioLimit", val );
-    getNewData( );
-}
-
-void
-Details :: onMaxPeersChanged( int val )
-{
-    mySession.torrentSet( myIds, "peer-limit", val );
-    getNewData( );
 }
 
 void
@@ -1089,24 +1086,26 @@ Details :: createOptionsTab( )
     c = new QCheckBox( tr( "Limit &download speed (%1):" ).arg( speed_K_str ) );
     mySingleDownCheck = c;
     s = new QSpinBox( );
+    s->setProperty( PREF_KEY, QString( "downloadLimit" ) );
     s->setSingleStep( 5 );
     s->setRange( 0, INT_MAX );
     mySingleDownSpin = s;
     hig->addRow( c, s );
     enableWhenChecked( c, s );
     connect( c, SIGNAL(clicked(bool)), this, SLOT(onDownloadLimitedToggled(bool)) );
-    connect( s, SIGNAL(valueChanged(int)), this, SLOT(onDownloadLimitChanged(int)));
+    connect( s, SIGNAL(editingFinished()), this, SLOT(onSpinBoxEditingFinished()));
 
     c = new QCheckBox( tr( "Limit &upload speed (%1):" ).arg( speed_K_str ) );
     mySingleUpCheck = c;
     s = new QSpinBox( );
     s->setSingleStep( 5 );
     s->setRange( 0, INT_MAX );
+    s->setProperty( PREF_KEY, QString( "uploadLimit" ) );
     mySingleUpSpin = s;
     hig->addRow( c, s );
     enableWhenChecked( c, s );
     connect( c, SIGNAL(clicked(bool)), this, SLOT(onUploadLimitedToggled(bool)) );
-    connect( s, SIGNAL(valueChanged(int)), this, SLOT(onUploadLimitChanged(int)));
+    connect( s, SIGNAL(editingFinished()), this, SLOT(onSpinBoxEditingFinished()));
 
     m = new QComboBox;
     m->addItem( tr( "High" ),   TR_PRI_HIGH );
@@ -1129,7 +1128,8 @@ Details :: createOptionsTab( )
     h->addWidget( myRatioCombo = m );
     ds = new QDoubleSpinBox( );
     ds->setRange( 0.5, INT_MAX );
-    connect( ds, SIGNAL(valueChanged(double)), this, SLOT(onRatioLimitChanged(double)));
+    ds->setProperty( PREF_KEY, QString( "seedRatioLimit" ) );
+    connect( ds, SIGNAL(editingFinished()), this, SLOT(onSpinBoxEditingFinished()));
     h->addWidget( myRatioSpin = ds );
     hig->addRow( tr( "&Ratio:" ), h, m );
 
@@ -1144,7 +1144,8 @@ Details :: createOptionsTab( )
     s = new QSpinBox( );
     s->setSingleStep( 5 );
     s->setRange( 1, 9999 );
-    connect( s, SIGNAL(valueChanged(int)), this, SLOT(onIdleLimitChanged(int)));
+    s->setProperty( PREF_KEY, QString( "seedIdleLimit" ) );
+    connect( s, SIGNAL(editingFinished()), this, SLOT(onSpinBoxEditingFinished()));
     h->addWidget( myIdleSpin = s );
     hig->addRow( tr( "&Idle:" ), h, m );
 
@@ -1155,7 +1156,8 @@ Details :: createOptionsTab( )
     s = new QSpinBox( );
     s->setSingleStep( 5 );
     s->setRange( 1, 300 );
-    connect( s, SIGNAL(valueChanged(int)), this, SLOT(onMaxPeersChanged(int)));
+    s->setProperty( PREF_KEY, QString( "peer-limit" ) );
+    connect( s, SIGNAL(editingFinished()), this, SLOT(onSpinBoxEditingFinished()));
     myPeerLimitSpin = s;
     hig->addRow( tr( "&Maximum peers:" ), s );
 

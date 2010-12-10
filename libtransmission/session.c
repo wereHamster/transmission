@@ -53,7 +53,7 @@
 
 enum
 {
-    SAVE_INTERVAL_SECS = 120,
+    SAVE_INTERVAL_SECS = 360,
 
     DEFAULT_CACHE_SIZE_MB = 2
 };
@@ -500,6 +500,8 @@ tr_sessionInit( const char  * tag,
     struct init_data data;
 
     assert( tr_bencIsDict( clientSettings ) );
+
+    tr_timeUpdate( time( NULL ) );
 
     /* initialize the bare skeleton of the session object */
     session = tr_new0( tr_session, 1 );
