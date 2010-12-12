@@ -44,6 +44,8 @@ struct tr_bindsockets;
 struct tr_cache;
 struct tr_fdInfo;
 
+typedef void ( tr_web_config_func )( tr_session * session, void * curl_pointer, const char * url );
+
 struct tr_turtle_info
 {
     /* TR_UP and TR_DOWN speed limits */
@@ -179,7 +181,7 @@ struct tr_session
     struct tr_bandwidth        * bandwidth;
 
     double                       desiredRatio;
-    
+
     uint16_t                     idleLimitMinutes;
 
     struct tr_bindinfo         * public_ipv4;
@@ -190,6 +192,8 @@ struct tr_session
     void * buffer;
 
     tr_bool bufferInUse;
+
+    tr_web_config_func          * curl_easy_config_func;
 };
 
 static inline tr_port
@@ -222,7 +226,7 @@ const struct tr_address*  tr_sessionGetPublicAddress( const tr_session *, int tr
 
 struct tr_bindsockets * tr_sessionGetBindSockets( tr_session * );
 
-int tr_sessionCountTorrents( const tr_session * session ); 
+int tr_sessionCountTorrents( const tr_session * session );
 
 enum
 {

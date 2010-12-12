@@ -261,8 +261,8 @@ syncAltSpeedButton( PrivateData * p )
 
     tr_formatter_speed_KBps( u, pref_int_get( TR_PREFS_KEY_ALT_SPEED_UP_KBps ), sizeof( u ) );
     tr_formatter_speed_KBps( d, pref_int_get( TR_PREFS_KEY_ALT_SPEED_DOWN_KBps ), sizeof( d ) );
-    fmt = b ? _( "Click to disable Temporary Speed Limits\n(%1$s down, %2$s up)" )
-            : _( "Click to enable Temporary Speed Limits\n(%1$s down, %2$s up)" );
+    fmt = b ? _( "Click to disable Alternative Speed Limits\n(%1$s down, %2$s up)" )
+            : _( "Click to enable Alternative Speed Limits\n(%1$s down, %2$s up)" );
     str = g_strdup_printf( fmt, d, u );
 
     gtk_toggle_button_set_active( GTK_TOGGLE_BUTTON( w ), b );
@@ -864,7 +864,7 @@ void
 tr_window_set_busy( TrWindow * w, gboolean isBusy )
 {
     if( w && gtr_widget_get_realized( GTK_WIDGET( w ) ) )
-    {    
+    {
         GdkDisplay * display = gtk_widget_get_display( GTK_WIDGET( w ) );
         GdkCursor * cursor = isBusy ? gdk_cursor_new_for_display( display, GDK_WATCH ) : NULL;
 
@@ -872,6 +872,6 @@ tr_window_set_busy( TrWindow * w, gboolean isBusy )
         gdk_display_flush( display );
 
         if( cursor )
-            gdk_cursor_unref( cursor ); 
+            gdk_cursor_unref( cursor );
     }
 }

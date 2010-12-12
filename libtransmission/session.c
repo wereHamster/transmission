@@ -55,7 +55,7 @@ enum
 {
     SAVE_INTERVAL_SECS = 360,
 
-    DEFAULT_CACHE_SIZE_MB = 2
+    DEFAULT_CACHE_SIZE_MB = 4
 };
 
 
@@ -2470,4 +2470,14 @@ tr_sessionSetTorrentDoneScript( tr_session * session, const char * scriptFilenam
         tr_free( session->torrentDoneScript );
         session->torrentDoneScript = tr_strdup( scriptFilename );
     }
+}
+
+/***
+****
+***/
+
+void
+tr_sessionSetWebConfigFunc( tr_session * session, void (*func)(tr_session*, void*, const char* ) )
+{
+    session->curl_easy_config_func = func;
 }
