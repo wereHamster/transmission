@@ -142,6 +142,7 @@ const char* tr_getDefaultDownloadDir( void );
 #define TR_DEFAULT_OPEN_FILE_LIMIT_STR           "32"
 #define TR_DEFAULT_RPC_WHITELIST          "127.0.0.1"
 #define TR_DEFAULT_RPC_PORT_STR                "9091"
+#define TR_DEFAULT_RPC_URL_STR       "/transmission/"
 #define TR_DEFAULT_PEER_PORT_STR              "51413"
 #define TR_DEFAULT_PEER_SOCKET_TOS_STR            "0"
 #define TR_DEFAULT_PEER_LIMIT_GLOBAL_STR        "240"
@@ -190,6 +191,7 @@ const char* tr_getDefaultDownloadDir( void );
 #define TR_PREFS_KEY_RPC_PASSWORD                  "rpc-password"
 #define TR_PREFS_KEY_RPC_PORT                      "rpc-port"
 #define TR_PREFS_KEY_RPC_USERNAME                  "rpc-username"
+#define TR_PREFS_KEY_RPC_URL                       "rpc-url"
 #define TR_PREFS_KEY_RPC_WHITELIST_ENABLED         "rpc-whitelist-enabled"
 #define TR_PREFS_KEY_SCRIPT_TORRENT_DONE_FILENAME  "script-torrent-done-filename"
 #define TR_PREFS_KEY_SCRIPT_TORRENT_DONE_ENABLED   "script-torrent-done-enabled"
@@ -420,6 +422,24 @@ void tr_sessionSetRPCPort( tr_session  * session,
     @see tr_sessionInit()
     @see tr_sessionSetRPCPort */
 tr_port tr_sessionGetRPCPort( const tr_session * session );
+
+/**
+ * @brief Specify which base URL to use.
+ *
+ * @detail The RPC API is accessible under <url>/rpc, the web interface under
+ * <url>/web.
+ *
+ *  @see tr_sessionGetRPCUrl
+ */
+void tr_sessionSetRPCUrl( tr_session  * session,
+                          const char * url );
+
+/**
+ * @brief Get the base URL.
+ * @see tr_sessionInit()
+ * @see tr_sessionSetRPCUrl
+ */
+const char* tr_sessionGetRPCUrl( const tr_session * session );
 
 /**
  * @brief Specify a whitelist for remote RPC access
@@ -1011,9 +1031,13 @@ tr_torrent * tr_torrentNew( const tr_ctor   * ctor,
            Running torrents are stopped first.  */
 void tr_torrentFree( tr_torrent * torrent );
 
+typedef int tr_fileFunc( const char * filename );
+
 /** @brief Removes our .torrent and .resume files for
            this torrent, then calls tr_torrentFree(). */
-void tr_torrentRemove( tr_torrent * torrent );
+void tr_torrentRemove( tr_torrent  * torrent,
+                       tr_bool       removeLocalData,
+                       tr_fileFunc   removeFunc );
 
 /** @brief Start a torrent */
 void tr_torrentStart( tr_torrent * torrent );
@@ -1040,17 +1064,6 @@ void tr_torrentSetLocation( tr_torrent  * torrent,
                             tr_bool       move_from_previous_location,
                             double      * setme_progress,
                             int         * setme_state );
-
-typedef int tr_fileFunc( const char * filename );
-
-/**
- * @brief Deletes the torrent's local data.
- * @param torrent
- * @param fileFunc Pass in "unlink" to destroy the files or, on platforms with
- *                 recycle bins, pass in a function that uses it instead.
- *                 tr_torrentDeleteLocalData() ignores fileFunc's return value.
- */
-void tr_torrentDeleteLocalData( tr_torrent * torrent, tr_fileFunc fileFunc );
 
 uint64_t tr_torrentGetBytesLeftToAllocate( const tr_torrent * torrent );
 

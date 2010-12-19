@@ -1266,11 +1266,8 @@ tr_core_remove_torrent_from_id( TrCore * core, int id, gboolean deleteFiles )
         /* remove from the gui */
         gtk_list_store_remove( GTK_LIST_STORE( model ), &iter );
 
-        /* maybe delete the downloaded files */
-        if( deleteFiles )
-            tr_torrentDeleteLocalData( tor, gtr_file_trash_or_remove );
-
         /* remove the torrent */
+        tr_torrent_set_delete_local_data_flag( gtor, deleteFiles );
         tr_torrent_set_remove_flag( gtor, TRUE );
         gtr_warn_if_fail( G_OBJECT( gtor )->ref_count == 1 );
         g_object_unref( G_OBJECT( gtor ) ); /* remove the last refcount */
@@ -1764,18 +1761,18 @@ tr_core_torrent_changed( TrCore * core, int id )
     while( gtk_tree_model_iter_next( model, &iter ) );
 }
 
-int
+size_t
 tr_core_get_torrent_count( TrCore * core )
 {
     return gtk_tree_model_iter_n_children( tr_core_model( core ), NULL );
 }
 
-int
+size_t
 tr_core_get_active_torrent_count( TrCore * core )
 {
     GtkTreeIter iter;
     GtkTreeModel * model = tr_core_model( core );
-    int activeCount = 0;
+    size_t activeCount = 0;
 
     if( gtk_tree_model_get_iter_first( model, &iter ) ) do
     {

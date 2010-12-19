@@ -12,6 +12,7 @@
 
 #include <sys/types.h> /* stat */
 #include <sys/stat.h> /* stat */
+#include <sys/wait.h> /* wait() */
 #include <unistd.h> /* stat */
 #include <dirent.h>
 
@@ -737,9 +738,30 @@ tr_torrentGotNewInfoDict( tr_torrent * tor )
 }
 
 static tr_bool
+hasAnyLocalData( const tr_torrent * tor )
+{
+    tr_file_index_t i;
+    tr_bool has_local_data = FALSE;
+    const tr_file_index_t n = tor->info.fileCount;
+
+    for( i=0; i<n && !has_local_data; ++i )
+    {
+        struct stat sb;
+        char * filename = tr_torrentFindFile( tor, i );
+
+        if( filename && !stat( filename, &sb ) )
+            has_local_data = TRUE;
+
+        tr_free( filename );
+    }
+
+    return has_local_data;
+}
+
+static tr_bool
 setLocalErrorIfFilesDisappeared( tr_torrent * tor )
 {
-    const tr_bool disappeared = ( tr_cpHaveTotal( &tor->completion ) > 0 ) && ( tr_torrentGetCurrentSizeOnDisk( tor ) == 0 );
+    const tr_bool disappeared = ( tr_cpHaveTotal( &tor->completion ) > 0 ) && !hasAnyLocalData( tor );
 
     if( disappeared )
     {
@@ -1749,13 +1771,43 @@ tr_torrentFree( tr_torrent * tor )
     }
 }
 
-void
-tr_torrentRemove( tr_torrent * tor )
+struct remove_data
 {
-    assert( tr_isTorrent( tor ) );
+    tr_torrent   * tor;
+    tr_bool        deleteFlag;
+    tr_fileFunc  * deleteFunc;
+};
 
+static void tr_torrentDeleteLocalData( tr_torrent *, tr_fileFunc );
+
+static void
+removeTorrent( void * vdata )
+{
+    struct remove_data * data = vdata;
+
+    if( data->deleteFlag )
+        tr_torrentDeleteLocalData( data->tor, data->deleteFunc );
+
+    tr_torrentClearCompletenessCallback( data->tor );
+    closeTorrent( data->tor );
+    tr_free( data );
+}
+
+void
+tr_torrentRemove( tr_torrent   * tor,
+                  tr_bool        deleteFlag, 
+                  tr_fileFunc    deleteFunc )
+{
+    struct remove_data * data;
+
+    assert( tr_isTorrent( tor ) );
     tor->isDeleting = 1;
-    tr_torrentFree( tor );
+
+    data = tr_new0( struct remove_data, 1 );
+    data->tor = tor;
+    data->deleteFlag = deleteFlag;
+    data->deleteFunc = deleteFunc;
+    tr_runInEventThread( tor->session, removeTorrent, data );
 }
 
 /**
@@ -1850,37 +1902,42 @@ tr_torrentClearIdleLimitHitCallback( tr_torrent * torrent )
 }
 
 static void
-tr_setenv( const char * name, const char * value, tr_bool override )
+onSigCHLD( int i UNUSED )
 {
-#ifdef WIN32
-    putenv( tr_strdup_printf( "%s=%s", name, value ) ); /* leaks memory... */
-#else
-    setenv( name, value, override );
-#endif
+    waitpid( -1, 0, WNOHANG );
 }
 
 static void
-torrentCallScript( tr_torrent * tor, const char * script )
+torrentCallScript( const tr_torrent * tor, const char * script )
 {
+    char timeStr[128];
+    const time_t now = tr_time( );
+
     assert( tr_isTorrent( tor ) );
+
+    tr_strlcpy( timeStr, ctime( &now ), sizeof( timeStr ) );
+    *strchr( timeStr,'\n' ) = '\0';
 
     if( script && *script )
     {
-        char buf[128];
-        const time_t now = tr_time( );
+        char * cmd[] = { tr_strdup( script ), NULL };
+        char * env[] = {
+            tr_strdup_printf( "TR_APP_VERSION=%s", SHORT_VERSION_STRING ),
+            tr_strdup_printf( "TR_TIME_LOCALTIME=%s", timeStr ),
+            tr_strdup_printf( "TR_TORRENT_DIR=%s", tor->currentDir ),
+            tr_strdup_printf( "TR_TORRENT_ID=%d", tr_torrentId( tor ) ),
+            tr_strdup_printf( "TR_TORRENT_HASH=%s", tor->info.hashString ),
+            tr_strdup_printf( "TR_TORRENT_NAME=%s", tr_torrentName( tor ) ),
+            NULL };
 
-        tr_setenv( "TR_APP_VERSION", SHORT_VERSION_STRING, 1 );
+        tr_torinf( tor, "Calling script \"%s\"", script ); 
+        signal( SIGCHLD, onSigCHLD );
 
-        tr_snprintf( buf, sizeof( buf ), "%d", tr_torrentId( tor ) );
-        tr_setenv( "TR_TORRENT_ID", buf, 1 );
-        tr_setenv( "TR_TORRENT_NAME", tr_torrentName( tor ), 1 );
-        tr_setenv( "TR_TORRENT_DIR", tor->currentDir, 1 );
-        tr_setenv( "TR_TORRENT_HASH", tor->info.hashString, 1 );
-        tr_strlcpy( buf, ctime( &now ), sizeof( buf ) );
-        *strchr( buf,'\n' ) = '\0';
-        tr_setenv( "TR_TIME_LOCALTIME", buf, 1 );
-        tr_torinf( tor, "Calling script \"%s\"", script );
-        system( script );
+        if( !fork( ) )
+        {
+            execve( script, cmd, env );
+            _exit( 0 );
+        }
     }
 }
 
@@ -2680,7 +2737,7 @@ deleteLocalData( tr_torrent * tor, tr_fileFunc fileFunc )
     tr_free( tmp );
 }
 
-void
+static void
 tr_torrentDeleteLocalData( tr_torrent * tor, tr_fileFunc fileFunc )
 {
     assert( tr_isTorrent( tor ) );
@@ -2689,6 +2746,7 @@ tr_torrentDeleteLocalData( tr_torrent * tor, tr_fileFunc fileFunc )
         fileFunc = remove;
 
     /* close all the files because we're about to delete them */
+    tr_cacheFlushTorrent( tor->session->cache, tor );
     tr_fdTorrentClose( tor->session, tor->uniqueId );
 
     if( tor->info.fileCount > 1 )
@@ -2751,7 +2809,6 @@ static void
 setLocation( void * vdata )
 {
     tr_bool err = FALSE;
-    tr_bool verify_needed = FALSE;
     struct LocationData * data = vdata;
     tr_torrent * tor = data->tor;
     const tr_bool do_move = data->move_from_old_location;
@@ -2798,10 +2855,6 @@ setLocation( void * vdata )
                         tr_torerr( tor, "error moving \"%s\" to \"%s\": %s",
                                         oldpath, newpath, tr_strerror( errno ) );
                     }
-                    else if( !renamed )
-                    {
-                        verify_needed = TRUE;
-                    }
                 }
 
                 tr_free( newpath );
@@ -2824,8 +2877,6 @@ setLocation( void * vdata )
 
             /* set the new location and reverify */
             tr_torrentSetDownloadDir( tor, location );
-            if( verify_needed )
-                tr_torrentVerify( tor );
         }
     }
 
