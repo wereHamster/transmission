@@ -65,10 +65,10 @@ quitresp( GtkWidget * widget,
 }
 
 GtkWidget *
-askquit( TrCore *       core,
-         GtkWindow *    parent,
-         callbackfunc_t func,
-         void *         cbdata )
+gtr_confirm_quit( GtkWindow *    parent,
+                  TrCore *       core,
+                  callbackfunc_t func,
+                  void *         cbdata )
 {
     struct quitdata * stuff;
     GtkWidget *       w;
@@ -101,16 +101,13 @@ askquit( TrCore *       core,
     dontask = gtk_check_button_new_with_mnemonic( _( "_Don't ask me again" ) );
     stuff->dontask = dontask;
 
-    gtk_box_pack_start( GTK_BOX( GTK_DIALOG(
-                                     wind )->vbox ), dontask, FALSE, FALSE,
-                        GUI_PAD );
+    gtr_dialog_set_content( GTK_DIALOG( wind ), dontask );
 
     g_signal_connect( G_OBJECT( wind ), "response",
                       G_CALLBACK( quitresp ), stuff );
     gtk_widget_grab_focus( w );
 
-    gtk_widget_show_all( wind );
-
+    gtk_widget_show( wind );
     return wind;
 }
 
@@ -168,10 +165,10 @@ countBusyTorrents( gpointer gtor, gpointer gdata )
 }
 
 void
-confirmRemove( GtkWindow * parent,
-               TrCore *    core,
-               GSList *    torrents,
-               gboolean    delete_files )
+gtr_confirm_remove( GtkWindow  * parent,
+                    TrCore     * core,
+                    GSList     * torrents,
+                    gboolean     delete_files )
 {
     GtkWidget *         d;
     const int           count = g_slist_length( torrents );

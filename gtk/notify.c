@@ -29,15 +29,15 @@
 
 #ifndef HAVE_LIBNOTIFY
 
-void tr_notify_init( void ) { }
-void tr_notify_send( TrTorrent * tor UNUSED ) { }
-void tr_notify_added( const char * name UNUSED ) { }
+void gtr_notify_init( void ) { }
+void gtr_notify_send( TrTorrent * tor UNUSED ) { }
+void gtr_notify_added( const char * name UNUSED ) { }
 
 #else
  #include <libnotify/notify.h>
 
 void
-tr_notify_init( void )
+gtr_notify_init( void )
 {
     notify_init( "Transmission" );
 }
@@ -109,10 +109,10 @@ addIcon( NotifyNotification * notify )
 }
 
 void
-tr_notify_send( TrTorrent *tor )
+gtr_notify_send( TrTorrent *tor )
 {
 #ifdef HAVE_LIBCANBERRA
-    if( pref_flag_get( PREF_KEY_PLAY_DOWNLOAD_COMPLETE_SOUND ) )
+    if( gtr_pref_flag_get( PREF_KEY_PLAY_DOWNLOAD_COMPLETE_SOUND ) )
     {
         /* play the sound, using sounds from the naming spec */
         ca_context_play( ca_gtk_context_get (), 0,
@@ -123,7 +123,7 @@ tr_notify_send( TrTorrent *tor )
     }
 #endif
 
-    if( pref_flag_get( PREF_KEY_SHOW_DESKTOP_NOTIFICATION ) )
+    if( gtr_pref_flag_get( PREF_KEY_SHOW_DESKTOP_NOTIFICATION ) )
     {
         const tr_info * info = tr_torrent_info( tor );
         NotifyNotification * n;
@@ -155,9 +155,9 @@ tr_notify_send( TrTorrent *tor )
 }
 
 void
-tr_notify_added( const char * name )
+gtr_notify_added( const char * name )
 {
-    if( pref_flag_get( PREF_KEY_SHOW_DESKTOP_NOTIFICATION ) )
+    if( gtr_pref_flag_get( PREF_KEY_SHOW_DESKTOP_NOTIFICATION ) )
     {
         NotifyNotification * n = notify_notification_new(
             _( "Torrent Added" ), name, NULL

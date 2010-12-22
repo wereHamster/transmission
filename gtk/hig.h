@@ -10,8 +10,8 @@
  * $Id$
  */
 
-#ifndef __HIG_H__
-#define __HIG_H__
+#ifndef GTR_HIG_H
+#define GTR_HIG_H
 
 #include <gtk/gtk.h>
 
@@ -54,10 +54,6 @@ void       hig_workarea_add_label_w( GtkWidget * table,
                                      int         row,
                                      GtkWidget * label_widget );
 
-void       hig_workarea_add_control( GtkWidget * table,
-                                     int         row,
-                                     GtkWidget * control );
-
 GtkWidget* hig_workarea_add_tall_row( GtkWidget *  table,
                                       int *        row,
                                       const char * mnemonic_string,
@@ -79,10 +75,6 @@ void       hig_workarea_add_row_w( GtkWidget * table,
 void       hig_workarea_finish( GtkWidget * table,
                                 int *       row );
 
-void       hig_message_dialog_set_text( GtkMessageDialog * dialog,
-                                        const char *       primary,
-                                        const char *       secondary );
-
 enum
 {
     GUI_PAD_SMALL = 3,
@@ -91,4 +83,4 @@ enum
     GUI_PAD_LARGE = 12
 };
 
-#endif /* __HIG_H__ */
+#endif /* GTR_HIG_H */

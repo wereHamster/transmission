@@ -1592,6 +1592,13 @@ torrentStart( tr_torrent * tor )
     if( setLocalErrorIfFilesDisappeared( tor ) )
         return;
 
+    /* verifying right now... wait until that's done so
+     * we'll know what completeness to use/announce */
+    if( tor->verifyState != TR_VERIFY_NONE ) {
+        tor->startAfterVerify = TRUE;
+        return;
+    }
+
     /* otherwise, start it now... */
     tr_sessionLock( tor->session );
 
@@ -1600,8 +1607,6 @@ torrentStart( tr_torrent * tor )
         tr_torinf( tor, _( "Restarted manually -- disabling its seed ratio" ) );
         tr_torrentSetRatioMode( tor, TR_RATIOLIMIT_UNLIMITED );
     }
-
-    tr_verifyRemove( tor );
 
     /* corresponds to the peer_id sent as a tracker request parameter.
      * one tracker admin says: "When the same torrent is opened and
@@ -2366,25 +2371,18 @@ tr_torrentPieceNeedsCheck( const tr_torrent * tor, tr_piece_index_t p )
     const tr_info * inf = tr_torrentInfo( tor );
 
     /* if we've never checked this piece, then it needs to be checked */
-    if( !inf->pieces[p].timeChecked ) {
-        tr_tordbg( tor, "[LAZY] piece %zu needs to be tested because it's never been tested", (size_t)p );
+    if( !inf->pieces[p].timeChecked )
         return TRUE;
-    }
 
     /* If we think we've completed one of the files in this piece,
      * but it's been modified since we last checked it,
      * then it needs to be rechecked */
     tr_ioFindFileLocation( tor, p, 0, &f, &unused );
-    for( ; f < inf->fileCount && pieceHasFile( p, &inf->files[f] ); ++f ) {
-        if( tr_cpFileIsComplete( &tor->completion, f ) ) {
-            if( getFileMTime( tor, f ) > inf->pieces[p].timeChecked ) {
-                tr_tordbg( tor, "[LAZY] piece %zu needs to be tested because file %zu mtime is newer than check time %zu", (size_t)p, (size_t)f, (size_t)inf->pieces[p].timeChecked );
+    for( ; f < inf->fileCount && pieceHasFile( p, &inf->files[f] ); ++f )
+        if( tr_cpFileIsComplete( &tor->completion, f ) )
+            if( getFileMTime( tor, f ) > inf->pieces[p].timeChecked )
                 return TRUE;
-            }
-        }
-    }
 
-    tr_tordbg( tor, "[LAZY] piece %zu does not need to be tested", (size_t)p );
     return FALSE;
 }
 
@@ -2783,28 +2781,6 @@ struct LocationData
     tr_torrent * tor;
 };
 
-static tr_bool
-isSameLocation( const char * path1, const char * path2 )
-{
-    struct stat s1, s2;
-    const int err1 = stat( path1, &s1 );
-    const int err2 = stat( path2, &s2 );
-
-    if( !err1 && !err2 ) {
-        tr_dbg( "path1 dev:inode is %"PRIu64":%"PRIu64"; "
-                "path2 dev:inode is %"PRIu64":%"PRIu64,
-                (uint64_t)s1.st_dev, (uint64_t)s1.st_ino,
-                (uint64_t)s2.st_dev, (uint64_t)s2.st_ino );
-        return ( s1.st_dev == s2.st_dev )
-            && ( s1.st_ino == s2.st_ino );
-    }
-
-    /* either one, or the other, or both don't exist... */
-    tr_dbg( "stat(%s) returned %d\n", path1, err1 );
-    tr_dbg( "stat(%s) returned %d\n", path2, err2 );
-    return FALSE;
-}
-
 static void
 setLocation( void * vdata )
 {
@@ -2822,7 +2798,7 @@ setLocation( void * vdata )
 
     tr_mkdirp( location, 0777 );
 
-    if( !isSameLocation( location, tor->currentDir ) )
+    if( !tr_is_same_file( location, tor->currentDir ) )
     {
         tr_file_index_t i;
 

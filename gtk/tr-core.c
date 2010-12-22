@@ -33,6 +33,8 @@
  #include <dbus/dbus-glib.h>
 #endif
 
+#include <event2/buffer.h>
+
 #include <libtransmission/transmission.h>
 #include <libtransmission/bencode.h>
 #include <libtransmission/rpcimpl.h>
@@ -503,19 +505,19 @@ static void
 tr_core_apply_defaults( tr_ctor * ctor )
 {
     if( tr_ctorGetPaused( ctor, TR_FORCE, NULL ) )
-        tr_ctorSetPaused( ctor, TR_FORCE, !pref_flag_get( TR_PREFS_KEY_START ) );
+        tr_ctorSetPaused( ctor, TR_FORCE, !gtr_pref_flag_get( TR_PREFS_KEY_START ) );
 
     if( tr_ctorGetDeleteSource( ctor, NULL ) )
         tr_ctorSetDeleteSource( ctor,
-                               pref_flag_get( TR_PREFS_KEY_TRASH_ORIGINAL ) );
+                               gtr_pref_flag_get( TR_PREFS_KEY_TRASH_ORIGINAL ) );
 
     if( tr_ctorGetPeerLimit( ctor, TR_FORCE, NULL ) )
         tr_ctorSetPeerLimit( ctor, TR_FORCE,
-                             pref_int_get( TR_PREFS_KEY_PEER_LIMIT_TORRENT ) );
+                             gtr_pref_int_get( TR_PREFS_KEY_PEER_LIMIT_TORRENT ) );
 
     if( tr_ctorGetDownloadDir( ctor, TR_FORCE, NULL ) )
     {
-        const char * path = pref_string_get( TR_PREFS_KEY_DOWNLOAD_DIR );
+        const char * path = gtr_pref_string_get( TR_PREFS_KEY_DOWNLOAD_DIR );
         tr_ctorSetDownloadDir( ctor, TR_FORCE, path );
     }
 }
@@ -665,11 +667,11 @@ watchFolderChanged( GFileMonitor       * monitor    UNUSED,
 static void
 scanWatchDir( TrCore * core )
 {
-    const gboolean isEnabled = pref_flag_get( PREF_KEY_DIR_WATCH_ENABLED );
+    const gboolean isEnabled = gtr_pref_flag_get( PREF_KEY_DIR_WATCH_ENABLED );
 
     if( isEnabled )
     {
-        const char * dirname = pref_string_get( PREF_KEY_DIR_WATCH );
+        const char * dirname = gtr_pref_string_get( PREF_KEY_DIR_WATCH );
         GDir * dir = g_dir_open( dirname, 0, NULL );
 
         if( dir != NULL )
@@ -690,8 +692,8 @@ scanWatchDir( TrCore * core )
 static void
 updateWatchDir( TrCore * core )
 {
-    const char *           filename = pref_string_get( PREF_KEY_DIR_WATCH );
-    const gboolean         isEnabled = pref_flag_get(
+    const char *           filename = gtr_pref_string_get( PREF_KEY_DIR_WATCH );
+    const gboolean         isEnabled = gtr_pref_flag_get(
         PREF_KEY_DIR_WATCH_ENABLED );
     struct TrCorePrivate * p = TR_CORE( core )->priv;
 
@@ -729,18 +731,18 @@ prefsChanged( TrCore *      core,
     if( !strcmp( key, PREF_KEY_SORT_MODE )
       || !strcmp( key, PREF_KEY_SORT_REVERSED ) )
     {
-        const char * mode = pref_string_get( PREF_KEY_SORT_MODE );
-        gboolean     isReversed = pref_flag_get( PREF_KEY_SORT_REVERSED );
+        const char * mode = gtr_pref_string_get( PREF_KEY_SORT_MODE );
+        gboolean     isReversed = gtr_pref_flag_get( PREF_KEY_SORT_REVERSED );
         setSort( core, mode, isReversed );
     }
     else if( !strcmp( key, TR_PREFS_KEY_PEER_LIMIT_GLOBAL ) )
     {
-        const uint16_t val = pref_int_get( key );
+        const uint16_t val = gtr_pref_int_get( key );
         tr_sessionSetPeerLimit( tr_core_session( core ), val );
     }
     else if( !strcmp( key, TR_PREFS_KEY_PEER_LIMIT_TORRENT ) )
     {
-        const uint16_t val = pref_int_get( key );
+        const uint16_t val = gtr_pref_int_get( key );
         tr_sessionSetPeerLimitPerTorrent( tr_core_session( core ), val );
     }
     else if( !strcmp( key, PREF_KEY_INHIBIT_HIBERNATION ) )
@@ -857,7 +859,7 @@ tr_core_close( TrCore * core )
     if( session )
     {
         core->priv->session = NULL;
-        pref_save( session );
+        gtr_pref_save( session );
         tr_sessionClose( session );
     }
 }
@@ -902,7 +904,7 @@ tr_core_add_torrent( TrCore     * self,
                                        -1 );
 
     if( doNotify )
-        tr_notify_added( inf->name );
+        gtr_notify_added( inf->name );
 
     /* cleanup */
     g_object_unref( G_OBJECT( gtor ) );
@@ -910,28 +912,26 @@ tr_core_add_torrent( TrCore     * self,
     g_free( trackers );
 }
 
-int
+void
 tr_core_load( TrCore * self, gboolean forcePaused )
 {
-    int           i;
-    int           count = 0;
+    int i;
+    tr_ctor * ctor;
     tr_torrent ** torrents;
-    tr_ctor *     ctor;
+    int count = 0;
 
     ctor = tr_ctorNew( tr_core_session( self ) );
     if( forcePaused )
         tr_ctorSetPaused( ctor, TR_FORCE, TRUE );
     tr_ctorSetPeerLimit( ctor, TR_FALLBACK,
-                         pref_int_get( TR_PREFS_KEY_PEER_LIMIT_TORRENT ) );
+                         gtr_pref_int_get( TR_PREFS_KEY_PEER_LIMIT_TORRENT ) );
 
     torrents = tr_sessionLoadTorrents ( tr_core_session( self ), ctor, &count );
-    for( i = 0; i < count; ++i )
+    for( i=0; i<count; ++i )
         tr_core_add_torrent( self, tr_torrent_new_preexisting( torrents[i] ), FALSE );
 
     tr_free( torrents );
     tr_ctorFree( ctor );
-
-    return count;
 }
 
 /***
@@ -995,7 +995,7 @@ add_ctor( TrCore * core, tr_ctor * ctor, gboolean doPrompt, gboolean doNotify )
 void
 tr_core_add_ctor( TrCore * core, tr_ctor * ctor )
 {
-    const gboolean doPrompt = pref_flag_get( PREF_KEY_OPTIONS_PROMPT );
+    const gboolean doPrompt = gtr_pref_flag_get( PREF_KEY_OPTIONS_PROMPT );
     const gboolean doNotify = FALSE;
     tr_core_apply_defaults( ctor );
     add_ctor( core, ctor, doPrompt, doNotify );
@@ -1024,7 +1024,7 @@ tr_core_add_metainfo( TrCore      * core,
         int file_length;
         tr_ctor * ctor;
         char * file_contents;
-        gboolean do_prompt = pref_flag_get( PREF_KEY_OPTIONS_PROMPT );
+        gboolean do_prompt = gtr_pref_flag_get( PREF_KEY_OPTIONS_PROMPT );
 
         ctor = tr_ctorNew( session );
         tr_core_apply_defaults( ctor );
@@ -1064,7 +1064,7 @@ onURLDoneIdle( gpointer vdata )
     }
     else
     {
-        const gboolean doPrompt = pref_flag_get( PREF_KEY_OPTIONS_PROMPT );
+        const gboolean doPrompt = gtr_pref_flag_get( PREF_KEY_OPTIONS_PROMPT );
         const gboolean doNotify = FALSE;
         const int err = add_ctor( data->core, data->ctor, doPrompt, doNotify );
 
@@ -1180,7 +1180,7 @@ tr_core_present_window( TrCore      * core UNUSED,
 {
     /* Setting the toggle-main-window GtkCheckMenuItem to
        make sure its state is correctly set */
-    action_toggle( "toggle-main-window", TRUE);
+    gtr_action_set_toggled( "toggle-main-window", TRUE);
 
     *success = TRUE;
     return TRUE;
@@ -1189,15 +1189,13 @@ tr_core_present_window( TrCore      * core UNUSED,
 void
 tr_core_add_list( TrCore       * core,
                   GSList       * torrentFiles,
-                  pref_flag_t    start,
-                  pref_flag_t    prompt,
+                  gboolean       doStart,
+                  gboolean       doPrompt,
                   gboolean       doNotify )
 {
-    const gboolean doStart = pref_flag_eval( start, TR_PREFS_KEY_START );
-    const gboolean doPrompt = pref_flag_eval( prompt, PREF_KEY_OPTIONS_PROMPT );
     GSList * l;
 
-    for( l = torrentFiles; l != NULL; l = l->next )
+    for( l=torrentFiles; l!=NULL; l=l->next )
     {
         char * filename = l->data;
         add_filename( core, filename, doStart, doPrompt, doNotify );
@@ -1207,6 +1205,15 @@ tr_core_add_list( TrCore       * core,
     tr_core_torrents_added( core );
 
     g_slist_free( torrentFiles );
+}
+
+void
+tr_core_add_list_defaults( TrCore * core, GSList * torrentFiles, gboolean doNotify )
+{
+    const gboolean doStart = gtr_pref_flag_get( TR_PREFS_KEY_START );
+    const gboolean doPrompt = gtr_pref_flag_get( PREF_KEY_OPTIONS_PROMPT );
+
+    tr_core_add_list( core, torrentFiles, doStart, doPrompt, doNotify );
 }
 
 void
@@ -1501,7 +1508,7 @@ maybeInhibitHibernation( TrCore * core )
     /* hibernation is allowed if EITHER
      * (a) the "inhibit" pref is turned off OR
      * (b) there aren't any active torrents */
-    const gboolean hibernation_allowed = !pref_flag_get( PREF_KEY_INHIBIT_HIBERNATION )
+    const gboolean hibernation_allowed = !gtr_pref_flag_get( PREF_KEY_INHIBIT_HIBERNATION )
                                       || !tr_core_get_active_torrent_count( core );
     tr_core_set_hibernation_allowed( core, hibernation_allowed );
 }
@@ -1514,17 +1521,17 @@ static void
 commitPrefsChange( TrCore * core, const char * key )
 {
     g_signal_emit( core, core_signals[PREFS_SIGNAL], 0, key );
-    pref_save( tr_core_session( core ) );
+    gtr_pref_save( tr_core_session( core ) );
 }
 
 void
 tr_core_set_pref( TrCore * self, const char * key, const char * newval )
 {
-    const char * oldval = pref_string_get( key );
+    const char * oldval = gtr_pref_string_get( key );
 
     if( gtr_strcmp0( oldval, newval ) )
     {
-        pref_string_set( key, newval );
+        gtr_pref_string_set( key, newval );
         commitPrefsChange( self, key );
     }
 }
@@ -1534,11 +1541,11 @@ tr_core_set_pref_bool( TrCore *     self,
                        const char * key,
                        gboolean     newval )
 {
-    const gboolean oldval = pref_flag_get( key );
+    const gboolean oldval = gtr_pref_flag_get( key );
 
     if( oldval != newval )
     {
-        pref_flag_set( key, newval );
+        gtr_pref_flag_set( key, newval );
         commitPrefsChange( self, key );
     }
 }
@@ -1548,11 +1555,11 @@ tr_core_set_pref_int( TrCore *     self,
                       const char * key,
                       int          newval )
 {
-    const int oldval = pref_int_get( key );
+    const int oldval = gtr_pref_int_get( key );
 
     if( oldval != newval )
     {
-        pref_int_set( key, newval );
+        gtr_pref_int_set( key, newval );
         commitPrefsChange( self, key );
     }
 }
@@ -1562,11 +1569,11 @@ tr_core_set_pref_double( TrCore *     self,
                          const char * key,
                          double       newval )
 {
-    const double oldval = pref_double_get( key );
+    const double oldval = gtr_pref_double_get( key );
 
     if( gtr_compare_double( oldval, newval, 4 ) )
     {
-        pref_double_set( key, newval );
+        gtr_pref_double_set( key, newval );
         commitPrefsChange( self, key );
     }
 }
@@ -1597,9 +1604,9 @@ readResponseIdle( void * vresponse )
 {
     tr_benc top;
     int64_t intVal;
-    GByteArray * response = vresponse;
+    struct evbuffer * response = vresponse;
 
-    tr_jsonParse( NULL, response->data, response->len, &top, NULL );
+    tr_jsonParse( NULL, evbuffer_pullup( response, -1 ), evbuffer_get_length( response ), &top, NULL );
 
     if( tr_bencDictFindInt( &top, "tag", &intVal ) )
     {
@@ -1613,22 +1620,18 @@ readResponseIdle( void * vresponse )
     }
 
     tr_bencFree( &top );
-    g_byte_array_free( response, TRUE );
+    evbuffer_free( response );
     return FALSE;
 }
 
 static void
 readResponse( tr_session  * session UNUSED,
-              const char  * response,
-              size_t        response_len,
+              struct evbuffer * response,
               void        * unused UNUSED )
 {
-    GByteArray * bytes = g_byte_array_new( );
-#ifdef DEBUG_RPC
-    g_message( "response: [%*.*s]", (int)response_len, (int)response_len, response );
-#endif
-    g_byte_array_append( bytes, (const uint8_t*)response, response_len );
-    gtr_idle_add( readResponseIdle, bytes );
+    struct evbuffer * buf = evbuffer_new( );
+    evbuffer_add_buffer( buf, response );
+    gtr_idle_add( readResponseIdle, buf );
 }
 
 static void
@@ -1703,7 +1706,7 @@ blocklistResponseFunc( TrCore * core, tr_benc * response, gpointer userData UNUS
         tr_bencDictFindInt( args, "blocklist-size", &ruleCount );
 
     if( ruleCount > 0 )
-        pref_int_set( "blocklist-date", time( NULL ) );
+        gtr_pref_int_set( "blocklist-date", time( NULL ) );
 
     emitBlocklistUpdated( core, ruleCount );
 }

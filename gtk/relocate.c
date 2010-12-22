@@ -15,7 +15,7 @@
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
 
-#include "conf.h" /* pref_string_get */
+#include "conf.h" /* gtr_pref_string_get */
 #include "hig.h"
 #include "relocate.h"
 #include "util.h"
@@ -175,7 +175,7 @@ gtr_relocate_dialog_new( GtkWindow * parent,
     hig_workarea_add_section_title( t, &row, _( "Location" ) );
 
     if( previousLocation == NULL )
-        previousLocation = g_strdup( pref_string_get( TR_PREFS_KEY_DOWNLOAD_DIR ) );
+        previousLocation = g_strdup( gtr_pref_string_get( TR_PREFS_KEY_DOWNLOAD_DIR ) );
     w = gtk_file_chooser_button_new( _( "Set Torrent Location" ), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER );
     gtk_file_chooser_set_current_folder( GTK_FILE_CHOOSER( w ), previousLocation );
     g_object_set_data( G_OBJECT( d ), "chooser", w );
@@ -186,8 +186,7 @@ gtr_relocate_dialog_new( GtkWindow * parent,
     w = gtk_radio_button_new_with_mnemonic_from_widget( GTK_RADIO_BUTTON( w ), _( "Local data is _already there" ) );
     hig_workarea_add_wide_control( t, &row, w );
     hig_workarea_finish( t, &row );
-    gtk_widget_show_all( t );
-    gtk_box_pack_start( GTK_BOX( GTK_DIALOG( d )->vbox ), t, TRUE, TRUE, 0 );
+    gtr_dialog_set_content( GTK_DIALOG( d ), t );
 
     data = g_new0( struct relocate_dialog_data, 1 );
     data->core = core;
