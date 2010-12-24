@@ -21,7 +21,9 @@
 #include <unistd.h> /* stat */
 #include <dirent.h> /* opendir */
 
-#include <event.h>
+#include <event2/event.h>
+#include <event2/event_compat.h>
+#include <event2/event_struct.h>
 
 //#define TR_SHOW_DEPRECATED
 #include "transmission.h"

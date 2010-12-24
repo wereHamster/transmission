@@ -24,8 +24,11 @@
  #include <zlib.h>
 #endif
 
-#include <event.h>
-#include <evhttp.h>
+#include <event2/buffer.h>
+#include <event2/buffer_compat.h>
+#include <event2/event.h>
+#include <event2/http.h>
+#include <event2/http_struct.h>
 
 #include "transmission.h"
 #include "bencode.h"
