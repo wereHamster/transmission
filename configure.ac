@@ -40,8 +40,6 @@ AM_CONDITIONAL(TR_UNSTABLE, test "x$supported_build" = "xno")
 ##
 CURL_MINIMUM=7.15.4
 AC_SUBST(CURL_MINIMUM)
-LIBEVENT_MINIMUM=2.0.10
-AC_SUBST(LIBEVENT_MINIUM)
 OPENSSL_MINIMUM=0.9.4
 AC_SUBST(OPENSSL_MINIMUM)
 
@@ -122,7 +120,6 @@ AC_SEARCH_LIBS([socket], [socket net])
 AC_SEARCH_LIBS([gethostbyname], [nsl bind])
 PKG_CHECK_MODULES(OPENSSL, [openssl >= $OPENSSL_MINIMUM], , [CHECK_SSL()])
 PKG_CHECK_MODULES(LIBCURL, [libcurl >= $CURL_MINIMUM])
-PKG_CHECK_MODULES(LIBEVENT, [libevent >= $LIBEVENT_MINIMUM])
 AC_PATH_ZLIB
 
 AC_SYS_LARGEFILE
@@ -202,6 +199,16 @@ AC_CHECK_LIB([rt],
              [clock_gettime],
              [libevent_extra_libs="-lrt"],
              [libevent_extra_libs=""])
+
+
+dnl ----------------------------------------------------------------------------
+dnl
+dnl  libevent
+
+LIBEVENT_CFLAGS="-I\$(top_srcdir)/third-party/libevent/include"
+LIBEVENT_LIBS="\$(top_builddir)/third-party/libevent/.libs/libevent.a"
+AC_SUBST(LIBEVENT_CFLAGS)
+AC_SUBST(LIBEVENT_LIBS)
 
 
 dnl ----------------------------------------------------------------------------
@@ -474,6 +481,7 @@ AC_CONFIG_FILES([Makefile
                  web/javascript/jquery/Makefile
                  web/stylesheets/Makefile
                  po/Makefile.in])
+AC_CONFIG_SUBDIRS([third-party/libevent])
 
 ac_configure_args="$ac_configure_args --enable-static --disable-shared -q"
 AC_OUTPUT
