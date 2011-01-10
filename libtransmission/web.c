@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -73,6 +73,7 @@ struct tr_web_task
 {
     long code;
     struct evbuffer * response;
+    struct evbuffer * freebuf;
     char * url;
     char * range;
     tr_session * session;
@@ -83,7 +84,8 @@ struct tr_web_task
 static void
 task_free( struct tr_web_task * task )
 {
-    evbuffer_free( task->response );
+    if( task->freebuf )
+        evbuffer_free( task->freebuf );
     tr_free( task->range );
     tr_free( task->url );
     tr_free( task );
@@ -143,6 +145,7 @@ static CURL *
 createEasy( tr_session * s, struct tr_web_task * task )
 {
     const tr_address * addr;
+    tr_bool is_default_value;
     CURL * e = curl_easy_init( );
     const long verbose = getenv( "TR_CURL_VERBOSE" ) != NULL;
     char * cookie_filename = tr_buildPath( s->configDir, "cookies.txt", NULL );
@@ -167,7 +170,9 @@ createEasy( tr_session * s, struct tr_web_task * task )
     curl_easy_setopt( e, CURLOPT_WRITEDATA, task );
     curl_easy_setopt( e, CURLOPT_WRITEFUNCTION, writeFunc );
 
-    if(( addr = tr_sessionGetPublicAddress( s, TR_AF_INET )))
+    if((( addr = tr_sessionGetPublicAddress( s, TR_AF_INET, &is_default_value ))) && !is_default_value )
+        curl_easy_setopt( e, CURLOPT_INTERFACE, tr_ntop_non_ts( addr ) );
+    else if ((( addr = tr_sessionGetPublicAddress( s, TR_AF_INET6, &is_default_value ))) && !is_default_value )
         curl_easy_setopt( e, CURLOPT_INTERFACE, tr_ntop_non_ts( addr ) );
 
     if( task->range )
@@ -211,6 +216,19 @@ tr_webRun( tr_session         * session,
            tr_web_done_func     done_func,
            void               * done_func_user_data )
 {
+    tr_webRunWithBuffer( session, url, range,
+                         done_func, done_func_user_data,
+                         NULL );
+}
+
+void
+tr_webRunWithBuffer( tr_session         * session,
+                     const char         * url,
+                     const char         * range,
+                     tr_web_done_func     done_func,
+                     void               * done_func_user_data,
+                     struct evbuffer    * buffer )
+{
     struct tr_web * web = session->web;
 
     if( web != NULL )
@@ -222,7 +240,8 @@ tr_webRun( tr_session         * session,
         task->range = tr_strdup( range );
         task->done_func = done_func;
         task->done_func_user_data = done_func_user_data;
-        task->response = evbuffer_new( );
+        task->response = buffer ? buffer : evbuffer_new( );
+        task->freebuf = buffer ? NULL : task->response;
 
         tr_lockLock( web->taskLock );
         tr_list_append( &web->tasks, task );

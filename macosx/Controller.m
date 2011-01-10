@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  * 
- * Copyright (c) 2005-2010 Transmission authors and contributors
+ * Copyright (c) 2005-2011 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -98,6 +98,13 @@ typedef enum
     SORT_TRACKER_TAG = 5,
     SORT_ACTIVITY_TAG = 6
 } sortTag;
+
+typedef enum
+{
+    SORT_ASC_TAG = 0,
+    SORT_DESC_TAG = 1
+} sortOrderTag;
+
 
 #define FILTER_NONE     @"None"
 #define FILTER_ACTIVE   @"Active"
@@ -391,8 +398,6 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
 
 - (void) awakeFromNib
 {
-    [fFilterBar setIsFilter: YES];
-    
     NSToolbar * toolbar = [[NSToolbar alloc] initWithIdentifier: @"TRMainToolbar"];
     [toolbar setDelegate: self];
     [toolbar setAllowsUserCustomization: YES];
@@ -2059,8 +2064,12 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
 
 - (void) setSortReverse: (id) sender
 {
-    [fDefaults setBool: ![fDefaults boolForKey: @"SortReverse"] forKey: @"SortReverse"];
-    [self sortTorrents];
+    const BOOL setReverse = [sender tag] == SORT_DESC_TAG;
+    if (setReverse != [fDefaults boolForKey: @"SortReverse"])
+    {
+        [fDefaults setBool: setReverse forKey: @"SortReverse"];
+        [self sortTorrents];
+    }
 }
 
 - (void) sortTorrents
@@ -4023,7 +4032,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     //enable reverse sort item
     if (action == @selector(setSortReverse:))
     {
-        [menuItem setState: [fDefaults boolForKey: @"SortReverse"] ? NSOnState : NSOffState];
+        const BOOL isReverse = [menuItem tag] == SORT_DESC_TAG;
+        [menuItem setState: (isReverse == [fDefaults boolForKey: @"SortReverse"]) ? NSOnState : NSOffState];
         return ![[fDefaults stringForKey: @"Sort"] isEqualToString: SORT_ORDER];
     }
     

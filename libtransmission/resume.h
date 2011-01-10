@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -36,7 +36,9 @@ enum
     TR_FR_DONE_DATE           = ( 1 << 14 ),
     TR_FR_ACTIVITY_DATE       = ( 1 << 15 ),
     TR_FR_RATIOLIMIT          = ( 1 << 16 ),
-    TR_FR_IDLELIMIT           = ( 1 << 17 )
+    TR_FR_IDLELIMIT           = ( 1 << 17 ),
+    TR_FR_TIME_SEEDING        = ( 1 << 18 ),
+    TR_FR_TIME_DOWNLOADING    = ( 1 << 19 )
 };
 
 /**

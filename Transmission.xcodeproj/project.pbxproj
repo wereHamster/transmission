@@ -193,6 +193,7 @@
 		A2623B4E0D3DC6DF0045D19A /* ActionHover.png in Resources */ = {isa = PBXBuildFile; fileRef = A2623B4D0D3DC6DF0045D19A /* ActionHover.png */; };
 		A263CFC010DD67670038DE27 /* InfoTextField.m in Sources */ = {isa = PBXBuildFile; fileRef = A263CFBF10DD67670038DE27 /* InfoTextField.m */; };
 		A263D03E10DE6F010038DE27 /* Magnet.png in Resources */ = {isa = PBXBuildFile; fileRef = A263D03D10DE6F010038DE27 /* Magnet.png */; };
+		A2661D6112D0E8D9004F69D5 /* FilterBarView.m in Sources */ = {isa = PBXBuildFile; fileRef = A2661D3B12D0E51B004F69D5 /* FilterBarView.m */; };
 		A26AF21A0D2DA35A00FF7140 /* FileOutlineController.m in Sources */ = {isa = PBXBuildFile; fileRef = A26AF2190D2DA35A00FF7140 /* FileOutlineController.m */; };
 		A26AF27E0D2DBDDF00FF7140 /* AddWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = A26AF27C0D2DBDDF00FF7140 /* AddWindow.xib */; };
 		A26AF2840D2DC27C00FF7140 /* AddWindowController.m in Sources */ = {isa = PBXBuildFile; fileRef = A26AF2830D2DC27C00FF7140 /* AddWindowController.m */; };
@@ -203,6 +204,8 @@
 		A2725D5D0DE7507C003445E7 /* TrackerTableView.m in Sources */ = {isa = PBXBuildFile; fileRef = A2725D5C0DE7507C003445E7 /* TrackerTableView.m */; };
 		A277DA0B0C693D9C00DA2CD4 /* ActionOn.png in Resources */ = {isa = PBXBuildFile; fileRef = A277DA090C693D9C00DA2CD4 /* ActionOn.png */; };
 		A27F0F330E19AD9800B2DB97 /* TorrentGroup.m in Sources */ = {isa = PBXBuildFile; fileRef = A27F0F320E19AD9800B2DB97 /* TorrentGroup.m */; };
+		A284214412DA663E00FBDDBB /* tr-udp.c in Sources */ = {isa = PBXBuildFile; fileRef = A284214212DA663E00FBDDBB /* tr-udp.c */; };
+		A284214512DA663E00FBDDBB /* tr-udp.h in Headers */ = {isa = PBXBuildFile; fileRef = A284214312DA663E00FBDDBB /* tr-udp.h */; };
 		A28F4F770E085BDC003A3882 /* ColorTextField.m in Sources */ = {isa = PBXBuildFile; fileRef = A28F4F760E085BDC003A3882 /* ColorTextField.m */; };
 		A292A6E80DFB45FC004B9C0A /* webseed.c in Sources */ = {isa = PBXBuildFile; fileRef = A292A6E50DFB45EC004B9C0A /* webseed.c */; };
 		A29576030D11D63C0093B167 /* Creator.xib in Resources */ = {isa = PBXBuildFile; fileRef = A29576010D11D63C0093B167 /* Creator.xib */; };
@@ -312,7 +315,6 @@
 		BEFC1E2B0C07861A00B0BB3C /* utils.c in Sources */ = {isa = PBXBuildFile; fileRef = BEFC1DF20C07861A00B0BB3C /* utils.c */; };
 		BEFC1E2C0C07861A00B0BB3C /* upnp.h in Headers */ = {isa = PBXBuildFile; fileRef = BEFC1DF30C07861A00B0BB3C /* upnp.h */; };
 		BEFC1E2D0C07861A00B0BB3C /* upnp.c in Sources */ = {isa = PBXBuildFile; fileRef = BEFC1DF40C07861A00B0BB3C /* upnp.c */; };
-		BEFC1E2E0C07861A00B0BB3C /* transmission.h in Headers */ = {isa = PBXBuildFile; fileRef = BEFC1DF50C07861A00B0BB3C /* transmission.h */; };
 		BEFC1E2F0C07861A00B0BB3C /* session.c in Sources */ = {isa = PBXBuildFile; fileRef = BEFC1DF60C07861A00B0BB3C /* session.c */; };
 		BEFC1E320C07861A00B0BB3C /* torrent.c in Sources */ = {isa = PBXBuildFile; fileRef = BEFC1DF90C07861A00B0BB3C /* torrent.c */; };
 		BEFC1E350C07861A00B0BB3C /* port-forwarding.h in Headers */ = {isa = PBXBuildFile; fileRef = BEFC1DFC0C07861A00B0BB3C /* port-forwarding.h */; };
@@ -698,6 +700,8 @@
 		A265A3BE0D25AE7800198AC8 /* es */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = es; path = macosx/es.lproj/Creator.xib; sourceTree = "<group>"; };
 		A265A3C00D25AE7800198AC8 /* es */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = es; path = macosx/es.lproj/MainMenu.xib; sourceTree = "<group>"; };
 		A265A3C20D25AE7800198AC8 /* es */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = es; path = macosx/es.lproj/PrefsWindow.xib; sourceTree = "<group>"; };
+		A2661D3A12D0E51A004F69D5 /* FilterBarView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = FilterBarView.h; path = macosx/FilterBarView.h; sourceTree = "<group>"; };
+		A2661D3B12D0E51B004F69D5 /* FilterBarView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = FilterBarView.m; path = macosx/FilterBarView.m; sourceTree = "<group>"; };
 		A26AF1040D2855FC00FF7140 /* ru */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = ru; path = macosx/ru.lproj/Creator.xib; sourceTree = "<group>"; };
 		A26AF1050D2855FC00FF7140 /* ru */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.strings; name = ru; path = macosx/ru.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		A26AF1070D2855FC00FF7140 /* ru */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.strings; name = ru; path = macosx/ru.lproj/Localizable.strings; sourceTree = "<group>"; };
@@ -735,6 +739,8 @@
 		A28393FF10D54A96005C0240 /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = macosx/de.lproj/Localizable.strings; sourceTree = "<group>"; };
 		A283940010D54A9D005C0240 /* de */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = de; path = macosx/de.lproj/MainMenu.xib; sourceTree = "<group>"; };
 		A283940110D54AA7005C0240 /* de */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = de; path = macosx/de.lproj/PrefsWindow.xib; sourceTree = "<group>"; };
+		A284214212DA663E00FBDDBB /* tr-udp.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = "tr-udp.c"; path = "libtransmission/tr-udp.c"; sourceTree = "<group>"; };
+		A284214312DA663E00FBDDBB /* tr-udp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "tr-udp.h"; path = "libtransmission/tr-udp.h"; sourceTree = "<group>"; };
 		A28E1DDF0CFFD8EC00E16385 /* ButtonToolbarItem.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ButtonToolbarItem.h; path = macosx/ButtonToolbarItem.h; sourceTree = "<group>"; };
 		A28F4F750E085BDC003A3882 /* ColorTextField.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ColorTextField.h; path = macosx/ColorTextField.h; sourceTree = "<group>"; };
 		A28F4F760E085BDC003A3882 /* ColorTextField.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = ColorTextField.m; path = macosx/ColorTextField.m; sourceTree = "<group>"; };
@@ -1062,6 +1068,8 @@
 				E138A9760C04D88F00C5426C /* ProgressGradients.m */,
 				A21282A50CA6C66800EAEE0F /* StatusBarView.h */,
 				A21282A60CA6C66800EAEE0F /* StatusBarView.m */,
+				A2661D3A12D0E51A004F69D5 /* FilterBarView.h */,
+				A2661D3B12D0E51B004F69D5 /* FilterBarView.m */,
 				A2ED7D8D0CEF431B00970975 /* FilterButton.h */,
 				A2ED7D8E0CEF431B00970975 /* FilterButton.m */,
 				A2C89D5F0CFCBF57004CC2BC /* ButtonToolbarItem.m */,
@@ -1262,6 +1270,8 @@
 				0A6169A60FE5C9A200C66CE6 /* bitfield.h */,
 				A22CFCA60FC24ED80009BD3E /* tr-dht.c */,
 				A22CFCA70FC24ED80009BD3E /* tr-dht.h */,
+				A284214212DA663E00FBDDBB /* tr-udp.c */,
+				A284214312DA663E00FBDDBB /* tr-udp.h */,
 				A220EC59118C8A060022B4BE /* tr-lpd.c */,
 				A220EC5A118C8A060022B4BE /* tr-lpd.h */,
 				A2AAB65B0DE0CF6200E04DDA /* rpcimpl.c */,
@@ -1579,7 +1589,6 @@
 				BEFC1E2C0C07861A00B0BB3C /* upnp.h in Headers */,
 				A2AAB65D0DE0CF6200E04DDA /* rpcimpl.h in Headers */,
 				A2AAB65E0DE0CF6200E04DDA /* rpc-server.h in Headers */,
-				BEFC1E2E0C07861A00B0BB3C /* transmission.h in Headers */,
 				BEFC1E350C07861A00B0BB3C /* port-forwarding.h in Headers */,
 				BEFC1E390C07861A00B0BB3C /* ratecontrol.h in Headers */,
 				BEFC1E3B0C07861A00B0BB3C /* platform.h in Headers */,
@@ -1621,6 +1630,7 @@
 				A247A443114C701800547DFC /* InfoViewController.h in Headers */,
 				A220EC5C118C8A060022B4BE /* tr-lpd.h in Headers */,
 				A23547E311CD0B090046EAE6 /* cache.h in Headers */,
+				A284214512DA663E00FBDDBB /* tr-udp.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2092,6 +2102,7 @@
 				A209EE5C1144B51E002B02D1 /* history.c in Sources */,
 				A220EC5B118C8A060022B4BE /* tr-lpd.c in Sources */,
 				A23547E211CD0B090046EAE6 /* cache.c in Sources */,
+				A284214412DA663E00FBDDBB /* tr-udp.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2168,6 +2179,7 @@
 				A209EBCE1142F2B4002B02D1 /* InfoFileViewController.m in Sources */,
 				A209EBF91142FEEE002B02D1 /* InfoOptionsViewController.m in Sources */,
 				A21F15AC11729A8B00CF5A9C /* AddMagnetWindowController.m in Sources */,
+				A2661D6112D0E8D9004F69D5 /* FilterBarView.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2496,10 +2508,8 @@
 				GCC_DEBUGGING_SYMBOLS = full;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					"third-party/shttpd",
-					"third-party/libevent/include",
-					"third-party/libevent",
 					"third-party",
+					"third-party/libevent/include",
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
@@ -2557,8 +2567,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					.,
-					"third-party/",
-					"third-party/libevent",
+					"third-party/libevent/include",
 				);
 				OTHER_CFLAGS = (
 					"$(inherited)",
@@ -2575,8 +2584,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					.,
-					"third-party/",
-					"third-party/libevent",
+					"third-party/libevent/include",
 				);
 				OTHER_CFLAGS = "-DHAVE_LIBZ";
 				PRODUCT_NAME = "transmission-remote";
@@ -2695,10 +2703,8 @@
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					"third-party/shttpd",
-					"third-party/libevent/include",
-					"third-party/libevent",
 					"third-party",
+					"third-party/libevent/include",
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
@@ -2941,10 +2947,8 @@
 				GCC_DEBUGGING_SYMBOLS = full;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					"third-party/shttpd",
-					"third-party/libevent/include",
-					"third-party/libevent",
 					"third-party",
+					"third-party/libevent/include",
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
@@ -2973,8 +2977,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					.,
-					"third-party/",
-					"third-party/libevent",
+					"third-party/libevent/include",
 				);
 				OTHER_CFLAGS = (
 					"$(inherited)",
@@ -2991,8 +2994,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					.,
-					"third-party/",
-					"third-party/libevent",
+					"third-party/libevent/include",
 				);
 				OTHER_CFLAGS = "-DHAVE_LIBZ";
 				PRODUCT_NAME = "transmission-remote";
@@ -3082,8 +3084,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					.,
-					"third-party/",
-					"third-party/libevent",
+					"third-party/libevent/include",
 				);
 				OTHER_CFLAGS = (
 					"$(inherited)",
@@ -3099,8 +3100,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					.,
-					"third-party/",
-					"third-party/libevent",
+					"third-party/libevent/include",
 				);
 				OTHER_CFLAGS = "-DHAVE_LIBZ";
 				PRODUCT_NAME = "transmission-remote";

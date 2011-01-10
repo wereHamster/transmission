@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -51,6 +51,8 @@
 #define KEY_SPEED_Bps              "speed-Bps"
 #define KEY_USE_GLOBAL_SPEED_LIMIT "use-global-speed-limit"
 #define KEY_USE_SPEED_LIMIT        "use-speed-limit"
+#define KEY_TIME_SEEDING           "seeding-time-seconds"
+#define KEY_TIME_DOWNLOADING       "downloading-time-seconds"
 #define KEY_SPEEDLIMIT_DOWN_SPEED  "down-speed"
 #define KEY_SPEEDLIMIT_DOWN_MODE   "down-mode"
 #define KEY_SPEEDLIMIT_UP_SPEED    "up-speed"
@@ -219,7 +221,7 @@ loadDND( tr_benc *    dict,
     {
         tr_tordbg(
             tor,
-            "Couldn't load DND flags.  dnd list (%p) has %zu children; torrent has %d files",
+            "Couldn't load DND flags. DND list (%p) has %zu children; torrent has %d files",
             list, tr_bencListSize( list ), (int)n );
     }
 
@@ -505,6 +507,8 @@ tr_torrentSaveResume( tr_torrent * tor )
         return;
 
     tr_bencInitDict( &top, 50 ); /* arbitrary "big enough" number */
+    tr_bencDictAddInt( &top, KEY_TIME_SEEDING, tor->secondsSeeding );
+    tr_bencDictAddInt( &top, KEY_TIME_DOWNLOADING, tor->secondsDownloading );
     tr_bencDictAddInt( &top, KEY_ACTIVITY_DATE, tor->activityDate );
     tr_bencDictAddInt( &top, KEY_ADDED_DATE, tor->addedDate );
     tr_bencDictAddInt( &top, KEY_CORRUPT, tor->corruptPrev + tor->corruptCur );
@@ -634,6 +638,20 @@ loadFromFile( tr_torrent * tor,
     {
         tr_torrentSetActivityDate( tor, i );
         fieldsLoaded |= TR_FR_ACTIVITY_DATE;
+    }
+
+    if( ( fieldsToLoad & TR_FR_TIME_SEEDING )
+      && tr_bencDictFindInt( &top, KEY_TIME_SEEDING, &i ) )
+    {
+        tor->secondsSeeding = i;
+        fieldsLoaded |= TR_FR_TIME_SEEDING;
+    }
+
+    if( ( fieldsToLoad & TR_FR_TIME_DOWNLOADING )
+      && tr_bencDictFindInt( &top, KEY_TIME_DOWNLOADING, &i ) )
+    {
+        tor->secondsDownloading = i;
+        fieldsLoaded |= TR_FR_TIME_DOWNLOADING;
     }
 
     if( ( fieldsToLoad & TR_FR_BANDWIDTH_PRIORITY )

@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -273,8 +273,7 @@ gtr_torrent_options_dialog_new( GtkWindow * parent, TrCore * core, tr_ctor * cto
 
     /* make the dialog */
     d = gtk_dialog_new_with_buttons( _( "Torrent Options" ), parent,
-                                     GTK_DIALOG_DESTROY_WITH_PARENT |
-                                     GTK_DIALOG_NO_SEPARATOR,
+                                     GTK_DIALOG_DESTROY_WITH_PARENT,
                                      NULL );
     gtk_dialog_add_button( GTK_DIALOG( d ), GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL );
     grab = gtk_dialog_add_button( GTK_DIALOG( d ), GTK_STOCK_ADD, GTK_RESPONSE_ACCEPT );
@@ -523,7 +522,7 @@ gtr_torrent_add_from_url_dialog_new( GtkWindow * parent, TrCore * core )
     GtkWidget * w;
 
     w = gtk_dialog_new_with_buttons( _( "Add URL" ), parent,
-                                     GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_NO_SEPARATOR,
+                                     GTK_DIALOG_DESTROY_WITH_PARENT,
                                      GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
                                      GTK_STOCK_ADD, GTK_RESPONSE_ACCEPT,
                                      NULL );

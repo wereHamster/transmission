@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2009-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -63,9 +63,9 @@
 #include "version.h"
 
 
-time_t transmission_now = 0;
+time_t       __tr_current_time   = 0;
+tr_msg_level __tr_message_level  = TR_MSG_ERR;
 
-tr_msg_level messageLevel = TR_MSG_ERR;
 static tr_bool        messageQueuing = FALSE;
 static tr_msg_list *  messageQueue = NULL;
 static tr_msg_list ** messageQueueTail = &messageQueue;
@@ -124,13 +124,7 @@ tr_getLog( void )
 void
 tr_setMessageLevel( tr_msg_level level )
 {
-    messageLevel = level;
-}
-
-tr_msg_level
-tr_getMessageLevel( void )
-{
-    return messageLevel;
+    __tr_message_level = level;
 }
 
 void
@@ -249,8 +243,8 @@ tr_deepLog( const char  * file,
         evbuffer_add_printf( buf, " (%s:%d)\n", base, line );
         /* FIXME(libevent2) ifdef this out for nonwindows platforms */
         OutputDebugString( evbuffer_pullup( buf, -1 ) );
-        if(fp) /* FIXME(libevent2) tr_getLog() should return an fd, then use evbuffer_write() here ) */
-            (void) fwrite( evbuffer_pullup( buf, -1 ), 1, evbuffer_get_length( buf ), fp );
+        if( fp )
+            evbuffer_write( buf, fileno( fp ) );
 
         tr_free( base );
         evbuffer_free( buf );
@@ -678,7 +672,7 @@ tr_buildPath( const char *first_element, ... )
     }
     va_end( vl );
 
-    /* terminate the string.  if nonempty, eat the unwanted trailing slash */
+    /* terminate the string. if nonempty, eat the unwanted trailing slash */
     if( pch != buf )
         --pch;
     *pch++ = '\0';
@@ -778,6 +772,15 @@ tr_strerror( int i )
     if( ret == NULL )
         ret = "Unknown Error";
     return ret;
+}
+
+int
+tr_strcmp0( const char * str1, const char * str2 )
+{
+    if( str1 && str2 ) return strcmp( str1, str2 );
+    if( str1 ) return 1;
+    if( str2 ) return -1;
+    return 0;
 }
 
 /****
@@ -899,14 +902,12 @@ tr_snprintf( char * buf, size_t buflen, const char * fmt, ... )
 }
 
 /*
- * Copy src to string dst of size siz.  At most siz-1 characters
- * will be copied.  Always NUL terminates (unless siz == 0).
+ * Copy src to string dst of size siz. At most siz-1 characters
+ * will be copied. Always NUL terminates (unless siz == 0).
  * Returns strlen(src); if retval >= siz, truncation occurred.
  */
 size_t
-tr_strlcpy( char *       dst,
-            const void * src,
-            size_t       siz )
+tr_strlcpy( char * dst, const void * src, size_t siz )
 {
 #ifdef HAVE_STRLCPY
     return strlcpy( dst, src, siz );
@@ -1623,7 +1624,8 @@ tr_valloc( size_t bufLen )
 
 #ifdef HAVE_POSIX_MEMALIGN
     if( !buf )
-        posix_memalign( &buf, pageSize, allocLen );
+        if( posix_memalign( &buf, pageSize, allocLen ) )
+            buf = NULL; /* just retry with valloc/malloc */
 #endif
 #ifdef HAVE_VALLOC
     if( !buf )

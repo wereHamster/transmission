@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -37,6 +37,7 @@ uint8_t*       tr_peerIdNew( void );
 
 const uint8_t* tr_getPeerId( void );
 
+struct event_base;
 struct tr_address;
 struct tr_announcer;
 struct tr_bandwidth;
@@ -117,11 +118,20 @@ struct tr_session
 
     tr_preallocation_mode        preallocationMode;
 
-    struct tr_event_handle *     events;
+    struct event_base          * event_base;
+    struct tr_event_handle     * events;
 
     uint16_t                     peerLimitPerTorrent;
 
     int                          uploadSlotsPerTorrent;
+
+    /* The UDP sockets used for the DHT and uTP. */
+    tr_port                      udp_port;
+    int                          udp_socket;
+    int                          udp6_socket;
+    unsigned char *              udp6_bound;
+    struct event                 *udp_event;
+    struct event                 *udp6_event;
 
     /* The open port on the local machine for incoming peer requests */
     tr_port                      private_peer_port;
@@ -222,7 +232,10 @@ void         tr_sessionUnlock( tr_session * );
 
 tr_bool      tr_sessionIsLocked( const tr_session * );
 
-const struct tr_address*  tr_sessionGetPublicAddress( const tr_session *, int tr_af_type );
+const struct tr_address*  tr_sessionGetPublicAddress( const tr_session  * session,
+                                                      int                 tr_af_type,
+                                                      tr_bool           * is_default_value );
+
 
 struct tr_bindsockets * tr_sessionGetBindSockets( tr_session * );
 

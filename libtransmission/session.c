@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -21,7 +21,7 @@
 #include <unistd.h> /* stat */
 #include <dirent.h> /* opendir */
 
-#include <event.h>
+#include <event2/event.h>
 
 //#define TR_SHOW_DEPRECATED
 #include "transmission.h"
@@ -43,7 +43,7 @@
 #include "session.h"
 #include "stats.h"
 #include "torrent.h"
-#include "tr-dht.h"
+#include "tr-udp.h"
 #include "tr-lpd.h"
 #include "trevent.h"
 #include "utils.h"
@@ -143,7 +143,7 @@ struct tr_bindinfo
 {
     int socket;
     tr_address addr;
-    struct event ev;
+    struct event * ev;
 };
 
 
@@ -152,7 +152,8 @@ close_bindinfo( struct tr_bindinfo * b )
 {
     if( ( b != NULL ) && ( b->socket >=0 ) )
     {
-        event_del( &b->ev );
+        event_free( b->ev );
+        b->ev = NULL;
         tr_netCloseSocket( b->socket );
     }
 }
@@ -201,8 +202,8 @@ open_incoming_peer_port( tr_session * session )
     b = session->public_ipv4;
     b->socket = tr_netBindTCP( &b->addr, session->private_peer_port, FALSE );
     if( b->socket >= 0 ) {
-        event_set( &b->ev, b->socket, EV_READ | EV_PERSIST, accept_incoming_peer, session );
-        event_add( &b->ev, NULL );
+        b->ev = event_new( session->event_base, b->socket, EV_READ | EV_PERSIST, accept_incoming_peer, session );
+        event_add( b->ev, NULL );
     }
 
     /* and do the exact same thing for ipv6, if it's supported... */
@@ -210,23 +211,38 @@ open_incoming_peer_port( tr_session * session )
         b = session->public_ipv6;
         b->socket = tr_netBindTCP( &b->addr, session->private_peer_port, FALSE );
         if( b->socket >= 0 ) {
-            event_set( &b->ev, b->socket, EV_READ | EV_PERSIST, accept_incoming_peer, session );
-            event_add( &b->ev, NULL );
+            b->ev = event_new( session->event_base, b->socket, EV_READ | EV_PERSIST, accept_incoming_peer, session );
+            event_add( b->ev, NULL );
         }
     }
 }
 
 const tr_address*
-tr_sessionGetPublicAddress( const tr_session * session, int tr_af_type )
+tr_sessionGetPublicAddress( const tr_session * session, int tr_af_type, tr_bool * is_default_value )
 {
+    const char * default_value;
     const struct tr_bindinfo * bindinfo;
 
     switch( tr_af_type )
     {
-        case TR_AF_INET:  bindinfo = session->public_ipv4; break;
-        case TR_AF_INET6: bindinfo = session->public_ipv6; break;
-        default:          bindinfo = NULL;                 break;
+        case TR_AF_INET:
+            bindinfo = session->public_ipv4;
+            default_value = TR_DEFAULT_BIND_ADDRESS_IPV4;
+            break;
+
+        case TR_AF_INET6:
+            bindinfo = session->public_ipv6;
+            default_value = TR_DEFAULT_BIND_ADDRESS_IPV6;
+            break;
+
+        default:
+            bindinfo = NULL;
+            default_value = "";
+            break;
     }
+
+    if( is_default_value && bindinfo )
+        *is_default_value = !tr_strcmp0( default_value, tr_ntop_non_ts( &bindinfo->addr ) );
 
     return bindinfo ? &bindinfo->addr : NULL;
 }
@@ -456,7 +472,7 @@ tr_sessionSaveSettings( tr_session    * session,
 
 /**
  * Periodically save the .resume files of any torrents whose
- * status has recently changed.  This prevents loss of metadata
+ * status has recently changed. This prevents loss of metadata
  * in the case of a crash, unclean shutdown, clumsy user, etc.
  */
 static void
@@ -507,6 +523,8 @@ tr_sessionInit( const char  * tag,
 
     /* initialize the bare skeleton of the session object */
     session = tr_new0( tr_session, 1 );
+    session->udp_socket = -1;
+    session->udp6_socket = -1;
     session->bandwidth = tr_bandwidthNew( session, NULL );
     session->lock = tr_lockNew( );
     session->cache = tr_cacheNew( 1024*1024*2 );
@@ -546,10 +564,33 @@ onNowTimer( int foo UNUSED, short bar UNUSED, void * vsession )
     const int min = 100;
     const int max = 999999;
     struct timeval tv;
+    tr_torrent * tor = NULL;
     tr_session * session = vsession;
 
     assert( tr_isSession( session ) );
     assert( session->nowTimer != NULL );
+
+    /**
+    ***  tr_session things to do once per second
+    **/
+
+    tr_timeUpdate( time( NULL ) );
+
+    if( session->turtle.isClockEnabled )
+        turtleCheckClock( session, &session->turtle );
+
+    while(( tor = tr_torrentNext( session, tor ))) {
+        if( tor->isRunning ) {
+            if( tr_torrentIsSeed( tor ) )
+                ++tor->secondsSeeding;
+            else
+                ++tor->secondsDownloading;
+        }
+    }
+
+    /**
+    ***  Set the timer
+    **/
 
     /* schedule the next timer for right after the next second begins */
     gettimeofday( &tv, NULL );
@@ -558,11 +599,6 @@ onNowTimer( int foo UNUSED, short bar UNUSED, void * vsession )
     if( usec < min ) usec = min;
     tr_timerAdd( session->nowTimer, 0, usec );
     /* fprintf( stderr, "time %zu sec, %zu microsec\n", (size_t)tr_time(), (size_t)tv.tv_usec ); */
-
-    /* tr_session things to do once per second */
-    tr_timeUpdate( tv.tv_sec );
-    if( session->turtle.isClockEnabled )
-        turtleCheckClock( session, &session->turtle );
 }
 
 static void loadBlocklists( tr_session * session );
@@ -585,8 +621,8 @@ tr_sessionInitImpl( void * vdata )
     tr_sessionGetDefaultSettings( data->configDir, &settings );
     tr_bencMergeDicts( &settings, clientSettings );
 
-    session->nowTimer = tr_new0( struct event, 1 );
-    evtimer_set( session->nowTimer, onNowTimer, session );
+    assert( session->event_base != NULL );
+    session->nowTimer = evtimer_new( session->event_base, onNowTimer, session );
     onNowTimer( 0, 0, session );
 
 #ifndef WIN32
@@ -615,8 +651,7 @@ tr_sessionInitImpl( void * vdata )
 
     assert( tr_isSession( session ) );
 
-    session->saveTimer = tr_new0( struct event, 1 );
-    evtimer_set( session->saveTimer, onSaveTimer, session );
+    session->saveTimer = evtimer_new( session->event_base, onSaveTimer, session );
     tr_timerAdd( session->saveTimer, SAVE_INTERVAL_SECS, 0 );
 
     tr_announcerInit( session );
@@ -631,8 +666,7 @@ tr_sessionInitImpl( void * vdata )
 
     tr_sessionSet( session, &settings );
 
-    if( session->isDHTEnabled )
-        tr_dhtInit( session, &session->public_ipv4->addr );
+    tr_udpInit( session, &session->public_ipv4->addr );
 
     if( session->isLPDEnabled )
         tr_lpdInit( session, &session->public_ipv4->addr );
@@ -847,6 +881,14 @@ tr_sessionGetDownloadDir( const tr_session * session )
     assert( tr_isSession( session ) );
 
     return session->downloadDir;
+}
+
+int64_t
+tr_sessionGetDownloadDirFreeSpace( const tr_session * session )
+{
+    assert( tr_isSession( session ) );
+
+    return tr_getFreeSpace( session->downloadDir );
 }
 
 /***
@@ -1645,22 +1687,19 @@ sessionCloseImpl( void * vsession )
     if( session->isLPDEnabled )
         tr_lpdUninit( session );
 
-    if( session->isDHTEnabled )
-        tr_dhtUninit( session );
+    tr_udpUninit( session );
 
-    evtimer_del( session->saveTimer );
-    tr_free( session->saveTimer );
+    event_free( session->saveTimer );
     session->saveTimer = NULL;
 
-    evtimer_del( session->nowTimer );
-    tr_free( session->nowTimer );
+    event_free( session->nowTimer );
     session->nowTimer = NULL;
 
     tr_verifyClose( session );
     tr_sharedClose( session );
     tr_rpcClose( &session->rpcServer );
 
-    /* close the torrents.  get the most active ones first so that
+    /* Close the torrents. Get the most active ones first so that
      * if we can't get them all closed in a reasonable amount of time,
      * at least we get the most important ones first. */
     tor = NULL;
@@ -1737,7 +1776,7 @@ tr_sessionClose( tr_session * session )
         {
             dbgmsg( "calling event_loopbreak()" );
             forced = TRUE;
-            event_loopbreak( );
+            event_base_loopbreak( session->event_base );
         }
         if( deadlineReached( deadline+3 ) )
         {
@@ -1863,13 +1902,9 @@ toggleDHTImpl(  void * data )
     tr_session * session = data;
     assert( tr_isSession( session ) );
 
-    if( session->isDHTEnabled )
-        tr_dhtUninit( session );
-
+    tr_udpUninit( session );
     session->isDHTEnabled = !session->isDHTEnabled;
-
-    if( session->isDHTEnabled )
-        tr_dhtInit( session, &session->public_ipv4->addr );
+    tr_udpInit( session, &session->public_ipv4->addr );
 }
 
 void

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2009 by Juliusz Chroboczek
+Copyright (c) 2009-2010 by Juliusz Chroboczek
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -13,7 +13,7 @@ all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
@@ -59,14 +59,11 @@ THE SOFTWARE.
 #include "trevent.h" /* tr_runInEventThread() */
 #include "utils.h"
 
-static int dht_socket = -1, dht6_socket = -1;
-static struct event * dht_event = NULL;
-static struct event * dht6_event = NULL;
-static tr_port dht_port;
+static struct event *dht_timer = NULL;
 static unsigned char myid[20];
 static tr_session *session = NULL;
 
-static void event_callback(int s, short type, void *ignore);
+static void timer_callback(int s, short type, void *ignore);
 
 struct bootstrap_closure {
     tr_session *session;
@@ -182,7 +179,7 @@ dht_bootstrap(void *closure)
         }
 
         /* Our DHT code is able to take up to 9 nodes in a row without
-           dropping any.  After that, it takes some time to split buckets.
+           dropping any. After that, it takes some time to split buckets.
            So ping the first 8 nodes quickly, then slow down. */
         if(i < 8)
             nap(2);
@@ -252,72 +249,9 @@ dht_bootstrap(void *closure)
     tr_ndbg( "DHT", "Finished bootstrapping" );
 }
 
-/* BEP-32 has a rather nice explanation of why we need to bind to one
-   IPv6 address, if I may say so myself. */
-
-static int
-rebind_ipv6(tr_bool force)
-{
-    struct sockaddr_in6 sin6;
-    const unsigned char *ipv6 = tr_globalIPv6();
-    static unsigned char *last_bound = NULL;
-    int s, rc;
-    int one = 1;
-
-    /* We currently have no way to enable or disable IPv6 once the DHT has
-       been initialised.  Oh, well. */
-    if(ipv6 == NULL || (!force && dht6_socket < 0)) {
-        if(last_bound) {
-            free(last_bound);
-            last_bound = NULL;
-        }
-        return 0;
-    }
-
-    if(last_bound != NULL && memcmp(ipv6, last_bound, 16) == 0)
-        return 0;
-
-    s = socket(PF_INET6, SOCK_DGRAM, 0);
-    if(s < 0)
-        return -1;
-
-#ifdef IPV6_V6ONLY
-        /* Since we always open an IPv4 socket on the same port, this
-           shouldn't matter.  But I'm superstitious. */
-        setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &one, sizeof(one));
-#endif
-
-    memset(&sin6, 0, sizeof(sin6));
-    sin6.sin6_family = AF_INET6;
-    if(ipv6)
-        memcpy(&sin6.sin6_addr, ipv6, 16);
-    sin6.sin6_port = htons(dht_port);
-    rc = bind(s, (struct sockaddr*)&sin6, sizeof(sin6));
-
-    if(rc < 0)
-        return -1;
-
-    if(dht6_socket < 0) {
-        dht6_socket = s;
-    } else {
-        rc = dup2(s, dht6_socket);
-        close(s);
-        if(rc < 0)
-            return -1;
-    }
-
-    if(last_bound == NULL)
-        last_bound = malloc(16);
-    if(last_bound)
-        memcpy(last_bound, ipv6, 16);
-
-    return 1;
-}
-
 int
-tr_dhtInit(tr_session *ss, const tr_address * tr_addr)
+tr_dhtInit(tr_session *ss)
 {
-    struct sockaddr_in sin;
     tr_benc benc;
     int rc;
     tr_bool have_id = FALSE;
@@ -328,28 +262,9 @@ tr_dhtInit(tr_session *ss, const tr_address * tr_addr)
     struct bootstrap_closure * cl;
 
     if( session ) /* already initialized */
-        return -1;
-
-    dht_port = tr_sessionGetPeerPort(ss);
-    if(dht_port <= 0)
-        return -1;
+        return -1;    
 
     tr_ndbg( "DHT", "Initializing DHT" );
-
-    dht_socket = socket(PF_INET, SOCK_DGRAM, 0);
-    if(dht_socket < 0)
-        goto fail;
-
-    memset(&sin, 0, sizeof(sin));
-    sin.sin_family = AF_INET;
-    memcpy(&sin.sin_addr, &tr_addr->addr.addr4, sizeof (struct in_addr));
-    sin.sin_port = htons(dht_port);
-    rc = bind(dht_socket, (struct sockaddr*)&sin, sizeof(sin));
-    if(rc < 0)
-        goto fail;
-
-    if(tr_globalIPv6())
-        rebind_ipv6(TRUE);
 
     if( getenv( "TR_DHT_VERBOSE" ) != NULL )
         dht_debug = stderr;
@@ -361,11 +276,11 @@ tr_dhtInit(tr_session *ss, const tr_address * tr_addr)
         have_id = tr_bencDictFindRaw(&benc, "id", &raw, &len);
         if( have_id && len==20 )
             memcpy( myid, raw, len );
-        if( dht_socket >= 0 &&
+        if( ss->udp_socket >= 0 &&
             tr_bencDictFindRaw( &benc, "nodes", &raw, &len ) && !(len%6) ) {
                 nodes = tr_memdup( raw, len );
         }
-        if( dht6_socket > 0 &&
+        if( ss->udp6_socket > 0 &&
             tr_bencDictFindRaw( &benc, "nodes6", &raw, &len6 ) && !(len6%18) ) {
             nodes6 = tr_memdup( raw, len6 );
         }
@@ -386,7 +301,7 @@ tr_dhtInit(tr_session *ss, const tr_address * tr_addr)
         tr_cryptoRandBuf( myid, 20 );
     }
 
-    rc = dht_init( dht_socket, dht6_socket, myid, NULL );
+    rc = dht_init( ss->udp_socket, ss->udp6_socket, myid, NULL );
     if( rc < 0 )
         goto fail;
 
@@ -400,31 +315,16 @@ tr_dhtInit(tr_session *ss, const tr_address * tr_addr)
     cl->len6 = len6;
     tr_threadNew( dht_bootstrap, cl );
 
-    dht_event = event_new( NULL, dht_socket, EV_READ, event_callback, NULL );
-    tr_timerAdd( dht_event, 0, tr_cryptoWeakRandInt( 1000000 ) );
-
-    if( dht6_socket >= 0 )
-    {
-        dht6_event = event_new( NULL, dht6_socket, EV_READ, event_callback, NULL );
-        tr_timerAdd( dht6_event, 0, tr_cryptoWeakRandInt( 1000000 ) );
-    }
+    dht_timer = evtimer_new( session->event_base, timer_callback, session );
+    tr_timerAdd( dht_timer, 0, tr_cryptoWeakRandInt( 1000000 ) );
 
     tr_ndbg( "DHT", "DHT initialized" );
 
     return 1;
 
-    fail:
-    {
-        const int save = errno;
-        close(dht_socket);
-        if( dht6_socket >= 0 )
-            close(dht6_socket);
-        dht_socket = dht6_socket = -1;
-        session = NULL;
-        tr_ndbg( "DHT", "DHT initialization failed (errno = %d)", save );
-        errno = save;
-    }
-
+ fail:
+    tr_ndbg( "DHT", "DHT initialization failed (errno = %d)", errno );
+    session = NULL;
     return -1;
 }
 
@@ -436,13 +336,8 @@ tr_dhtUninit(tr_session *ss)
 
     tr_ndbg( "DHT", "Uninitializing DHT" );
 
-    event_free( dht_event );
-    dht_event = NULL;
-
-    if( dht6_event ) {
-        event_free( dht6_event );
-        dht6_event = NULL;
-    }
+    event_free( dht_timer );
+    dht_timer = NULL;
 
     /* Since we only save known good nodes, avoid erasing older data if we
        don't know enough nodes. */
@@ -483,14 +378,7 @@ tr_dhtUninit(tr_session *ss)
         tr_free( dat_file );
     }
 
-    dht_uninit( 1 );
-    tr_netCloseSocket( dht_socket );
-    dht_socket = -1;
-    if(dht6_socket > 0) {
-        tr_netCloseSocket( dht6_socket );
-        dht6_socket = -1;
-    }
-
+    dht_uninit();
     tr_ndbg("DHT", "Done uninitializing DHT");
 
     session = NULL;
@@ -535,8 +423,8 @@ tr_dhtStatus( tr_session * session, int af, int * nodes_return )
     struct getstatus_closure closure = { af, -1, -1 };
 
     if( !tr_dhtEnabled( session ) ||
-        (af == AF_INET && dht_socket < 0) ||
-        (af == AF_INET6 && dht6_socket < 0) ) {
+        (af == AF_INET && session->udp_socket < 0) ||
+        (af == AF_INET6 && session->udp6_socket < 0) ) {
         if( nodes_return )
             *nodes_return = 0;
         return TR_DHT_STOPPED;
@@ -555,7 +443,7 @@ tr_dhtStatus( tr_session * session, int af, int * nodes_return )
 tr_port
 tr_dhtPort( tr_session *ss )
 {
-    return tr_dhtEnabled( ss ) ? dht_port : 0;
+    return tr_dhtEnabled( ss ) ? ss->udp_port : 0;
 }
 
 int
@@ -679,9 +567,10 @@ tr_dhtAnnounce(tr_torrent *tor, int af, tr_bool announce)
                 tor->dhtAnnounce6InProgress = TRUE;
             ret = 1;
         } else {
-            tr_torerr(tor, "%sDHT announce failed, errno = %d (%s, %d nodes)",
+            tr_torerr(tor, "%sDHT announce failed (%s, %d nodes): %s",
                       af == AF_INET6 ? "IPv6 " : "",
-                      errno, tr_dhtPrintableStatus(status), numnodes);
+                      tr_dhtPrintableStatus(status), numnodes,
+                      tr_strerror( errno ) );
         }
     } else {
         tr_tordbg(tor, "%sDHT not ready (%s, %d nodes)",
@@ -692,36 +581,44 @@ tr_dhtAnnounce(tr_torrent *tor, int af, tr_bool announce)
     return ret;
 }
 
-static void
-event_callback(int s, short type, void *ignore UNUSED )
+void
+tr_dhtCallback(unsigned char *buf, int buflen,
+               struct sockaddr *from, socklen_t fromlen,
+               void *sv )
 {
-    struct event *event = (s == dht_socket) ? dht_event : dht6_event;
+    tr_session *ss = (tr_session*)sv;
     time_t tosleep;
-    static int count = 0;
+    int rc;
 
-    if( dht_periodic( type == EV_READ, &tosleep, callback, NULL) < 0 ) {
+    assert(tr_isSession(ss));
+
+    if(sv != session)
+        return;
+
+    rc = dht_periodic( buf, buflen, from, fromlen,
+                       &tosleep, callback, NULL);
+    if(rc < 0) {
         if(errno == EINTR) {
             tosleep = 0;
         } else {
-            tr_nerr("DHT", "dht_periodic failed (errno = %d)", errno);
+            tr_nerr( "DHT", "dht_periodic failed: %s", tr_strerror( errno ) );
             if(errno == EINVAL || errno == EFAULT)
                     abort();
             tosleep = 1;
         }
     }
 
-    /* Only do this once in a while.  Counting rather than measuring time
-       avoids a system call. */
-    count++;
-    if(count >= 20) {
-        rebind_ipv6(FALSE);
-        count = 0;
-    }
-
     /* Being slightly late is fine,
        and has the added benefit of adding some jitter. */
-    tr_timerAdd( event, tosleep, tr_cryptoWeakRandInt( 1000000 ) );
+    tr_timerAdd( dht_timer, tosleep, tr_cryptoWeakRandInt( 1000000 ) );
 }
+
+static void
+timer_callback(int s UNUSED, short type UNUSED, void *session )
+{
+    tr_dhtCallback(NULL, 0, NULL, 0, session);
+}
+
 
 void
 dht_hash(void *hash_return, int hash_size,

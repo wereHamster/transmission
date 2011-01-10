@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2007-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -24,7 +24,7 @@
 
 void tr_fdSetFileLimit( tr_session * session, int limit );
 
-int tr_fdGetFileLimit( const tr_session * session );
+int tr_fdGetFileLimit( tr_session * session );
 
 void tr_fdSetGlobalPeerLimit( tr_session * session, int limit );
 
@@ -98,7 +98,7 @@ void tr_fdTorrentClose( tr_session * session, int torrentId );
 int      tr_fdSocketCreate( tr_session * session, int domain, int type );
 
 int      tr_fdSocketAccept( tr_session  * session,
-                            int           b,
+                            int           listening_sockfd,
                             tr_address  * addr,
                             tr_port     * port );
 

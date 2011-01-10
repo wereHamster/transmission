@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2007-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -16,7 +16,7 @@
 #include <string.h> /* memcpy, memcmp, strstr */
 #include <stdlib.h> /* qsort */
 
-#include <event.h>
+#include <event2/event.h>
 
 #include "transmission.h"
 #include "announcer.h"
@@ -112,7 +112,7 @@ enum
 
 /**
  * Peer information that should be kept even before we've connected and
- * after we've disconnected.  These are kept in a pool of peer_atoms to decide
+ * after we've disconnected. These are kept in a pool of peer_atoms to decide
  * which ones would make good candidates for connecting to, and to watch out
  * for banned peers.
  *
@@ -121,7 +121,8 @@ enum
  */
 struct peer_atom
 {
-    uint8_t     from;
+    uint8_t     fromFirst;          /* where the peer was first found */
+    uint8_t     fromBest;           /* the "best" value of where the peer has been found */
     uint8_t     flags;              /* these match the added_f flags */
     uint8_t     flags2;             /* flags that aren't defined in added_f */
     uint8_t     uploadOnly;         /* UPLOAD_ONLY_ */
@@ -150,7 +151,8 @@ static tr_bool
 tr_isAtom( const struct peer_atom * atom )
 {
     return ( atom != NULL )
-        && ( atom->from < TR_PEER_FROM__MAX )
+        && ( atom->fromFirst < TR_PEER_FROM__MAX )
+        && ( atom->fromBest < TR_PEER_FROM__MAX )
         && ( tr_isAddress( &atom->addr ) );
 }
 #endif
@@ -158,7 +160,7 @@ tr_isAtom( const struct peer_atom * atom )
 static const char*
 tr_atomAddrStr( const struct peer_atom * atom )
 {
-    return tr_peerIoAddrStr( &atom->addr, atom->port );
+    return atom ? tr_peerIoAddrStr( &atom->addr, atom->port ) : "[no atom]";
 }
 
 struct block_request
@@ -501,8 +503,7 @@ deleteTimer( struct event ** t )
 {
     if( *t != NULL )
     {
-        evtimer_del( *t );
-        tr_free( *t );
+        event_free( *t );
         *t = NULL;
     }
 }
@@ -523,7 +524,7 @@ tr_peerMgrFree( tr_peerMgr * manager )
 
     deleteTimers( manager );
 
-    /* free the handshakes.  Abort invokes handshakeDoneCB(), which removes
+    /* free the handshakes. Abort invokes handshakeDoneCB(), which removes
      * the item from manager->handshakes, so this is a little roundabout... */
     while( !tr_ptrArrayEmpty( &manager->incomingHandshakes ) )
         tr_handshakeAbort( tr_ptrArrayNth( &manager->incomingHandshakes, 0 ) );
@@ -639,7 +640,7 @@ tr_peerMgrPeerIsSeed( const tr_torrent  * tor,
 ***    for too long and (b) avoiding duplicate requests before endgame.
 ***
 *** 2. Torrent::pieces, an array of "struct weighted_piece" which lists the
-***    pieces that we want to request.  It's used to decide which blocks to
+***    pieces that we want to request. It's used to decide which blocks to
 ***    return next when tr_peerMgrGetBlockRequests() is called.
 **/
 
@@ -1198,7 +1199,7 @@ refillUpkeep( int foo UNUSED, short bar UNUSED, void * vmgr )
 
             for( it=t->requests, end=it+n; it!=end; ++it )
             {
-                if( ( it->sentAt <= too_old ) && !tr_peerMsgsIsReadingBlock( it->peer->msgs, it->block ) )
+                if( ( it->sentAt <= too_old ) && it->peer->msgs && !tr_peerMsgsIsReadingBlock( it->peer->msgs, it->block ) )
                     cancel[cancelCount++] = *it;
                 else
                 {
@@ -1406,7 +1407,7 @@ peerCallbackFunc( tr_peer * peer, const tr_peer_event * e, void * vt )
                 tr_statsAddDownloaded( tor->session, e->length );
 
             /* update our atom */
-            if( peer && e->wasPieceData )
+            if( peer && peer->atom && e->wasPieceData )
                 peer->atom->piece_data_time = now;
 
             break;
@@ -1433,7 +1434,7 @@ peerCallbackFunc( tr_peer * peer, const tr_peer_event * e, void * vt )
             requestListRemove( t, block, peer );
             pieceListRemoveRequest( t, block );
 
-            if( peer != NULL )
+            if( peer && peer->blocksSentToClient )
                 tr_historyAdd( peer->blocksSentToClient, tr_time( ), 1 );
 
             if( tr_cpBlockIsComplete( &tor->completion, block ) )
@@ -1476,12 +1477,12 @@ peerCallbackFunc( tr_peer * peer, const tr_peer_event * e, void * vt )
                         tr_file_index_t fileIndex;
 
                         /* only add this to downloadedCur if we got it from a peer --
-                         * webseeds shouldn't count against our ratio.  As one tracker
+                         * webseeds shouldn't count against our ratio. As one tracker
                          * admin put it, "Those pieces are downloaded directly from the
                          * content distributor, not the peers, it is the tracker's job
                          * to manage the swarms, not the web server and does not fit
                          * into the jurisdiction of the tracker." */
-                        if( peer != NULL ) {
+                        if( peer->msgs != NULL ) {
                             const uint32_t n = tr_torPieceCountBytes( tor, p );
                             tr_announcerAddBytes( tor, TR_ANN_DOWN, n );
                         }
@@ -1571,7 +1572,8 @@ ensureAtomExists( Torrent           * t,
         a->addr = *addr;
         a->port = port;
         a->flags = flags;
-        a->from = from;
+        a->fromFirst = from;
+        a->fromBest = from;
         a->shelf_date = tr_time( ) + getDefaultShelfLife( from ) + jitter;
         a->blocklisted = -1;
         atomSetSeedProbability( a, seedProbability );
@@ -1579,9 +1581,13 @@ ensureAtomExists( Torrent           * t,
 
         tordbg( t, "got a new atom: %s", tr_atomAddrStr( a ) );
     }
-    else if( a->seedProbability == -1 )
+    else
     {
-        atomSetSeedProbability( a, seedProbability );
+        if( from < a->fromBest )
+            a->fromBest = from;
+        
+        if( a->seedProbability == -1 )
+            atomSetSeedProbability( a, seedProbability );
     }
 }
 
@@ -1944,8 +1950,8 @@ compareAtomsByUsefulness( const void * va, const void *vb )
 
     if( a->piece_data_time != b->piece_data_time )
         return a->piece_data_time > b->piece_data_time ? -1 : 1;
-    if( a->from != b->from )
-        return a->from < b->from ? -1 : 1;
+    if( a->fromBest != b->fromBest )
+        return a->fromBest < b->fromBest ? -1 : 1;
     if( a->numFails != b->numFails )
         return a->numFails < b->numFails ? -1 : 1;
 
@@ -2035,10 +2041,9 @@ static void rechokePulse   ( int, short, void * );
 static void reconnectPulse ( int, short, void * );
 
 static struct event *
-createTimer( int msec, void (*callback)(int, short, void *), void * cbdata )
+createTimer( tr_session * session, int msec, void (*callback)(int, short, void *), void * cbdata )
 {
-    struct event * timer = tr_new0( struct event, 1 );
-    evtimer_set( timer, callback, cbdata );
+    struct event * timer = evtimer_new( session->event_base, callback, cbdata );
     tr_timerAddMsec( timer, msec );
     return timer;
 }
@@ -2047,16 +2052,16 @@ static void
 ensureMgrTimersExist( struct tr_peerMgr * m )
 {
     if( m->atomTimer == NULL )
-        m->atomTimer = createTimer( ATOM_PERIOD_MSEC, atomPulse, m );
+        m->atomTimer = createTimer( m->session, ATOM_PERIOD_MSEC, atomPulse, m );
 
     if( m->bandwidthTimer == NULL )
-        m->bandwidthTimer = createTimer( BANDWIDTH_PERIOD_MSEC, bandwidthPulse, m );
+        m->bandwidthTimer = createTimer( m->session, BANDWIDTH_PERIOD_MSEC, bandwidthPulse, m );
 
     if( m->rechokeTimer == NULL )
-        m->rechokeTimer = createTimer( RECHOKE_PERIOD_MSEC, rechokePulse, m );
+        m->rechokeTimer = createTimer( m->session, RECHOKE_PERIOD_MSEC, rechokePulse, m );
 
-   if( m->refillUpkeepTimer == NULL )
-        m->refillUpkeepTimer = createTimer( REFILL_UPKEEP_PERIOD_MSEC, refillUpkeep, m );
+    if( m->refillUpkeepTimer == NULL )
+        m->refillUpkeepTimer = createTimer( m->session, REFILL_UPKEEP_PERIOD_MSEC, refillUpkeep, m );
 }
 
 void
@@ -2089,7 +2094,7 @@ stopTorrent( Torrent * t )
         peerDestructor( t, tr_ptrArrayNth( &t->peers, i ) );
     tr_ptrArrayClear( &t->peers );
 
-    /* disconnect the handshakes.  handshakeAbort calls handshakeDoneCB(),
+    /* disconnect the handshakes. handshakeAbort calls handshakeDoneCB(),
      * which removes the handshake from t->outgoingHandshakes... */
     while( !tr_ptrArrayEmpty( &t->outgoingHandshakes ) )
         tr_handshakeAbort( tr_ptrArrayNth( &t->outgoingHandshakes, 0 ) );
@@ -2232,7 +2237,7 @@ tr_peerMgrTorrentStats( tr_torrent       * tor,
 
         ++*setmePeersConnected;
 
-        ++setmePeersFrom[atom->from];
+        ++setmePeersFrom[atom->fromFirst];
 
         if( clientIsDownloadingFrom( tor, peer ) )
             ++*setmePeersSendingToUs;
@@ -2341,7 +2346,7 @@ tr_peerMgrPeerStats( const tr_torrent    * tor,
         tr_strlcpy( stat->client, ( peer->client ? peer->client : "" ),
                    sizeof( stat->client ) );
         stat->port                = ntohs( peer->atom->port );
-        stat->from                = atom->from;
+        stat->from                = atom->fromFirst;
         stat->progress            = peer->progress;
         stat->isEncrypted         = tr_peerIoIsEncrypted( peer->io ) ? 1 : 0;
         stat->rateToPeer_KBps     = toSpeedKBps( tr_peerGetPieceSpeed_Bps( peer, now_msec, TR_CLIENT_TO_PEER ) );
@@ -2373,7 +2378,7 @@ tr_peerMgrPeerStats( const tr_torrent    * tor,
         if( !stat->peerIsChoked && !stat->peerIsInterested ) *pch++ = '?';
         if( stat->isEncrypted ) *pch++ = 'E';
         if( stat->from == TR_PEER_FROM_DHT ) *pch++ = 'H';
-        if( stat->from == TR_PEER_FROM_PEX ) *pch++ = 'X';
+        else if( stat->from == TR_PEER_FROM_PEX ) *pch++ = 'X';
         if( stat->isIncoming ) *pch++ = 'I';
         *pch = '\0';
     }
@@ -2955,7 +2960,7 @@ closePeer( Torrent * t, tr_peer * peer )
     atom = peer->atom;
 
     /* if we transferred piece data, then they might be good peers,
-       so reset their `numFails' weight to zero.  otherwise we connected
+       so reset their `numFails' weight to zero. otherwise we connected
        to them fruitlessly, so mark it as another fail */
     if( atom->piece_data_time ) {
         tordbg( t, "resetting atom %s numFails to 0", tr_atomAddrStr(atom) );
@@ -3369,7 +3374,7 @@ isPeerCandidate( const tr_torrent * tor, struct peer_atom * atom, const time_t n
         if( atomIsSeed( atom ) || ( atom->uploadOnly == UPLOAD_ONLY_YES ) )
             return FALSE;
 
-    /* not if we've already got a connection to them...  */
+    /* not if we've already got a connection to them... */
     if( peerIsInUse( tor->torrentPeers, atom ) )
         return FALSE;
 
@@ -3453,8 +3458,8 @@ getPeerCandidateScore( const tr_torrent * tor, const struct peer_atom * atom, ui
     score = addValToKey( score, 8, i );
 
     /* Prefer peers that we got from more trusted sources.
-     * lower `from' values indicate more trusted sources */
-    score = addValToKey( score, 4, atom->from );
+     * lower `fromBest' values indicate more trusted sources */
+    score = addValToKey( score, 4, atom->fromBest );
 
     /* salt */
     score = addValToKey( score, 8, salt );

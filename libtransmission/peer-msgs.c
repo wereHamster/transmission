@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2007-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -224,7 +224,7 @@ struct tr_peermsgs
     struct tr_incoming    incoming;
 
     /* if the peer supports the Extension Protocol in BEP 10 and
-       supplied a reqq argument, it's stored here.  otherwise the
+       supplied a reqq argument, it's stored here. Otherwise, the
        value is zero and should be ignored. */
     int64_t               reqq;
 
@@ -278,7 +278,7 @@ myDebug( const char * file, int line,
         evbuffer_add_vprintf( buf, fmt, args );
         va_end( args );
         evbuffer_add_printf( buf, " (%s:%d)\n", base, line );
-        fwrite( evbuffer_pullup( buf, -1 ), 1, evbuffer_get_length( buf ), fp );
+        evbuffer_write( buf, fileno( fp ) );
 
         tr_free( base );
         evbuffer_free( buf );
@@ -1910,7 +1910,7 @@ fillOutputBuffer( tr_peermsgs * msgs, time_t now )
             /* check the piece if it needs checking... */
             if( !err && tr_torrentPieceNeedsCheck( msgs->torrent, req.index ) )
                 if(( err = !tr_torrentCheckPiece( msgs->torrent, req.index )))
-                    tr_torrentSetLocalError( msgs->torrent, _( "Piece #%zu is corrupt!  Please Verify Local Data." ), (size_t)req.index );
+                    tr_torrentSetLocalError( msgs->torrent, _( "Please Verify Local Data! Piece #%zu is corrupt." ), (size_t)req.index );
 
             if( err )
             {
@@ -2334,7 +2334,7 @@ tr_peerMsgsNew( struct tr_torrent    * torrent,
     m->outMessagesBatchedAt = 0;
     m->outMessagesBatchPeriod = LOW_PRIORITY_INTERVAL_SECS;
     m->incoming.block = evbuffer_new( );
-    m->pexTimer = evtimer_new( NULL, pexPulse, m );
+    m->pexTimer = evtimer_new( torrent->session->event_base, pexPulse, m );
     peer->msgs = m;
     tr_timerAdd( m->pexTimer, PEX_INTERVAL_SECS, 0 );
 

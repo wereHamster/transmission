@@ -175,7 +175,7 @@ prefsChanged( TrCore * core UNUSED,
     {
         g_object_set( p->renderer, "compact", gtr_pref_flag_get( key ), NULL );
         /* since the cell size has changed, we need gtktreeview to revalidate
-         * its fixed-height mode values.  Unfortunately there's not an API call
+         * its fixed-height mode values. Unfortunately there's not an API call
          * for that, but it *does* revalidate when it thinks the style's been tweaked */
         g_signal_emit_by_name( p->view, "style-set", NULL, NULL );
     }
@@ -784,7 +784,7 @@ updateStats( PrivateData * p )
         tr_sessionGetStats( session, &stats );
         tr_strlsize( up, stats.uploadedBytes, sizeof( up ) );
         tr_strlsize( down, stats.downloadedBytes, sizeof( down ) );
-        /* Translators: "size|" is here for disambiguation.  Please remove it from your translation.
+        /* Translators: "size|" is here for disambiguation. Please remove it from your translation.
            %1$s is the size of the data we've downloaded
            %2$s is the size of the data we've uploaded */
         g_snprintf( buf, sizeof( buf ), Q_(
@@ -795,7 +795,7 @@ updateStats( PrivateData * p )
         tr_sessionGetCumulativeStats( session, &stats );
         tr_strlsize( up, stats.uploadedBytes, sizeof( up ) );
         tr_strlsize( down, stats.downloadedBytes, sizeof( down ) );
-        /* Translators: "size|" is here for disambiguation.  Please remove it from your translation.
+        /* Translators: "size|" is here for disambiguation. Please remove it from your translation.
            %1$s is the size of the data we've downloaded
            %2$s is the size of the data we've uploaded */
         g_snprintf( buf, sizeof( buf ), Q_(
@@ -869,7 +869,7 @@ gtr_window_set_busy( TrWindow * w, gboolean isBusy )
         GdkDisplay * display = gtk_widget_get_display( GTK_WIDGET( w ) );
         GdkCursor * cursor = isBusy ? gdk_cursor_new_for_display( display, GDK_WATCH ) : NULL;
 
-        gdk_window_set_cursor( GTK_WIDGET(w)->window, cursor );
+        gdk_window_set_cursor( gtr_widget_get_window( GTK_WIDGET( w ) ), cursor );
         gdk_display_flush( display );
 
         if( cursor )

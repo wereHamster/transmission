@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -24,8 +24,10 @@
  #include <zlib.h>
 #endif
 
-#include <event.h>
-#include <evhttp.h>
+#include <event2/buffer.h>
+#include <event2/event.h>
+#include <event2/http.h>
+#include <event2/http_struct.h> /* TODO: eventually remove this */
 
 #include "transmission.h"
 #include "bencode.h"
@@ -37,6 +39,7 @@
 #include "ptrarray.h"
 #include "rpcimpl.h"
 #include "rpc-server.h"
+#include "session.h"
 #include "trevent.h"
 #include "utils.h"
 #include "web.h"
@@ -160,7 +163,7 @@ extract_parts_from_multipart( const struct evkeyvalq * headers,
                               tr_ptrArray * setme_parts )
 {
     const char * content_type = evhttp_find_header( headers, "Content-Type" );
-    const char * in = (const char*) EVBUFFER_DATA( body );
+    const char * in = (const char*) evbuffer_pullup( body, -1 );
     size_t inlen = evbuffer_get_length( body );
 
     const char * boundary_key = "boundary=";
@@ -277,7 +280,7 @@ handle_upload( struct evhttp_request * req,
                 struct evbuffer * json = evbuffer_new( );
                 tr_bencToBuf( &top, TR_FMT_JSON, json );
                 tr_rpc_request_exec_json( server->session,
-                                          EVBUFFER_DATA( json ),
+                                          evbuffer_pullup( json, -1 ),
                                           evbuffer_get_length( json ),
                                           NULL, NULL );
                 evbuffer_free( json );
@@ -550,7 +553,7 @@ handle_rpc( struct evhttp_request * req,
     else if( req->type == EVHTTP_REQ_POST )
     {
         tr_rpc_request_exec_json( server->session,
-                                  EVBUFFER_DATA( req->input_buffer ),
+                                  evbuffer_pullup( req->input_buffer, -1 ),
                                   evbuffer_get_length( req->input_buffer ),
                                   rpc_response_func, data );
     }
@@ -613,7 +616,7 @@ handle_request( struct evhttp_request * req, void * arg )
                 "<p>Unauthorized IP Address.</p>"
                 "<p>Either disable the IP address whitelist or add your address to it.</p>"
                 "<p>If you're editing settings.json, see the 'rpc-whitelist' and 'rpc-whitelist-enabled' entries.</p>"
-                "<p>If you're still using ACLs, use a whitelist instead.  See the transmission-daemon manpage for details.</p>" );
+                "<p>If you're still using ACLs, use a whitelist instead. See the transmission-daemon manpage for details.</p>" );
         }
         else if( server->isPasswordEnabled
                  && ( !pass || !user || strcmp( server->username, user )
@@ -637,6 +640,10 @@ handle_request( struct evhttp_request * req, void * arg )
         else if( !strncmp( req->uri + strlen( server->url ), "web/", 4 ) )
         {
             handle_web_client( req, server );
+        }
+        else if( !strncmp( req->uri + strlen( server->url ), "upload", 6 ) )
+        {
+            handle_upload( req, server );
         }
 #ifdef REQUIRE_SESSION_ID
         else if( !test_session_id( server, req ) )
@@ -663,10 +670,6 @@ handle_request( struct evhttp_request * req, void * arg )
         {
             handle_rpc( req, server );
         }
-        else if( !strncmp( req->uri + strlen( server->url ), "upload", 6 ) )
-        {
-            handle_upload( req, server );
-        }
         else
         {
             send_simple_response( req, HTTP_NOTFOUND, req->uri );
@@ -686,9 +689,8 @@ startServer( void * vserver )
     {
         addr.type = TR_AF_INET;
         addr.addr.addr4 = server->bindAddress;
-        server->httpd = evhttp_new( tr_eventGetBase( server->session ) );
-        evhttp_bind_socket( server->httpd, tr_ntop_non_ts( &addr ),
-                            server->port );
+        server->httpd = evhttp_new( server->session->event_base );
+        evhttp_bind_socket( server->httpd, tr_ntop_non_ts( &addr ), server->port );
         evhttp_set_gencb( server->httpd, handle_request, server );
 
     }

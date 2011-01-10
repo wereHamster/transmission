@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2007-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -433,8 +433,7 @@ gtr_torrent_creation_dialog_new( GtkWindow  * parent, TrCore * core )
 
     d = gtk_dialog_new_with_buttons( _( "New Torrent" ),
                                      parent,
-                                     GTK_DIALOG_DESTROY_WITH_PARENT |
-                                     GTK_DIALOG_NO_SEPARATOR,
+                                     GTK_DIALOG_DESTROY_WITH_PARENT,
                                      GTK_STOCK_CLOSE, GTK_RESPONSE_CLOSE,
                                      GTK_STOCK_NEW, GTK_RESPONSE_ACCEPT,
                                      NULL );

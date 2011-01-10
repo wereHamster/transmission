@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2007-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -615,7 +615,7 @@ readHandshake( tr_handshake *    handshake,
 
     handshake->haveReadAnythingFromPeer = TRUE;
 
-    pstrlen = evbuffer_pullup( inbuf, 1 )[0]; /* peek, don't read.  We may be
+    pstrlen = evbuffer_pullup( inbuf, 1 )[0]; /* peek, don't read. We may be
                                                  handing inbuf to AWAITING_YA */
 
     if( pstrlen == 19 ) /* unencrypted */
@@ -1165,12 +1165,13 @@ handshakeTimeout( int foo UNUSED, short bar UNUSED, void * handshake )
 }
 
 tr_handshake*
-tr_handshakeNew( tr_peerIo *        io,
-                 tr_encryption_mode encryptionMode,
-                 handshakeDoneCB    doneCB,
-                 void *             doneUserData )
+tr_handshakeNew( tr_peerIo           * io,
+                 tr_encryption_mode    encryptionMode,
+                 handshakeDoneCB       doneCB,
+                 void                * doneUserData )
 {
     tr_handshake * handshake;
+    tr_session * session = tr_peerIoGetSession( io );
 
     handshake = tr_new0( tr_handshake, 1 );
     handshake->io = io;
@@ -1178,8 +1179,8 @@ tr_handshakeNew( tr_peerIo *        io,
     handshake->encryptionMode = encryptionMode;
     handshake->doneCB = doneCB;
     handshake->doneUserData = doneUserData;
-    handshake->session = tr_peerIoGetSession( io );
-    handshake->timeout_timer = evtimer_new( NULL, handshakeTimeout, handshake );
+    handshake->session = session;
+    handshake->timeout_timer = evtimer_new( session->event_base, handshakeTimeout, handshake );
     tr_timerAdd( handshake->timeout_timer, HANDSHAKE_TIMEOUT_SEC, 0 );
 
     tr_peerIoRef( io ); /* balanced by the unref in tr_handshakeFree */

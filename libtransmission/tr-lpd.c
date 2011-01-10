@@ -13,7 +13,7 @@ all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
@@ -61,7 +61,7 @@ THE SOFTWARE.
 * @file tr-lpd.c
 *
 * This module implements the Local Peer Discovery (LPD) protocol as supported by the
-* uTorrent client application.  A typical LPD datagram is 119 bytes long.
+* uTorrent client application. A typical LPD datagram is 119 bytes long.
 *
 * $Id$
 */
@@ -338,7 +338,7 @@ int tr_lpdInit( tr_session* ss, tr_address* tr_addr UNUSED )
     /* Note: lpd_unsolicitedMsgCounter remains 0 until the first timeout event, thus
      * any announcement received during the initial interval will be discarded. */
 
-    lpd_event = event_new( NULL, lpd_socket, EV_READ | EV_PERSIST, event_callback, NULL );
+    lpd_event = event_new( ss->event_base, lpd_socket, EV_READ | EV_PERSIST, event_callback, NULL );
     event_add( lpd_event, NULL );
 
     tr_ndbg( "LPD", "Local Peer Discovery initialised" );
@@ -414,7 +414,7 @@ static inline void lpd_consistencyCheck( void )
 * @return Returns TRUE on success
 *
 * Send a query for torrent t out to the LPD multicast group (or the LAN, for that
-* matter).  A listening client on the same network might react by adding us to his
+* matter). A listening client on the same network might react by adding us to his
 * peer pool for torrent t.
 */
 tr_bool tr_lpdSendAnnounce( const tr_torrent* t )
@@ -471,7 +471,7 @@ tr_bool tr_lpdSendAnnounce( const tr_torrent* t )
 * the peer in/out parameter.
 *
 * @note The port information gets added to the peer structure if tr_lpdConsiderAnnounce
-* is able to extract the necessary information from the announce message.  That is, if
+* is able to extract the necessary information from the announce message. That is, if
 * return != 0, the caller may retrieve the value from the passed structure.
 */
 static int tr_lpdConsiderAnnounce( tr_pex* peer, const char* const msg )

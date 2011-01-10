@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -1689,8 +1689,6 @@ tr_bencToFile( const tr_benc * top, tr_fmt_mode mode, const char * filename )
             nleft = evbuffer_get_length( buffer );
             while( nleft > 0 ) {
                 const int n = evbuffer_write( buffer, fd );
-                if( n < nleft )
-                    fprintf( stderr, "wrote %d of %d to %s\n", n, nleft, tmp );
                 if( n >= 0 )
                     nleft -= n;
                 else if( errno != EAGAIN ) {

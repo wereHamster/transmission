@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2005-2010 Transmission authors and contributors
+ * Copyright (c) 2005-2011 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -32,6 +32,7 @@
 + (NSString *) formattedUInteger: (NSUInteger) value;
 
 + (NSString *) stringForFileSize: (uint64_t) size;
++ (NSString *) stringForFilePartialSize: (uint64_t) partialSize fullSize: (uint64_t) fullSize;
 
 + (NSString *) stringForSpeed: (CGFloat) speed;
 + (NSString *) stringForSpeedAbbrev: (CGFloat) speed;

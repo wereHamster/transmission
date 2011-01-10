@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2009-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -205,6 +205,9 @@ struct tr_torrent
     time_t                     doneDate;
     time_t                     startDate;
     time_t                     anyDate;
+
+    time_t                     secondsDownloading;
+    time_t                     secondsSeeding;
 
     tr_torrent_metadata_func  * metadata_func;
     void                      * metadata_func_user_data;

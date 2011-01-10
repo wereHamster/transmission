@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2009-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -23,8 +23,7 @@
 #include <string.h> /* memcmp */
 #include <stdlib.h> /* qsort */
 
-#include <stdarg.h> /* some 1.4.x versions of evutil.h need this */
-#include <evutil.h> /* evutil_vsnprintf() */
+#include <event2/util.h> /* evutil_vsnprintf() */
 
 #include "transmission.h"
 #include "announcer.h"
@@ -653,7 +652,7 @@ tr_torrentInitFilePieces( tr_torrent * tor )
 static void torrentStart( tr_torrent * tor );
 
 /**
- * Decide on a block size.  constraints:
+ * Decide on a block size. Constraints:
  * (1) most clients decline requests over 16 KiB
  * (2) pieceSize must be a multiple of block size
  */
@@ -766,7 +765,7 @@ setLocalErrorIfFilesDisappeared( tr_torrent * tor )
     if( disappeared )
     {
         tr_tordbg( tor, "%s", "[LAZY] uh oh, the files disappeared" );
-        tr_torrentSetLocalError( tor, "%s", _( "No data found!  Ensure your drives are connected or use \"Set Location\".  To re-download, remove the torrent and re-add it." ) );
+        tr_torrentSetLocalError( tor, "%s", _( "No data found! Ensure your drives are connected or use \"Set Location\". To re-download, remove the torrent and re-add it." ) );
     }
 
     return disappeared;
@@ -1160,14 +1159,16 @@ tr_torrentStat( tr_torrent * tor )
     s->percentComplete = tr_cpPercentComplete ( &tor->completion );
     s->metadataPercentComplete = tr_torrentGetMetadataPercent( tor );
 
-    s->percentDone      = tr_cpPercentDone  ( &tor->completion );
-    s->leftUntilDone    = tr_cpLeftUntilDone( &tor->completion );
-    s->sizeWhenDone     = tr_cpSizeWhenDone ( &tor->completion );
-    s->recheckProgress  = s->activity == TR_STATUS_CHECK ? getVerifyProgress( tor ) : 0;
-    s->activityDate     = tor->activityDate;
-    s->addedDate        = tor->addedDate;
-    s->doneDate         = tor->doneDate;
-    s->startDate        = tor->startDate;
+    s->percentDone         = tr_cpPercentDone  ( &tor->completion );
+    s->leftUntilDone       = tr_cpLeftUntilDone( &tor->completion );
+    s->sizeWhenDone        = tr_cpSizeWhenDone ( &tor->completion );
+    s->recheckProgress     = s->activity == TR_STATUS_CHECK ? getVerifyProgress( tor ) : 0;
+    s->activityDate        = tor->activityDate;
+    s->addedDate           = tor->addedDate;
+    s->doneDate            = tor->doneDate;
+    s->startDate           = tor->startDate;
+    s->secondsSeeding      = tor->secondsSeeding;
+    s->secondsDownloading  = tor->secondsDownloading;
 
     if ((s->activity == TR_STATUS_DOWNLOAD || s->activity == TR_STATUS_SEED) && s->startDate != 0)
         s->idleSecs = difftime(tr_time(), MAX(s->startDate, s->activityDate));
@@ -1925,6 +1926,7 @@ torrentCallScript( const tr_torrent * tor, const char * script )
 
     if( script && *script )
     {
+        int i;
         char * cmd[] = { tr_strdup( script ), NULL };
         char * env[] = {
             tr_strdup_printf( "TR_APP_VERSION=%s", SHORT_VERSION_STRING ),
@@ -1943,6 +1945,9 @@ torrentCallScript( const tr_torrent * tor, const char * script )
             execve( script, cmd, env );
             _exit( 0 );
         }
+
+        for( i=0; cmd[i]; ++i ) tr_free( cmd[i] );
+        for( i=0; env[i]; ++i ) tr_free( env[i] );
     }
 }
 
@@ -2314,7 +2319,6 @@ tr_torrentSetPieceChecked( tr_torrent * tor, tr_piece_index_t pieceIndex )
     assert( tr_isTorrent( tor ) );
     assert( pieceIndex < tor->info.pieceCount );
 
-    tr_tordbg( tor, "[LAZY] setting piece %zu timeChecked to now", (size_t)pieceIndex );
     tor->info.pieces[pieceIndex].timeChecked = tr_time( );
 }
 

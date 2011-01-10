@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -21,7 +21,7 @@
  #include <zlib.h>
 #endif
 
-#include <event.h> /* evbuffer */
+#include <event2/buffer.h>
 
 #include "transmission.h"
 #include "bencode.h"
@@ -455,7 +455,7 @@ addPeers( const tr_torrent * tor,
     tr_torrentPeersFree( peers, peerCount );
 }
 
-/* faster-than-strcmp() optimization.  this is kind of clumsy,
+/* faster-than-strcmp() optimization. This is kind of clumsy,
    but addField() was in the profiler's top 10 list, and this
    makes it 4x faster... */
 #define tr_streq(a,alen,b) ((alen+1==sizeof(b)) && !memcmp(a,b,alen))
@@ -594,6 +594,10 @@ addField( const tr_torrent * tor, tr_benc * d, const char * key )
         tr_bencDictAddInt( d, key, st->startDate );
     else if( tr_streq( key, keylen, "status" ) )
         tr_bencDictAddInt( d, key, st->activity );
+    else if( tr_streq( key, keylen, "secondsDownloading" ) )
+        tr_bencDictAddInt( d, key, st->secondsDownloading );
+    else if( tr_streq( key, keylen, "secondsSeeding" ) )
+        tr_bencDictAddInt( d, key, st->secondsSeeding );
     else if( tr_streq( key, keylen, "trackers" ) )
         addTrackers( inf, tr_bencDictAddList( d, key, inf->trackerCount ) );
     else if( tr_streq( key, keylen, "trackerStats" ) ) {
@@ -1578,6 +1582,7 @@ sessionGet( tr_session               * s,
     tr_bencDictAddInt ( d, "blocklist-size", tr_blocklistGetRuleCount( s ) );
     tr_bencDictAddStr ( d, "config-dir", tr_sessionGetConfigDir( s ) );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_DOWNLOAD_DIR, tr_sessionGetDownloadDir( s ) );
+    tr_bencDictAddInt ( d, "download-dir-free-space",  tr_sessionGetDownloadDirFreeSpace( s ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_LIMIT_GLOBAL, tr_sessionGetPeerLimit( s ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_LIMIT_TORRENT, tr_sessionGetPeerLimitPerTorrent( s ) );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_INCOMPLETE_DIR, tr_sessionGetIncompleteDir( s ) );
@@ -1611,7 +1616,7 @@ sessionGet( tr_session               * s,
         default: str = "preferred"; break;
     }
     tr_bencDictAddStr( d, TR_PREFS_KEY_ENCRYPTION, str );
-
+    
     return NULL;
 }
 

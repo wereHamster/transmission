@@ -24,7 +24,7 @@
  #include <unistd.h> /* getcwd */
 #endif
 
-#include <event.h>
+#include <event2/buffer.h>
 
 #define CURL_DISABLE_TYPECHECK /* otherwise -Wunreachable-code goes insane */
 #include <curl/curl.h>
@@ -100,10 +100,10 @@ tr_strltime( char * buf, int seconds, size_t buflen )
     minutes = ( seconds % 3600 ) / 60;
     seconds = ( seconds % 3600 ) % 60;
 
-    tr_snprintf( d, sizeof( d ), "%'d day%s", days, days==1?"":"s" );
-    tr_snprintf( h, sizeof( h ), "%'d hour%s", hours, hours==1?"":"s" );
-    tr_snprintf( m, sizeof( m ), "%'d minute%s", minutes, minutes==1?"":"s" );
-    tr_snprintf( s, sizeof( s ), "%'d second%s", seconds, seconds==1?"":"s" );
+    tr_snprintf( d, sizeof( d ), "%d %s", days, days==1?"day":"days" );
+    tr_snprintf( h, sizeof( h ), "%d %s", hours, hours==1?"hour":"hours" );
+    tr_snprintf( m, sizeof( m ), "%d %s", minutes, minutes==1?"minute":"minutes" );
+    tr_snprintf( s, sizeof( s ), "%d %s", seconds, seconds==1?"seconds":"seconds" );
 
     if( days )
     {
@@ -297,7 +297,7 @@ static tr_option opts[] =
     { 'U', "no-uplimit",             "Disable max upload speed for the current torrent(s) or globally", "U", 0, NULL },
     { 'v', "verify",                 "Verify the current torrent(s)", "v",  0, NULL },
     { 'V', "version",                "Show version number and exit", "V", 0, NULL },
-    { 'w', "download-dir",           "When adding a new torrent, set its download folder.  Otherwise, set the default download folder", "w",  1, "<path>" },
+    { 'w', "download-dir",           "When adding a new torrent, set its download folder. Otherwise, set the default download folder", "w",  1, "<path>" },
     { 'x', "pex",                    "Enable peer exchange (PEX)", "x",  0, NULL },
     { 'X', "no-pex",                 "Disable peer exchange (PEX)", "X",  0, NULL },
     { 'y', "lpd",                    "Enable local peer discovery (LPD)", "y",  0, NULL },
@@ -667,6 +667,8 @@ static const char * details_keys[] = {
     "rateDownload",
     "rateUpload",
     "recheckProgress",
+    "secondsDownloading",
+    "secondsSeeding",
     "seedRatioMode",
     "seedRatioLimit",
     "sizeWhenDone",
@@ -946,23 +948,27 @@ printDetails( tr_benc * top )
             if( tr_bencDictFindInt( t, "addedDate", &i ) && i )
             {
                 const time_t tt = i;
-                printf( "  Date added:      %s", ctime( &tt ) );
+                printf( "  Date added:       %s", ctime( &tt ) );
             }
             if( tr_bencDictFindInt( t, "doneDate", &i ) && i )
             {
                 const time_t tt = i;
-                printf( "  Date finished:   %s", ctime( &tt ) );
+                printf( "  Date finished:    %s", ctime( &tt ) );
             }
             if( tr_bencDictFindInt( t, "startDate", &i ) && i )
             {
                 const time_t tt = i;
-                printf( "  Date started:    %s", ctime( &tt ) );
+                printf( "  Date started:     %s", ctime( &tt ) );
             }
             if( tr_bencDictFindInt( t, "activityDate", &i ) && i )
             {
                 const time_t tt = i;
-                printf( "  Latest activity: %s", ctime( &tt ) );
+                printf( "  Latest activity:  %s", ctime( &tt ) );
             }
+            if( tr_bencDictFindInt( t, "secondsDownloading", &i ) && ( i > 0 ) )
+                printf( "  Downloading Time: %s\n", tr_strltime( buf, i, sizeof( buf ) ) );
+            if( tr_bencDictFindInt( t, "secondsSeeding", &i ) && ( i > 0 ) )
+                printf( "  Seeding Time:     %s\n", tr_strltime( buf, i, sizeof( buf ) ) );
             printf( "\n" );
 
             printf( "ORIGINS\n" );
@@ -1346,7 +1352,7 @@ printTrackersImpl( tr_benc * trackerStats )
                 {
                     tr_strltime( buf, now - lastAnnounceTime, sizeof( buf ) );
                     if( lastAnnounceSucceeded )
-                        printf( "  Got a list of %'d peers %s ago\n",
+                        printf( "  Got a list of %d peers %s ago\n",
                                 (int)lastAnnouncePeerCount, buf );
                     else if( lastAnnounceTimedOut )
                         printf( "  Peer list request timed out; will retry\n" );
@@ -1377,7 +1383,7 @@ printTrackersImpl( tr_benc * trackerStats )
                 {
                     tr_strltime( buf, now - lastScrapeTime, sizeof( buf ) );
                     if( lastScrapeSucceeded )
-                        printf( "  Tracker had %'d seeders and %'d leechers %s ago\n",
+                        printf( "  Tracker had %d seeders and %d leechers %s ago\n",
                                 (int)seederCount, (int)leecherCount, buf );
                     else if( lastScrapeTimedOut )
                         printf( "  Tracker scrape timed out; will retry\n" );
@@ -1454,6 +1460,8 @@ printSession( tr_benc * top )
             printf( "  Configuration directory: %s\n", str );
         if( tr_bencDictFindStr( args,  TR_PREFS_KEY_DOWNLOAD_DIR, &str ) )
             printf( "  Download directory: %s\n", str );
+        if( tr_bencDictFindInt( args,  "download-dir-free-space", &i ) )
+            printf( "  Download directory free space: %s\n",  strlsize( buf, i, sizeof buf ) );
         if( tr_bencDictFindInt( args, TR_PREFS_KEY_PEER_PORT, &i ) )
             printf( "  Listenport: %" PRId64 "\n", i );
         if( tr_bencDictFindBool( args, TR_PREFS_KEY_PORT_FORWARDING, &boolVal ) )
@@ -1723,19 +1731,19 @@ flush( const char * rpcurl, tr_benc ** benc )
         curl_easy_getinfo( curl, CURLINFO_RESPONSE_CODE, &response );
         switch( response ) {
             case 200:
-                status |= processResponse( rpcurl, EVBUFFER_DATA(buf), EVBUFFER_LENGTH(buf) );
+                status |= processResponse( rpcurl, (const char*) evbuffer_pullup( buf, -1 ), evbuffer_get_length( buf ) );
                 break;
             case 409:
-                /* session id failed.  our curl header func has already
-                * pulled the new session id from this response's headers,
-                * build a new CURL* and try again */
+                /* Session id failed. Our curl header func has already
+                 * pulled the new session id from this response's headers,
+                 * build a new CURL* and try again */
                 curl_easy_cleanup( curl );
                 curl = NULL;
                 flush( rpcurl, benc );
                 benc = NULL;
                 break;
             default:
-                fprintf( stderr, "Unexpected response: %s\n", (char*)EVBUFFER_DATA(buf) );
+                fprintf( stderr, "Unexpected response: %s\n", evbuffer_pullup( buf, -1 ) );
                 status |= EXIT_FAILURE;
                 break;
         }

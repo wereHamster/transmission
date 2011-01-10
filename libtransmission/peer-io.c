@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2007-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -394,8 +394,8 @@ tr_peerIoNew( tr_session       * session,
     io->timeCreated = tr_time( );
     io->inbuf = evbuffer_new( );
     io->outbuf = evbuffer_new( );
-    io->event_read = event_new( NULL, io->socket, EV_READ, event_read_cb, io );
-    io->event_write = event_new( NULL, io->socket, EV_WRITE, event_write_cb, io );
+    io->event_read = event_new( session->event_base, io->socket, EV_READ, event_read_cb, io );
+    io->event_write = event_new( session->event_base, io->socket, EV_WRITE, event_write_cb, io );
     tr_bandwidthConstruct( &io->bandwidth, session, parent );
     tr_bandwidthSetPeer( &io->bandwidth, io );
     dbgmsg( io, "bandwidth is %p; its parent is %p", &io->bandwidth, parent );
@@ -644,8 +644,8 @@ tr_peerIoReconnect( tr_peerIo * io )
     event_del( io->event_read );
     event_del( io->event_write );
     io->socket = tr_netOpenPeerSocket( session, &io->addr, io->port, io->isSeed );
-    io->event_read = event_new( NULL, io->socket, EV_READ, event_read_cb, io );
-    io->event_write = event_new( NULL, io->socket, EV_WRITE, event_write_cb, io );
+    io->event_read = event_new( session->event_base, io->socket, EV_READ, event_read_cb, io );
+    io->event_write = event_new( session->event_base, io->socket, EV_WRITE, event_write_cb, io );
 
     if( io->socket >= 0 )
     {

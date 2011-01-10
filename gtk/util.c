@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -30,8 +30,6 @@
 #ifdef HAVE_DBUS_GLIB
  #include <dbus/dbus-glib.h>
 #endif
-
-#include <evhttp.h>
 
 #include <libtransmission/transmission.h> /* TR_RATIO_NA, TR_RATIO_INF */
 #include <libtransmission/utils.h> /* tr_inf */
@@ -715,6 +713,16 @@ gtr_widget_set_tooltip_text( GtkWidget * w, const char * tip )
 #endif
 }
 
+GdkWindow*
+gtr_widget_get_window( GtkWidget * w )
+{
+#if GTK_CHECK_VERSION( 2,14,0 )
+    return gtk_widget_get_window( w );
+#else
+    return w->window;
+#endif
+}
+
 gboolean
 gtr_widget_get_realized( GtkWidget * w )
 {
@@ -750,6 +758,17 @@ gtr_widget_set_visible( GtkWidget * w, gboolean b )
         gtk_widget_show( w );
     else
         gtk_widget_hide( w );
+#endif
+}
+
+void
+gtr_cell_renderer_get_padding( GtkCellRenderer * cell, gint * xpad, gint * ypad )
+{
+#if GTK_CHECK_VERSION( 2,18,0 )
+    gtk_cell_renderer_get_padding( cell, xpad, ypad );
+#else
+    if( xpad != NULL ) *xpad = cell->xpad;
+    if( ypad != NULL ) *ypad = cell->ypad;
 #endif
 }
 
@@ -819,16 +838,16 @@ gtr_thread_func( gpointer data )
 }
 #endif
 
-void
+guint
 gtr_idle_add( GSourceFunc function, gpointer data )
 {
 #if GTK_CHECK_VERSION( 2,12,0 )
-    gdk_threads_add_idle( function, data );
+    return gdk_threads_add_idle( function, data );
 #else
-    g_idle_add_full( G_PRIORITY_DEFAULT,
-                     gtr_thread_func,
-                     gtr_func_data_new( function, data ),
-                     gtr_func_data_free );
+    return g_idle_add_full( G_PRIORITY_DEFAULT,
+                            gtr_thread_func,
+                            gtr_func_data_new( function, data ),
+                            gtr_func_data_free );
 #endif
 }
 
@@ -886,7 +905,7 @@ gtr_unrecognized_url_dialog( GtkWidget * parent, const char * url )
     if( gtr_is_magnet_link( url ) && ( strstr( url, xt ) == NULL ) )
     {
         g_string_append_printf( gstr, "\n \n" );
-        g_string_append_printf( gstr, _( "This magnet link appears to be intended for something other than BitTorrent.  BitTorrent magnet links have a section containing \"%s\"." ), xt );
+        g_string_append_printf( gstr, _( "This magnet link appears to be intended for something other than BitTorrent. BitTorrent magnet links have a section containing \"%s\"." ), xt );
     }
 
     gtk_message_dialog_format_secondary_text( GTK_MESSAGE_DIALOG( w ), "%s", gstr->str );

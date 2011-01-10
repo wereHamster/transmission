@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2006-2010 Transmission authors and contributors
+ * Copyright (c) 2006-2011 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -225,6 +225,9 @@
 - (NSDate *) dateCompleted;
 - (NSDate *) dateActivity;
 - (NSDate *) dateActivityOrAdd;
+
+- (NSInteger) secondsDownloading;
+- (NSInteger) secondsSeeding;
 
 - (NSInteger) stalledMinutes;
 - (BOOL) isStalled;

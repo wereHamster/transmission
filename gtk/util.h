@@ -1,7 +1,7 @@
 /*
  * This file Copyright (C) 2008-2010 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2.  Works owned by the
+ * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
  * so that the bulk of its code can remain under the MIT license.
  * This exemption does not extend to derived works not owned by
@@ -131,16 +131,22 @@ int gtr_mkdir_with_parents( const char *name, int mode );
 guint gtr_timeout_add_seconds( guint seconds, GSourceFunc func, gpointer data );
 
 /* backwards-compatible wrapper around gdk_threads_add_idle() */
-void gtr_idle_add( GSourceFunc  func, gpointer data );
+guint gtr_idle_add( GSourceFunc  func, gpointer data );
 
 /* backwards-compatible wrapper around gtk_widget_set_tooltip_text() */
 void gtr_widget_set_tooltip_text( GtkWidget * w, const char * tip );
+
+/* backwards-compatible wrapper around gtk_widget_get_window() */
+GdkWindow* gtr_widget_get_window( GtkWidget * w );
 
 /* backwards-compatible wrapper around gtk_widget_get_realized() */
 gboolean gtr_widget_get_realized( GtkWidget * w );
 
 /* backwards-compatible wrapper around gtk_widget_set_visible() */
 void gtr_widget_set_visible( GtkWidget *, gboolean );
+
+/* backwards-compatible wrapper around gtk_cell_renderer_get_padding() */
+void gtr_cell_renderer_get_padding( GtkCellRenderer *, gint * xpad, gint * ypad );
 
 /* backwards-compatible wrapper around g_object_ref_sink() */
 gpointer gtr_object_ref_sink( gpointer object );
