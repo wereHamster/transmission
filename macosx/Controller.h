@@ -31,6 +31,7 @@
 @class AddWindowController;
 @class Badger;
 @class DragOverlayWindow;
+@class FilterBarView;
 @class FilterButton;
 @class InfoWindowController;
 @class MessageWindowController;
@@ -77,7 +78,7 @@ typedef enum
     IBOutlet NSTextField            * fTotalDLField, * fTotalULField;
     IBOutlet NSImageView            * fTotalDLImageView;
     
-    IBOutlet StatusBarView          * fFilterBar;
+    IBOutlet FilterBarView          * fFilterBar;
     IBOutlet FilterButton           * fNoFilterButton, * fActiveFilterButton, * fDownloadFilterButton,
                                     * fSeedFilterButton, * fPauseFilterButton;
     IBOutlet NSSearchField          * fSearchFilterField;
@@ -102,8 +103,7 @@ typedef enum
     #warning change to QLPreviewPanel
     id                              fPreviewPanel;
     BOOL                            fQuitting;
-    
-    BOOL                            fUpdateInProgress;
+    BOOL                            fQuitRequested;
     BOOL                            fPauseOnLaunch;
     
     Badger                          * fBadger;

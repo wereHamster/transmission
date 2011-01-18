@@ -1455,7 +1455,7 @@ peerCallbackFunc( tr_peer * peer, const tr_peer_event * e, void * vt )
                     const tr_piece_index_t p = e->pieceIndex;
                     const tr_bool ok = tr_torrentCheckPiece( tor, p );
 
-                    tr_tordbg( tor, "[LAZY] checked just-completed piece %zu", (size_t)p );
+                    tordbg( t, "[LAZY] checked just-completed piece %zu", (size_t)p );
 
                     if( !ok )
                     {
@@ -1588,6 +1588,8 @@ ensureAtomExists( Torrent           * t,
         
         if( a->seedProbability == -1 )
             atomSetSeedProbability( a, seedProbability );
+
+        a->flags |= flags;
     }
 }
 
@@ -1764,12 +1766,6 @@ tr_peerMgrAddIncoming( tr_peerMgr * manager,
     }
 
     managerUnlock( manager );
-}
-
-static tr_bool
-tr_isPex( const tr_pex * pex )
-{
-    return pex && tr_isAddress( &pex->addr );
 }
 
 void

@@ -144,7 +144,7 @@ const char* tr_getDefaultDownloadDir( void );
 #define TR_DEFAULT_RPC_PORT_STR                "9091"
 #define TR_DEFAULT_RPC_URL_STR       "/transmission/"
 #define TR_DEFAULT_PEER_PORT_STR              "51413"
-#define TR_DEFAULT_PEER_SOCKET_TOS_STR            "0"
+#define TR_DEFAULT_PEER_SOCKET_TOS_STR      "default"
 #define TR_DEFAULT_PEER_LIMIT_GLOBAL_STR        "240"
 #define TR_DEFAULT_PEER_LIMIT_TORRENT_STR        "60"
 
@@ -498,7 +498,8 @@ typedef enum
     TR_RPC_TORRENT_REMOVING,
     TR_RPC_TORRENT_CHANGED, /* catch-all for the "torrent-set" rpc method */
     TR_RPC_TORRENT_MOVED,
-    TR_RPC_SESSION_CHANGED
+    TR_RPC_SESSION_CHANGED,
+    TR_RPC_SESSION_CLOSE
 }
 tr_rpc_callback_type;
 
