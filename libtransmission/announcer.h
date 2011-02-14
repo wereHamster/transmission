@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -35,6 +35,8 @@ typedef enum
 }
 TrackerEventType;
 
+struct tr_pex;
+
 /** @brief Notification object to tell listeners about announce or scrape occurences */
 typedef struct
 {
@@ -46,8 +48,8 @@ typedef struct
     const char * tracker;
 
     /* for TR_TRACKER_PEERS */
-    const uint8_t *  compact;
-    int              compactLen;
+    const struct tr_pex * pex;
+    size_t pexCount;
 
     /* [0...100] for probability a peer is a seed. calculated by the leecher/seeder ratio */
     int8_t           seedProbability;
@@ -70,8 +72,7 @@ void tr_announcerClose( tr_session * );
 ***  For torrent customers
 **/
 
-struct tr_torrent_tiers * tr_announcerAddTorrent( struct tr_announcer *,
-                                                  tr_torrent          * torrent,
+struct tr_torrent_tiers * tr_announcerAddTorrent( tr_torrent          * torrent,
                                                   tr_tracker_callback * cb,
                                                   void                * cbdata );
 

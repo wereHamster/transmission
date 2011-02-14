@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2008-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -91,7 +91,7 @@ callback( void *             vdata,
 
         case JSON_T_FLOAT:
             data->hasContent = TRUE;
-            tr_bencInitReal( getNode( data ), (double)value->vu.float_value );
+            tr_bencInitReal( getNode( data ), value->vu.float_value );
             break;
 
         case JSON_T_NULL:

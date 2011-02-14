@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -235,10 +235,10 @@ getHashInfo( tr_metainfo_builder * b )
         while( leftInPiece )
         {
             const size_t n_this_pass = (size_t) MIN( ( b->files[fileIndex].size - off ), leftInPiece );
-            read( fd, bufptr, n_this_pass );
-            bufptr += n_this_pass;
-            off += n_this_pass;
-            leftInPiece -= n_this_pass;
+            const ssize_t n_read = read( fd, bufptr, n_this_pass );
+            bufptr += n_read;
+            off += n_read;
+            leftInPiece -= n_read;
             if( off == b->files[fileIndex].size )
             {
                 off = 0;

@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2007-2008 Transmission authors and contributors
+ * Copyright (c) Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -79,6 +79,8 @@ void           tr_core_close( TrCore* );
 
 /* Return the model used without incrementing the reference count */
 GtkTreeModel * tr_core_model( TrCore * self );
+
+void           tr_core_clear( TrCore * self );
 
 tr_session *   tr_core_session( TrCore * self );
 
@@ -191,11 +193,22 @@ enum
     MC_TORRENT_RAW,
     MC_SPEED_UP,
     MC_SPEED_DOWN,
+    MC_RECHECK_PROGRESS,
     MC_ACTIVE,
     MC_ACTIVITY,
     MC_FINISHED,
     MC_PRIORITY,
     MC_TRACKERS,
+
+    /* tr_stat.error
+     * Tracked because ACTIVITY_FILTER_ERROR needs the row-changed events */
+    MC_ERROR,
+
+    /* tr_stat.{ peersSendingToUs + peersGettingFromUs + webseedsSendingToUs }
+     * Tracked because ACTIVITY_FILTER_ACTIVE needs the row-changed events */
+    MC_ACTIVE_PEER_COUNT,
+
+
     MC_ROW_COUNT
 };
 

@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -680,6 +680,7 @@ onRowActivated( GtkTreeView * view, GtkTreePath * path,
     return handled;
 }
 
+#if 0
 static void
 fileMenuSetDownload( GtkWidget * item, gpointer gdata )
 {
@@ -771,6 +772,7 @@ fileMenuPopup( GtkWidget * w, GdkEventButton * event, gpointer filedata )
                     event ? event->button : 0,
                     event ? event->time : gtk_get_current_event_time( ) );
 }
+#endif
 
 static gboolean
 onViewPathToggled( GtkTreeView       * view,
@@ -877,6 +879,7 @@ onViewButtonPressed( GtkWidget * w, GdkEventButton * event, gpointer gdata )
     {
         handled = onViewPathToggled( treeview, col, path, data );
     }
+#if 0
     else if( event->type == GDK_BUTTON_PRESS && event->button == 3
              && getAndSelectEventPath( treeview, event, &col, &path ) )
     {
@@ -887,17 +890,20 @@ onViewButtonPressed( GtkWidget * w, GdkEventButton * event, gpointer gdata )
             handled = TRUE;
         }
     }
+#endif
 
     gtk_tree_path_free( path );
     return handled;
 }
 
+#if 0
 static gboolean
 onViewPopupMenu( GtkWidget * w, gpointer gdata )
 {
     fileMenuPopup( w, NULL, gdata );
     return TRUE;
 }
+#endif
 
 GtkWidget *
 gtr_file_list_new( TrCore * core, int torrentId )
@@ -926,8 +932,10 @@ gtr_file_list_new( TrCore * core, int torrentId )
     gtk_container_set_border_width( GTK_CONTAINER( view ), GUI_PAD_BIG );
     g_signal_connect( view, "button-press-event",
                       G_CALLBACK( onViewButtonPressed ), data );
+#if 0
     g_signal_connect( view, "popup-menu",
                       G_CALLBACK( onViewPopupMenu ), data );
+#endif
     g_signal_connect( view, "row_activated",
                       G_CALLBACK( onRowActivated ), data );
     g_signal_connect( view, "button-release-event",
@@ -1040,5 +1048,6 @@ gtr_file_list_new( TrCore * core, int torrentId )
     g_object_set_data_full( G_OBJECT( ret ), "file-data", data, freeData );
     gtr_file_list_set_torrent( ret, torrentId );
 
+    pango_font_description_free( pango_font_description );
     return ret;
 }

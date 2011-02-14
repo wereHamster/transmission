@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2008-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -58,7 +58,7 @@ static struct tr_msg_list * myHead = NULL;
 static gboolean
 is_pinned_to_new( struct MsgData * data )
 {
-    gboolean pinned_to_new;
+    gboolean pinned_to_new = FALSE;
 
     if( data->view == NULL )
     {
@@ -335,7 +335,6 @@ appendColumn( GtkTreeView * view,
             break;
     }
 
-    gtk_tree_view_column_set_sort_column_id( c, col );
     gtk_tree_view_append_column( view, c );
 }
 

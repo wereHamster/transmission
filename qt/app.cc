@@ -139,6 +139,11 @@ MyApp :: MyApp( int& argc, char ** argv ):
     if( configDir == 0 )
         configDir = tr_getDefaultConfigDir( MY_CONFIG_NAME );
 
+    // ensure our config directory exists
+    QDir dir( configDir );
+    if( !dir.exists() )
+        dir.mkpath( configDir );
+
     // is this the first time we've run transmission?
     const bool firstTime = !QFile(QDir(configDir).absoluteFilePath("settings.json")).exists();
 

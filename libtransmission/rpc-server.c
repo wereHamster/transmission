@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2008-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -363,7 +363,7 @@ add_response( struct evhttp_request * req, struct tr_rpc_server * server,
 
             /* zlib's manual says: "Add 16 to windowBits to write a simple gzip header
              * and trailer around the compressed data instead of a zlib wrapper." */
-#ifdef TR_EMBEDDED
+#ifdef TR_LIGHTWEIGHT
             compressionLevel = Z_DEFAULT_COMPRESSION;
 #else
             compressionLevel = Z_BEST_COMPRESSION;

@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2
@@ -153,7 +153,7 @@ watchdir_update_impl( dtr_watchdir * w )
 
 #define WATCHDIR_POLL_INTERVAL_SECS 10
 
-#define FILE_DELIMITER '\0'
+#define FILE_DELIMITER '\t'
 
 static void
 watchdir_new_impl( dtr_watchdir * w UNUSED )

@@ -38,6 +38,8 @@ THE SOFTWARE.
 static void
 rebind_ipv6(tr_session *ss, tr_bool force)
 {
+    tr_bool is_default;
+    const struct tr_address * public_addr;
     struct sockaddr_in6 sin6;
     const unsigned char *ipv6 = tr_globalIPv6();
     int s = -1, rc;
@@ -71,6 +73,10 @@ rebind_ipv6(tr_session *ss, tr_bool force)
     if(ipv6)
         memcpy(&sin6.sin6_addr, ipv6, 16);
     sin6.sin6_port = htons(ss->udp_port);
+    public_addr = tr_sessionGetPublicAddress(ss, TR_AF_INET6, &is_default);
+    if(public_addr && !is_default)
+        sin6.sin6_addr = public_addr->addr.addr6;
+
     rc = bind(s, (struct sockaddr*)&sin6, sizeof(sin6));
     if(rc < 0)
         goto fail;
@@ -106,15 +112,14 @@ rebind_ipv6(tr_session *ss, tr_bool force)
 }
 
 static void
-event_callback(int s, short type, void *sv)
+event_callback(int s, short type UNUSED, void *sv)
 {
-    tr_session *ss = (tr_session*)sv;
     unsigned char *buf;
     struct sockaddr_storage from;
     socklen_t fromlen;
     int rc;
 
-    assert(tr_isSession(ss));
+    assert(tr_isSession(sv));
     assert(type == EV_READ);
 
     buf = malloc(4096);
@@ -142,8 +147,10 @@ event_callback(int s, short type, void *sv)
 }    
 
 void
-tr_udpInit(tr_session *ss, const tr_address * addr)
+tr_udpInit(tr_session *ss)
 {
+    tr_bool is_default;
+    const struct tr_address * public_addr;
     struct sockaddr_in sin;
     int rc;
 
@@ -162,7 +169,9 @@ tr_udpInit(tr_session *ss, const tr_address * addr)
 
     memset(&sin, 0, sizeof(sin));
     sin.sin_family = AF_INET;
-    memcpy(&sin.sin_addr, &addr->addr.addr4, sizeof (struct in_addr));
+    public_addr = tr_sessionGetPublicAddress(ss, TR_AF_INET, &is_default);
+    if(public_addr && !is_default)
+        memcpy(&sin.sin_addr, &public_addr->addr.addr4, sizeof (struct in_addr));
     sin.sin_port = htons(ss->udp_port);
     rc = bind(ss->udp_socket, (struct sockaddr*)&sin, sizeof(sin));
     if(rc < 0) {

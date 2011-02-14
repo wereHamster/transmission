@@ -39,6 +39,7 @@
 @class StatusBarView;
 @class Torrent;
 @class TorrentTableView;
+@class URLSheetWindowController;
 
 typedef enum
 {
@@ -96,10 +97,6 @@ typedef enum
     IBOutlet NSMenu                 * fGroupsSetMenu, * fGroupsSetContextMenu, * fGroupFilterMenu;
     IBOutlet NSPopUpButton          * fGroupsButton;
     
-    IBOutlet NSWindow               * fURLSheetWindow;
-    IBOutlet NSTextField            * fURLSheetTextField;
-    IBOutlet NSButton               * fURLSheetOpenButton;
-    
     #warning change to QLPreviewPanel
     id                              fPreviewPanel;
     BOOL                            fQuitting;
@@ -132,10 +129,9 @@ typedef enum
 - (void) duplicateOpenAlert: (NSString *) name;
 - (void) duplicateOpenMagnetAlert: (NSString *) address transferName: (NSString *) name;
 
-- (void) openURL:               (NSString *) urlString;
-- (void) openURLEndSheet:       (id) sender;
-- (void) openURLCancelEndSheet: (id) sender;
-- (void) openURLShowSheet:      (id) sender;
+- (void) openURL: (NSString *) urlString;
+- (void) openURLShowSheet: (id) sender;
+- (void) urlSheetDidEnd: (URLSheetWindowController *) controller url: (NSString *) urlString returnCode: (NSInteger) returnCode;
 
 - (void) quitSheetDidEnd: (NSWindow *) sheet returnCode: (NSInteger) returnCode contextInfo: (void *) contextInfo;
 
@@ -159,6 +155,8 @@ typedef enum
 - (void) confirmRemoveTorrents: (NSArray *) torrents deleteData: (BOOL) deleteData;
 - (void) removeNoDelete:                (id) sender;
 - (void) removeDeleteData:              (id) sender;
+
+- (void) clearCompleted: (id) sender;
 
 - (void) moveDataFilesSelected: (id) sender;
 - (void) moveDataFiles: (NSArray *) torrents;
@@ -274,6 +272,7 @@ typedef enum
 - (void) rpcCallback: (tr_rpc_callback_type) type forTorrentStruct: (struct tr_torrent *) torrentStruct;
 - (void) rpcAddTorrentStruct: (NSValue *) torrentStructPtr;
 - (void) rpcRemoveTorrent: (Torrent *) torrent;
+- (void) rpcRemoveTorrentDeleteData: (Torrent *) torrent;
 - (void) rpcStartedStoppedTorrent: (Torrent *) torrent;
 - (void) rpcChangedTorrent: (Torrent *) torrent;
 - (void) rpcMovedTorrent: (Torrent *) torrent;

@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2
@@ -155,6 +155,8 @@ replaceSubstr( const char * str, const char * in, const char * out )
         evbuffer_add( buf, out, outlen );
         str = walk + inlen;
     }
+
+    evbuffer_add( buf, str, strlen( str ) );
 
     return evbuffer_free_to_str( buf );
 }

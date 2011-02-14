@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -106,10 +106,10 @@ static GtkActionEntry entries[] =
     { "sort-menu", NULL, N_( "_Sort Torrents By" ), NULL, NULL, NULL },
     { "edit-menu", NULL, N_( "_Edit" ), NULL, NULL, NULL },
     { "help-menu", NULL, N_( "_Help" ), NULL, NULL, NULL },
-    { "copy-magnet-link-to-clipboard",  GTK_STOCK_COPY, N_("Copy _Magnet Link to Clipboard" ), "<control>M", NULL,  G_CALLBACK( action_cb ) },
-    { "add-torrent-from-url",  GTK_STOCK_ADD, N_("Add _URL..." ), NULL, N_( "Add URL..." ),  G_CALLBACK( action_cb ) },
-    { "add-torrent-toolbar",  GTK_STOCK_ADD, NULL, NULL, N_( "Add a torrent" ),  G_CALLBACK( action_cb ) },
-    { "add-torrent-menu", GTK_STOCK_ADD, N_( "_Add File..." ), "<control>D", N_( "Add a torrent" ), G_CALLBACK( action_cb ) },
+    { "copy-magnet-link-to-clipboard",  GTK_STOCK_COPY, N_("Copy _Magnet Link to Clipboard" ), "", NULL,  G_CALLBACK( action_cb ) },
+    { "open-torrent-from-url",  GTK_STOCK_OPEN, N_("Open _URL..." ), "<control>U", N_( "Open URL..." ),  G_CALLBACK( action_cb ) },
+    { "open-torrent-toolbar",  GTK_STOCK_OPEN, NULL, NULL, N_( "Open a torrent" ),  G_CALLBACK( action_cb ) },
+    { "open-torrent-menu", GTK_STOCK_OPEN, NULL, NULL, N_( "Open a torrent" ), G_CALLBACK( action_cb ) },
     { "start-torrent", GTK_STOCK_MEDIA_PLAY, N_( "_Start" ), "<control>S", N_( "Start torrent" ), G_CALLBACK( action_cb ) },
     { "show-stats", NULL, N_( "_Statistics" ), NULL, NULL, G_CALLBACK( action_cb ) },
     { "donate", NULL, N_( "_Donate" ), NULL, NULL, G_CALLBACK( action_cb ) },
@@ -126,7 +126,7 @@ static GtkActionEntry entries[] =
     { "deselect-all", NULL, N_( "Dese_lect All" ), "<shift><control>A", NULL, G_CALLBACK( action_cb ) },
     { "edit-preferences", GTK_STOCK_PREFERENCES, NULL, NULL, NULL, G_CALLBACK( action_cb ) },
     { "show-torrent-properties", GTK_STOCK_PROPERTIES, NULL, "<alt>Return", N_( "Torrent properties" ), G_CALLBACK( action_cb ) },
-    { "open-torrent-folder",  GTK_STOCK_OPEN, N_( "_Open Folder" ), NULL, NULL, G_CALLBACK( action_cb ) },
+    { "open-torrent-folder",  GTK_STOCK_OPEN, N_( "Open Fold_er" ), "<control>E", NULL, G_CALLBACK( action_cb ) },
     { "show-about-dialog", GTK_STOCK_ABOUT, NULL, NULL, NULL, G_CALLBACK( action_cb ) },
     { "help", GTK_STOCK_HELP, N_( "_Contents" ), "F1", NULL, G_CALLBACK( action_cb ) },
     { "update-tracker", GTK_STOCK_NETWORK, N_( "Ask Tracker for _More Peers" ), NULL, NULL, G_CALLBACK( action_cb ) },

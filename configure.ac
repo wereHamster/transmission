@@ -3,8 +3,8 @@ dnl STATUS: "X" for prerelease beta builds,
 dnl         "Z" for unsupported trunk builds,
 dnl         "0" for stable, supported releases
 dnl these should be the only two lines you need to change
-m4_define([user_agent_prefix],[2.13+])
-m4_define([peer_id_prefix],[-WH213Z-])
+m4_define([user_agent_prefix],[2.21+])
+m4_define([peer_id_prefix],[-WH221Z-])
 
 AC_INIT([transmission],
         [user_agent_prefix],
@@ -406,6 +406,14 @@ case $host_os in
 
 esac
 
+AC_ARG_ENABLE([lightweight],
+              AS_HELP_STRING([--enable-lightweight],[optimize libtransmission for low-resource systems: smaller cache size, prefer unencrypted peer connections, etc.]),
+              [enable_lightweight=${enableval}],
+              [enable_lightweight="no"])
+if test "x$enable_lightweight" = "xyes" ; then 
+  AC_DEFINE([TR_LIGHTWEIGHT],[1],[optimize libtransmission for low-resource systems])
+fi 
+
 AC_ARG_ENABLE([cli],
               [AS_HELP_STRING([--enable-cli],[build command-line client])],
               [build_cli=${enableval}],
@@ -476,7 +484,6 @@ AC_CONFIG_FILES([Makefile
                  web/stylesheets/Makefile
                  po/Makefile.in])
 
-ac_configure_args="$ac_configure_args --enable-static --disable-shared -q"
 AC_OUTPUT
 
 echo "
@@ -485,6 +492,10 @@ Configuration:
 
    Source code location:                              ${srcdir}
    Compiler:                                          ${CXX}
+
+   Build libtransmission:                             yes
+
+      * optimized for low-resource systems:           ${enable_lightweight}
 
    Build Command-Line client:                         ${build_cli}
 

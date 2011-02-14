@@ -8,6 +8,7 @@ EXTRA_DIST = \
     InfoWindow.xib \
     MessageWindow.xib \
     StatsWindow.xib \
+    URLSheetWindow.xib \
     Defaults.plist \
     Info.plist \
     Transmission_Prefix.pch \
@@ -81,6 +82,8 @@ EXTRA_DIST = \
     GroupsPrefsController.m \
     GroupToolbarItem.h \
     GroupToolbarItem.m \
+    InfoTabButtonBack.h \
+    InfoTabButtonBack.m \
     InfoTabButtonCell.h \
     InfoTabButtonCell.m \
     InfoTextField.h \
@@ -142,7 +145,9 @@ EXTRA_DIST = \
     TrackerNode.h \
     TrackerNode.m \
     TrackerTableView.h \
-    TrackerTableView.m
+    TrackerTableView.m \
+    URLSheetWindowController.h \
+    URLSheetWindowController.m
 
 dist-hook:
 	rm -rf `find $(distdir)/ -type d -name .svn`

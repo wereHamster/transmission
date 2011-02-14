@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2008-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -91,6 +91,7 @@ struct tr_session
     tr_bool                      isDHTEnabled;
     tr_bool                      isLPDEnabled;
     tr_bool                      isBlocklistEnabled;
+    tr_bool                      isPrefetchEnabled;
     tr_bool                      isTorrentDoneScriptEnabled;
     tr_bool                      isClosed;
     tr_bool                      useLazyBitfield;
@@ -303,6 +304,16 @@ void tr_sessionSetAltSpeed_Bps  ( tr_session *, tr_direction, int Bps );
 tr_bool  tr_sessionGetActiveSpeedLimit_Bps( const tr_session  * session,
                                             tr_direction        dir,
                                             int               * setme );
+
+
+/**
+ * Tries to use libevent's cached timeval so we can avoid excessive calls
+ * to gettimeofday().
+ *
+ * This isn't for all uses, but should be reasonably accurate when called
+ * near the beginning of a libevent callback.
+ */
+uint64_t tr_sessionGetTimeMsec( tr_session * session );
 
 
 #endif

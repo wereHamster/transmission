@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -358,7 +358,7 @@ tr_torrentGetMetadataPercent( const tr_torrent * tor )
         ret = 1.0;
     else {
         const struct tr_incomplete_metadata * m = tor->incompleteMetadata;
-        if( m == NULL )
+        if( !m || !m->pieceCount )
             ret = 0.0;
         else
             ret = (m->pieceCount - m->piecesNeededCount) / (double)m->pieceCount;

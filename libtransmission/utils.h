@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -101,7 +101,7 @@ const char * tr_strip_positional_args( const char * fmt );
 
 /* #define DISABLE_GETTEXT */
 #ifndef DISABLE_GETTEXT
- #if defined(WIN32) || defined(TR_EMBEDDED)
+ #if defined(WIN32) || defined(TR_LIGHTWEIGHT)
    #define DISABLE_GETTEXT
  #endif
 #endif
@@ -323,13 +323,13 @@ void evbuffer_ref_cleanup_tr_free( const void * data UNUSED, size_t datalen UNUS
 void* tr_memdup( const void * src, size_t byteCount );
 
 #define tr_new( struct_type, n_structs )           \
-    ( (struct_type *) tr_malloc ( ( (size_t) sizeof ( struct_type ) ) * ( ( size_t) ( n_structs ) ) ) )
+    ( (struct_type *) tr_malloc ( sizeof ( struct_type ) * ( ( size_t) ( n_structs ) ) ) )
 
 #define tr_new0( struct_type, n_structs )          \
-    ( (struct_type *) tr_malloc0 ( ( (size_t) sizeof ( struct_type ) ) * ( ( size_t) ( n_structs ) ) ) )
+    ( (struct_type *) tr_malloc0 ( sizeof ( struct_type ) * ( ( size_t) ( n_structs ) ) ) )
 
 #define tr_renew( struct_type, mem, n_structs )    \
-    ( (struct_type *) realloc ( ( mem ), ( (size_t) sizeof ( struct_type ) ) * ( ( size_t) ( n_structs ) ) ) )
+    ( (struct_type *) realloc ( ( mem ), sizeof ( struct_type ) * ( ( size_t) ( n_structs ) ) ) )
 
 void* tr_valloc( size_t bufLen );
 
@@ -585,13 +585,13 @@ extern unsigned int tr_size_K;
 char* tr_formatter_speed_KBps( char * buf, double KBps, size_t buflen );
 
 /* format a memory size from bytes into a user-readable string. */
-char* tr_formatter_mem_B( char * buf, uint64_t bytes, size_t buflen );
+char* tr_formatter_mem_B( char * buf, int64_t bytes, size_t buflen );
 
 /* format a memory size from MB into a user-readable string. */
 static inline char* tr_formatter_mem_MB( char * buf, double MBps, size_t buflen ) { return tr_formatter_mem_B( buf, MBps * tr_mem_K * tr_mem_K, buflen ); }
 
 /* format a file size from bytes into a user-readable string. */
-char* tr_formatter_size_B( char * buf, uint64_t bytes, size_t buflen );
+char* tr_formatter_size_B( char * buf, int64_t bytes, size_t buflen );
 
 void tr_formatter_get_units( struct tr_benc * dict );
 

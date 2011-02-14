@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -70,10 +70,12 @@ get_name_from_host( const char * host )
     char * name;
     const char * dot = strrchr( host, '.' );
 
-    if( dot == NULL )
+    if( tr_addressIsIP( host ) )
         name = g_strdup( host );
-    else
+    else if( dot )
         name = g_strndup( host, dot - host );
+    else
+        name = g_strdup( host );
 
     *name = g_ascii_toupper( *name );
 
@@ -621,6 +623,7 @@ test_torrent_activity( tr_torrent * tor, int type )
         case ACTIVITY_FILTER_ACTIVE:
             return ( st->peersSendingToUs > 0 )
                 || ( st->peersGettingFromUs > 0 )
+                || ( st->webseedsSendingToUs > 0 )
                 || ( st->activity == TR_STATUS_CHECK );
 
         case ACTIVITY_FILTER_PAUSED:

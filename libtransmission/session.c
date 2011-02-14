@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2008-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -53,9 +53,14 @@
 
 enum
 {
-    SAVE_INTERVAL_SECS = 360,
-
-    DEFAULT_CACHE_SIZE_MB = 4
+#ifdef TR_LIGHTWEIGHT
+    DEFAULT_CACHE_SIZE_MB = 2,
+    DEFAULT_PREFETCH_ENABLED = FALSE,
+#else
+    DEFAULT_CACHE_SIZE_MB = 4,
+    DEFAULT_PREFETCH_ENABLED = TRUE,
+#endif
+    SAVE_INTERVAL_SECS = 360
 };
 
 
@@ -251,7 +256,7 @@ tr_sessionGetPublicAddress( const tr_session * session, int tr_af_type, tr_bool 
 ****
 ***/
 
-#ifdef TR_EMBEDDED
+#ifdef TR_LIGHTWEIGHT
  #define TR_DEFAULT_ENCRYPTION   TR_CLEAR_PREFERRED
 #else
  #define TR_DEFAULT_ENCRYPTION   TR_ENCRYPTION_PREFERRED
@@ -330,6 +335,7 @@ tr_sessionGetDefaultSettings( const char * configDir UNUSED, tr_benc * d )
     tr_bencDictAddBool( d, TR_PREFS_KEY_PEX_ENABLED,              TRUE );
     tr_bencDictAddBool( d, TR_PREFS_KEY_PORT_FORWARDING,          TRUE );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PREALLOCATION,            TR_PREALLOCATE_SPARSE );
+    tr_bencDictAddBool( d, TR_PREFS_KEY_PREFETCH_ENABLED,         DEFAULT_PREFETCH_ENABLED );
     tr_bencDictAddReal( d, TR_PREFS_KEY_RATIO,                    2.0 );
     tr_bencDictAddBool( d, TR_PREFS_KEY_RATIO_ENABLED,            FALSE );
     tr_bencDictAddBool( d, TR_PREFS_KEY_RENAME_PARTIAL_FILES,     TRUE );
@@ -394,6 +400,7 @@ tr_sessionGetSettings( tr_session * s, struct tr_benc * d )
     tr_bencDictAddBool( d, TR_PREFS_KEY_PEX_ENABLED,              s->isPexEnabled );
     tr_bencDictAddBool( d, TR_PREFS_KEY_PORT_FORWARDING,          tr_sessionIsPortForwardingEnabled( s ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PREALLOCATION,            s->preallocationMode );
+    tr_bencDictAddInt ( d, TR_PREFS_KEY_PREFETCH_ENABLED,         s->isPrefetchEnabled );
     tr_bencDictAddReal( d, TR_PREFS_KEY_RATIO,                    s->desiredRatio );
     tr_bencDictAddBool( d, TR_PREFS_KEY_RATIO_ENABLED,            s->isRatioLimited );
     tr_bencDictAddBool( d, TR_PREFS_KEY_RENAME_PARTIAL_FILES,     tr_sessionIsIncompleteFileNamingEnabled( s ) );
@@ -706,7 +713,7 @@ tr_sessionInitImpl( void * vdata )
 
     tr_sessionSet( session, &settings );
 
-    tr_udpInit( session, &session->public_ipv4->addr );
+    tr_udpInit( session );
 
     if( session->isLPDEnabled )
         tr_lpdInit( session, &session->public_ipv4->addr );
@@ -775,6 +782,8 @@ sessionSetImpl( void * vdata )
         tr_sessionSetDeleteSource( session, boolVal );
 
     /* files and directories */
+    if( tr_bencDictFindBool( settings, TR_PREFS_KEY_PREFETCH_ENABLED, &boolVal ) )
+        session->isPrefetchEnabled = boolVal;
     if( tr_bencDictFindInt( settings, TR_PREFS_KEY_PREALLOCATION, &i ) )
         session->preallocationMode = i;
     if( tr_bencDictFindStr( settings, TR_PREFS_KEY_DOWNLOAD_DIR, &str ) )
@@ -1674,11 +1683,6 @@ tr_sessionGetPieceSpeed_Bps( const tr_session * session, tr_direction dir )
 {
     return tr_isSession( session ) ? tr_bandwidthGetPieceSpeed_Bps( session->bandwidth, 0, dir ) : 0;
 }
-double
-tr_sessionGetPieceSpeed_KBps( const tr_session * session, tr_direction dir )
-{
-    return toSpeedKBps( tr_sessionGetPieceSpeed_Bps( session, dir ) );
-}
 
 int
 tr_sessionGetRawSpeed_Bps( const tr_session * session, tr_direction dir )
@@ -1946,7 +1950,7 @@ toggleDHTImpl(  void * data )
 
     tr_udpUninit( session );
     session->isDHTEnabled = !session->isDHTEnabled;
-    tr_udpInit( session, &session->public_ipv4->addr );
+    tr_udpInit( session );
 }
 
 void
@@ -2349,24 +2353,6 @@ tr_sessionSetTorrentFile( tr_session * session,
         tr_bencDictAddStr( session->metainfoLookup, hashString, filename );
 }
 
-tr_torrent*
-tr_torrentNext( tr_session * session,
-                tr_torrent * tor )
-{
-    tr_torrent * ret;
-
-    assert( !session || tr_isSession( session ) );
-
-    if( !session )
-        ret = NULL;
-    else if( !tor )
-        ret = session->torrentList;
-    else
-        ret = tor->next;
-
-    return ret;
-}
-
 /***
 ****
 ***/
@@ -2576,4 +2562,37 @@ void
 tr_sessionSetWebConfigFunc( tr_session * session, void (*func)(tr_session*, void*, const char* ) )
 {
     session->curl_easy_config_func = func;
+}
+
+/***
+****
+***/
+
+uint64_t
+tr_sessionGetTimeMsec( tr_session * session )
+{
+    struct timeval tv;
+
+    if( event_base_gettimeofday_cached( session->event_base, &tv ) )
+    {
+        return tr_time_msec( );
+    }
+    else
+    {
+        /* event_base_gettimeofday_cached() might be implemented using
+           clock_gettime(CLOCK_MONOTONIC), so calculate the offset to
+           real time... */
+        static uint64_t offset;
+        static tr_bool offset_calculated = FALSE;
+
+        const uint64_t val = (uint64_t) tv.tv_sec * 1000 + ( tv.tv_usec / 1000 );
+
+        if( !offset_calculated )
+        {
+            offset = tr_time_msec() - val;
+            offset_calculated = TRUE;
+        }
+
+        return val + offset;
+    }
 }

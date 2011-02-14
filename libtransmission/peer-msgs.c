@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -278,7 +278,7 @@ myDebug( const char * file, int line,
         evbuffer_add_vprintf( buf, fmt, args );
         va_end( args );
         evbuffer_add_printf( buf, " (%s:%d)\n", base, line );
-        evbuffer_write( buf, fileno( fp ) );
+        fputs( (const char*)evbuffer_pullup( buf, -1 ), fp );
 
         tr_free( base );
         evbuffer_free( buf );
@@ -1196,6 +1196,9 @@ prefetchPieces( tr_peermsgs *msgs )
 {
     int i;
 
+    if( !getSession(msgs)->isPrefetchEnabled )
+        return;
+
     /* Maintain 12 prefetched blocks per unchoked peer */
     for( i=msgs->prefetchCount; i<msgs->peer->pendingReqsToClient && i<12; ++i )
     {
@@ -1279,7 +1282,7 @@ messageLengthIsCorrect( const tr_peermsgs * msg, uint8_t id, uint32_t len )
 }
 
 static int clientGotBlock( tr_peermsgs *               msgs,
-                           const uint8_t *             block,
+                           struct evbuffer *           block,
                            const struct peer_request * req );
 
 static int
@@ -1335,7 +1338,7 @@ readBtPiece( tr_peermsgs      * msgs,
             return READ_LATER;
 
         /* we've got the whole block ... process it */
-        err = clientGotBlock( msgs, evbuffer_pullup( msgs->incoming.block, -1 ), req );
+        err = clientGotBlock( msgs, msgs->incoming.block, req );
 
         /* cleanup */
         evbuffer_free( msgs->incoming.block );
@@ -1562,7 +1565,7 @@ addPeerToBlamefield( tr_peermsgs * msgs, uint32_t index )
 /* returns 0 on success, or an errno on failure */
 static int
 clientGotBlock( tr_peermsgs *               msgs,
-                const uint8_t *             data,
+                struct evbuffer *           data,
                 const struct peer_request * req )
 {
     int err;

@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -90,7 +90,7 @@ onProgressDialogRefresh( gpointer data )
         g_assert_not_reached( );
 
     if( str != NULL ) {
-        gtk_label_set_text( GTK_LABEL( ui->progress_label ), str );
+        gtr_label_set_text( GTK_LABEL( ui->progress_label ), str );
         g_free( str );
     }
 

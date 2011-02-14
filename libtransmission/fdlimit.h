@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -40,6 +40,8 @@ int tr_open_file_for_writing( const char * filename );
 
 void tr_close_file( int fd );
 
+int tr_fsync(int fd);
+
 ssize_t tr_pread(int fd, void *buf, size_t count, off_t offset);
 ssize_t tr_pwrite(int fd, const void *buf, size_t count, off_t offset);
 int tr_prefetch(int fd, off_t offset, size_t count);
@@ -76,7 +78,7 @@ int tr_fdFileGetCached( tr_session             * session,
 /**
  * Closes a file that's being held by our file repository.
  *
- * If the file isn't checked out, it's closed immediately.
+ * If the file isn't checked out, it's fsync()ed and close()d immediately.
  * If the file is currently checked out, it will be closed upon its return.
  *
  * @see tr_fdFileCheckout

@@ -1,4 +1,12 @@
-=== Transmission 2.20 (2011/xx/yy) ===
+=== Transmission 2.21 (2011/02/08) ===
+==== All Platforms ====
+  * Fix compile error in the the 2.20 tarball
+==== GTK+ ====
+  * Several updated translations
+==== Qt ====
+  * Updated Spanish translation
+
+=== Transmission 2.20 (2011/02/06) ===
 [http://trac.transmissionbt.com/query?milestone=2.20&group=component&order=severity All tickets closed by this release]
 ==== All Platforms ====
   * Remember downloaded files when a drive is unplugged
@@ -7,14 +15,18 @@
   * Show the total downloading and seeding time per torrent
   * Fix webseeds
   * Better support for IPv6-only trackers
-  * Add the ability to shut down Transmission sessions via RPC
+  * Add the ability to shutdown Transmission sessions via RPC
   * NAT-PMP and UPnP now also map the UDP port
+  * Update the DHT code to dht-0.18
+  * Faster parsing of bencoded data
   * Improve support for running scripts when a torrent finishes downloading
+  * Fix reannounce interval when trackers return a 404 error
   * Fix checksum error on platforms running uClibc 0.9.27 or older
   * Fix memmem() errors on Solaris
 ==== Mac ====
   * Fix issues in the German and Spanish localizations
   * Interface tweaks
+  * Support ZIP and other compression formats in the blocklist downloader
 ==== GTK+ ====
   * Add "Add" and "Remove" buttons to the tracker list
   * Add filesize column to the files list
@@ -24,10 +36,12 @@
 ==== Daemon ====
   * Add "reannounce to tracker" option to transmission-remote
   * transmission-remote can now read auth info from environment variables
+  * Fix configuration file bug with transmission-daemon running on Macs
 ==== Web Client ====
   * Right-clicking a torrent now works with Firefox / Firegestures / Ubuntu
 ==== Utils ====
-  * transmission-show now displays webseed information
+  * Fix error when replacing substrings in tracker announce URLs
+  * Webseeds are now displayed in transmission-show
 
 === Transmission 2.13 (2010/12/09) ===
 [http://trac.transmissionbt.com/query?milestone=2.13&group=component&order=severity All tickets closed by this release]

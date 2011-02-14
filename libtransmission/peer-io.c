@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -86,6 +86,7 @@ struct tr_datatype
     size_t   length;
 };
 
+
 /***
 ****
 ***/
@@ -99,7 +100,7 @@ didWriteWrapper( tr_peerIo * io, unsigned int bytes_transferred )
 
         const unsigned int payload = MIN( next->length, bytes_transferred );
         const unsigned int overhead = guessPacketOverhead( payload );
-        const uint64_t now = tr_time_msec( );
+        const uint64_t now = tr_sessionGetTimeMsec( io->session );
 
         tr_bandwidthUsed( &io->bandwidth, TR_UP, payload, next->isPieceData, now );
 
@@ -139,6 +140,8 @@ canReadWrapper( tr_peerIo * io )
     /* try to consume the input buffer */
     if( io->canRead )
     {
+        const uint64_t now = tr_sessionGetTimeMsec( io->session );
+
         tr_sessionLock( session );
 
         while( !done && !err )
@@ -146,21 +149,22 @@ canReadWrapper( tr_peerIo * io )
             size_t piece = 0;
             const size_t oldLen = evbuffer_get_length( io->inbuf );
             const int ret = io->canRead( io, io->userData, &piece );
-
             const size_t used = oldLen - evbuffer_get_length( io->inbuf );
+            const unsigned int overhead = guessPacketOverhead( used );
 
             assert( tr_isPeerIo( io ) );
 
             if( piece || (piece!=used) )
             {
-                const uint64_t now = tr_time_msec( );
-
                 if( piece )
                     tr_bandwidthUsed( &io->bandwidth, TR_DOWN, piece, TRUE, now );
 
                 if( used != piece )
                     tr_bandwidthUsed( &io->bandwidth, TR_DOWN, used - piece, FALSE, now );
             }
+
+            if( overhead > 0 )
+                tr_bandwidthUsed( &io->bandwidth, TR_UP, overhead, FALSE, now );
 
             switch( ret )
             {
@@ -638,8 +642,8 @@ tr_peerIoReconnect( tr_peerIo * io )
     if( io->socket >= 0 )
         tr_netClose( session, io->socket );
 
-    event_del( io->event_read );
-    event_del( io->event_write );
+    event_free( io->event_read );
+    event_free( io->event_write );
     io->socket = tr_netOpenPeerSocket( session, &io->addr, io->port, io->isSeed );
     io->event_read = event_new( session->event_base, io->socket, EV_READ, event_read_cb, io );
     io->event_write = event_new( session->event_base, io->socket, EV_WRITE, event_write_cb, io );
@@ -769,8 +773,8 @@ evbuffer_peek_all( struct evbuffer * buf, size_t * setme_vecCount )
     const int vecCount = evbuffer_peek( buf, byteCount, NULL, NULL, 0 );
     struct evbuffer_iovec * iovec = tr_new0( struct evbuffer_iovec, vecCount );
     const int n = evbuffer_peek( buf, byteCount, NULL, iovec, vecCount );
-    assert( vecCount == n );
-    *setme_vecCount = vecCount;
+    assert( n == vecCount );
+    *setme_vecCount = n;
     return iovec;
 }
 
@@ -810,6 +814,12 @@ tr_peerIoWriteBytes( tr_peerIo * io, const void * bytes, size_t byteCount, tr_bo
 /***
 ****
 ***/
+
+void
+evbuffer_add_uint8( struct evbuffer * outbuf, uint8_t byte )
+{
+    evbuffer_add( outbuf, &byte, 1 );
+}
 
 void
 evbuffer_add_uint16( struct evbuffer * outbuf, uint16_t addme_hs )

@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -179,6 +179,19 @@ preallocate_file_full( const char * filename, uint64_t length )
 
     return success;
 }
+
+
+/* portability wrapper for fsync(). */
+int
+tr_fsync( int fd )
+{
+#ifdef WIN32
+    return _commit( fd );
+#else
+    return fsync( fd );
+#endif
+}
+
 
 /* Like pread and pwrite, except that the position is undefined afterwards.
    And of course they are not thread-safe. */
@@ -384,7 +397,14 @@ cached_file_open( struct tr_cached_file  * o,
      * https://bugs.launchpad.net/ubuntu/+source/transmission/+bug/318249
      */
     if( alreadyExisted && ( file_size < (uint64_t)sb.st_size ) )
-        ftruncate( o->fd, file_size );
+    {
+        if( ftruncate( o->fd, file_size ) == -1 )
+        {
+            const int err = errno;
+            tr_err( _( "Couldn't truncate \"%1$s\": %2$s" ), filename, tr_strerror( err ) );
+            return err;
+        }
+    }
 
     if( writable && !alreadyExisted && ( allocation == TR_PREALLOCATE_SPARSE ) )
         preallocate_file_sparse( o->fd, file_size );
@@ -512,7 +532,14 @@ tr_fdFileClose( tr_session * s, const tr_torrent * tor, tr_file_index_t i )
     struct tr_cached_file * o;
 
     if(( o = fileset_lookup( get_fileset( s ), tr_torrentId( tor ), i )))
+    {
+        /* flush writable files so that their mtimes will be
+         * up-to-date when this function returns to the caller... */
+        if( o->is_writable )
+            tr_fsync( o->fd );
+
         cached_file_close( o );
+    }
 }
 
 int
@@ -766,7 +793,7 @@ tr_fdSetPeerLimit( tr_session * session, int socket_limit )
 #endif
     gFd->public_socket_limit = socket_limit;
 
-    tr_dbg( "socket limit is %d", (int)gFd->socket_limit );
+    tr_dbg( "socket limit is %d", gFd->socket_limit );
 }
 
 int

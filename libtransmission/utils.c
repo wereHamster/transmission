@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2009-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -201,7 +201,7 @@ tr_getLogTimeStr( char * buf, int buflen )
     seconds = tv.tv_sec;
     tr_localtime_r( &seconds, &now_tm );
     strftime( tmp, sizeof( tmp ), "%H:%M:%S", &now_tm );
-    milliseconds = (int)( tv.tv_usec / 1000 );
+    milliseconds = tv.tv_usec / 1000;
     tr_snprintf( buf, buflen, "%s.%03d", tmp, milliseconds );
 
     return buf;
@@ -244,7 +244,7 @@ tr_deepLog( const char  * file,
         /* FIXME(libevent2) ifdef this out for nonwindows platforms */
         OutputDebugString( evbuffer_pullup( buf, -1 ) );
         if( fp )
-            evbuffer_write( buf, fileno( fp ) );
+            fputs( (const char*)evbuffer_pullup( buf, -1 ), fp );
 
         tr_free( base );
         evbuffer_free( buf );
@@ -422,7 +422,7 @@ tr_strip_positional_args( const char* str )
     const char * in = str;
     static size_t bufsize = 0;
     static char * buf = NULL;
-    const size_t  len = strlen( str );
+    const size_t  len = str ? strlen( str ) : 0;
     char *        out;
 
     if( !buf || ( bufsize < len ) )
@@ -431,7 +431,7 @@ tr_strip_positional_args( const char* str )
         buf = tr_renew( char, buf, bufsize );
     }
 
-    for( out = buf; *str; ++str )
+    for( out = buf; str && *str; ++str )
     {
         *out++ = *str;
 
@@ -450,7 +450,7 @@ tr_strip_positional_args( const char* str )
     }
     *out = '\0';
 
-    return strcmp( buf, in ) ? buf : in;
+    return !in || strcmp( buf, in ) ? buf : in;
 }
 
 /**
@@ -1154,6 +1154,7 @@ tr_base64_encode( const void * input, int length, int * setme_len )
 
         bmem = BIO_new( BIO_s_mem( ) );
         b64 = BIO_new( BIO_f_base64( ) );
+        BIO_set_flags( b64, BIO_FLAGS_BASE64_NO_NL );
         b64 = BIO_push( b64, bmem );
         BIO_write( b64, input, length );
         (void) BIO_flush( b64 );
@@ -1659,7 +1660,7 @@ tr_realpath( const char * path, char * resolved_path )
 struct formatter_unit
 {
     char * name;
-    uint64_t value;
+    int64_t value;
 };
 
 struct formatter_units
@@ -1694,7 +1695,7 @@ formatter_init( struct formatter_units * units,
 
 static char*
 formatter_get_size_str( const struct formatter_units * u,
-                        char * buf, uint64_t bytes, size_t buflen )
+                        char * buf, int64_t bytes, size_t buflen )
 {
     int precision;
     double value;
@@ -1729,7 +1730,7 @@ tr_formatter_size_init( unsigned int kilo,
 }
 
 char*
-tr_formatter_size_B( char * buf, uint64_t bytes, size_t buflen )
+tr_formatter_size_B( char * buf, int64_t bytes, size_t buflen )
 {
     return formatter_get_size_str( &size_units, buf, bytes, buflen );
 }
@@ -1784,7 +1785,7 @@ tr_formatter_mem_init( unsigned int kilo,
 }
 
 char*
-tr_formatter_mem_B( char * buf, uint64_t bytes_per_second, size_t buflen )
+tr_formatter_mem_B( char * buf, int64_t bytes_per_second, size_t buflen )
 {
     return formatter_get_size_str( &mem_units, buf, bytes_per_second, buflen );
 }

@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2005-2008 Transmission authors and contributors
+ * Copyright (c) Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -536,7 +536,7 @@ onOptionsClicked( GtkButton * button UNUSED, gpointer vp )
 
     w = p->speedlimit_on_item[TR_DOWN];
     tr_formatter_speed_KBps( buf1, gtr_pref_int_get( TR_PREFS_KEY_DSPEED_KBps ), sizeof( buf1 ) );
-    gtk_label_set_text( GTK_LABEL( gtk_bin_get_child( GTK_BIN( w ) ) ), buf1 );
+    gtr_label_set_text( GTK_LABEL( gtk_bin_get_child( GTK_BIN( w ) ) ), buf1 );
 
     b = gtr_pref_flag_get( TR_PREFS_KEY_DSPEED_ENABLED );
     w = b ? p->speedlimit_on_item[TR_DOWN] : p->speedlimit_off_item[TR_DOWN];
@@ -544,7 +544,7 @@ onOptionsClicked( GtkButton * button UNUSED, gpointer vp )
 
     w = p->speedlimit_on_item[TR_UP];
     tr_formatter_speed_KBps( buf1, gtr_pref_int_get( TR_PREFS_KEY_USPEED_KBps ), sizeof( buf1 ) );
-    gtk_label_set_text( GTK_LABEL( gtk_bin_get_child( GTK_BIN( w ) ) ), buf1 );
+    gtr_label_set_text( GTK_LABEL( gtk_bin_get_child( GTK_BIN( w ) ) ), buf1 );
 
     b = gtr_pref_flag_get( TR_PREFS_KEY_USPEED_ENABLED );
     w = b ? p->speedlimit_on_item[TR_UP] : p->speedlimit_off_item[TR_UP];
@@ -552,7 +552,7 @@ onOptionsClicked( GtkButton * button UNUSED, gpointer vp )
 
     tr_strlratio( buf1, gtr_pref_double_get( TR_PREFS_KEY_RATIO ), sizeof( buf1 ) );
     g_snprintf( buf2, sizeof( buf2 ), _( "Stop at Ratio (%s)" ), buf1 );
-    gtk_label_set_text( GTK_LABEL( gtk_bin_get_child( GTK_BIN( p->ratio_on_item ) ) ), buf2 );
+    gtr_label_set_text( GTK_LABEL( gtk_bin_get_child( GTK_BIN( p->ratio_on_item ) ) ), buf2 );
 
     b = gtr_pref_flag_get( TR_PREFS_KEY_RATIO_ENABLED );
     gtk_check_menu_item_set_active( GTK_CHECK_MENU_ITEM( b ? p->ratio_on_item : p->ratio_off_item ), TRUE );
@@ -607,7 +607,7 @@ gtr_window_new( GtkUIManager * ui_mgr, TrCore * core )
 
     /* toolbar */
     toolbar = p->toolbar = gtr_action_get_widget( "/main-window-toolbar" );
-    gtr_action_set_important( "add-torrent-toolbar", TRUE );
+    gtr_action_set_important( "open-torrent-toolbar", TRUE );
     gtr_action_set_important( "show-torrent-properties", TRUE );
 
     /* filter */
@@ -656,6 +656,7 @@ gtr_window_new( GtkUIManager * ui_mgr, TrCore * core )
         gtk_box_pack_start( GTK_BOX( h ), w, 0, 0, 0 );
 
         w = p->gutter_lb = gtk_label_new( "N Torrents" );
+        gtk_label_set_single_line_mode( GTK_LABEL( w ), TRUE );
         gtk_box_pack_start( GTK_BOX( h ), w, 1, 1, GUI_PAD );
 
         hbox = gtk_hbox_new( FALSE, GUI_PAD );
@@ -663,6 +664,7 @@ gtr_window_new( GtkUIManager * ui_mgr, TrCore * core )
             gtk_widget_set_size_request( w, GUI_PAD, 0u );
             gtk_box_pack_start( GTK_BOX( hbox ), w, FALSE, FALSE, 0 );
             w = p->ul_lb = gtk_label_new( NULL );
+            gtk_label_set_single_line_mode( GTK_LABEL( w ), TRUE );
             gtk_box_pack_start( GTK_BOX( hbox ), w, FALSE, FALSE, 0 );
             w = gtk_image_new_from_stock( GTK_STOCK_GO_UP, GTK_ICON_SIZE_MENU );
             gtk_box_pack_start( GTK_BOX( hbox ), w, FALSE, FALSE, 0 );
@@ -673,6 +675,7 @@ gtr_window_new( GtkUIManager * ui_mgr, TrCore * core )
             gtk_widget_set_size_request( w, GUI_PAD, 0u );
             gtk_box_pack_start( GTK_BOX( hbox ), w, FALSE, FALSE, 0 );
             w = p->dl_lb = gtk_label_new( NULL );
+            gtk_label_set_single_line_mode( GTK_LABEL( w ), TRUE );
             gtk_box_pack_start( GTK_BOX( hbox ), w, FALSE, FALSE, 0 );
             w = gtk_image_new_from_stock( GTK_STOCK_GO_DOWN, GTK_ICON_SIZE_MENU );
             gtk_box_pack_start( GTK_BOX( hbox ), w, FALSE, FALSE, 0 );
@@ -686,6 +689,7 @@ gtr_window_new( GtkUIManager * ui_mgr, TrCore * core )
             g_signal_connect( w, "clicked", G_CALLBACK( onYinYangReleased ), p );
             gtk_box_pack_start( GTK_BOX( hbox ), w, FALSE, FALSE, 0 );
             w = p->stats_lb = gtk_label_new( NULL );
+            gtk_label_set_single_line_mode( GTK_LABEL( w ), TRUE );
             gtk_box_pack_end( GTK_BOX( hbox ), w, FALSE, FALSE, 0 );
         gtk_box_pack_end( GTK_BOX( h ), hbox, FALSE, FALSE, 0 );
 
@@ -759,7 +763,7 @@ updateTorrentCount( PrivateData * p )
             g_snprintf( buf, sizeof( buf ),
                         gtr_ngettext( "%'d Torrent", "%'d Torrents", torrentCount ),
                         torrentCount );
-        gtk_label_set_text( GTK_LABEL( p->gutter_lb ), buf );
+        gtr_label_set_text( GTK_LABEL( p->gutter_lb ), buf );
     }
 }
 
@@ -807,7 +811,7 @@ updateStats( PrivateData * p )
         tr_strlratio( ratio, stats.ratio, sizeof( ratio ) );
         g_snprintf( buf, sizeof( buf ), _( "Ratio: %s" ), ratio );
     }
-    gtk_label_set_text( GTK_LABEL( p->stats_lb ), buf );
+    gtr_label_set_text( GTK_LABEL( p->stats_lb ), buf );
 }
 
 static void
@@ -834,10 +838,10 @@ updateSpeeds( PrivateData * p )
         while( gtk_tree_model_iter_next( model, &iter ) );
 
         tr_formatter_speed_KBps( buf, down, sizeof( buf ) );
-        gtk_label_set_text( GTK_LABEL( p->dl_lb ), buf );
+        gtr_label_set_text( GTK_LABEL( p->dl_lb ), buf );
 
         tr_formatter_speed_KBps( buf, up, sizeof( buf ) );
-        gtk_label_set_text( GTK_LABEL( p->ul_lb ), buf );
+        gtr_label_set_text( GTK_LABEL( p->ul_lb ), buf );
     }
 }
 
@@ -851,7 +855,6 @@ gtr_window_refresh( TrWindow * self )
         updateSpeeds( p );
         updateTorrentCount( p );
         updateStats( p );
-        gtk_tree_model_filter_refilter( GTK_TREE_MODEL_FILTER( p->filter_model ) );
     }
 }
 

@@ -1,5 +1,5 @@
 /*
- * This file Copyright (C) 2007-2010 Mnemosyne LLC
+ * This file Copyright (C) Mnemosyne LLC
  *
  * This file is licensed by the GPL version 2. Works owned by the
  * Transmission project are granted a special exemption to clause 2(b)
@@ -1104,7 +1104,7 @@ onCorePrefsChanged( TrCore * core UNUSED, const char *  key, gpointer gdata )
     {
         struct network_page_data * data = gdata;
         gdk_threads_enter();
-        gtk_label_set_text( GTK_LABEL( data->portLabel ), _( "Status unknown" ) );
+        gtr_label_set_text( GTK_LABEL( data->portLabel ), _( "Status unknown" ) );
         gtk_widget_set_sensitive( data->portButton, TRUE );
         gtk_widget_set_sensitive( data->portSpin, TRUE );
         gdk_threads_leave();
