@@ -452,6 +452,11 @@ tr_session * fHandle;
         [sound play];
 }
 
+- (void) setUTP: (id) sender
+{
+    tr_sessionSetUTPEnabled(fHandle, [fDefaults boolForKey: @"UTPGlobal"]);
+}
+
 - (void) setPeersGlobal: (id) sender
 {
     const int count = [sender intValue];
@@ -1094,6 +1099,10 @@ tr_session * fHandle;
     const BOOL usePartialFileRanaming = tr_sessionIsIncompleteFileNamingEnabled(fHandle);
     [fDefaults setBool: usePartialFileRanaming forKey: @"RenamePartialFiles"];
     
+    //utp
+    const BOOL utp = tr_sessionIsUTPEnabled(fHandle);
+    [fDefaults setBool: utp forKey: @"UTPGlobal"];
+    
     //peers
     const uint16_t peersTotal = tr_sessionGetPeerLimit(fHandle);
     [fDefaults setInteger: peersTotal forKey: @"PeersTotal"];
@@ -1109,7 +1118,7 @@ tr_session * fHandle;
     const BOOL dht = tr_sessionIsDHTEnabled(fHandle);
     [fDefaults setBool: dht forKey: @"DHTGlobal"];
     
-    //dht
+    //lpd
     const BOOL lpd = tr_sessionIsLPDEnabled(fHandle);
     [fDefaults setBool: lpd forKey: @"LocalPeerDiscoveryGlobal"];
     
@@ -1204,6 +1213,8 @@ tr_session * fHandle;
         //encryption handled by bindings
         
         //download directory handled by bindings
+        
+        //utp handled by bindings
         
         [fPeersGlobalField setIntValue: peersTotal];
         [fPeersTorrentField setIntValue: peersTorrent];

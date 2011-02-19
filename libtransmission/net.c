@@ -45,6 +45,7 @@
 #include <unistd.h>
 
 #include <event2/util.h>
+#include <libutp/utp.h>
 
 #include "transmission.h"
 #include "fdlimit.h"
@@ -53,6 +54,7 @@
 #include "peer-io.h"
 #include "platform.h"
 #include "session.h"
+#include "tr-utp.h"
 #include "utils.h"
 
 #ifndef IN_MULTICAST
@@ -347,6 +349,20 @@ tr_netOpenPeerSocket( tr_session        * session,
                s, tr_peerIoAddrStr( addr, port ) );
 
     return s;
+}
+
+struct UTPSocket *
+tr_netOpenPeerUTPSocket( tr_session        * session,
+                         const tr_address  * addr,
+                         tr_port             port,
+                         tr_bool             clientIsSeed UNUSED )
+{
+    struct sockaddr_storage ss;
+    socklen_t sslen;
+    sslen = setup_sockaddr( addr, port, &ss );
+
+    return UTP_Create( tr_utpSendTo, (void*)session,
+                       (struct sockaddr*)&ss, sslen );
 }
 
 static int

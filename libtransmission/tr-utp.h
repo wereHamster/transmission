@@ -25,6 +25,16 @@ THE SOFTWARE.
  #error only libtransmission should #include this header.
 #endif
 
-void tr_udpInit( tr_session * );
-void tr_udpUninit( tr_session * );
-void tr_udpSetSocketBuffers(tr_session *);
+#ifndef _TR_UTP_H_
+#define _TR_UTP_H_
+
+int tr_utpPacket(const unsigned char *buf, size_t buflen,
+                 const struct sockaddr *from, socklen_t fromlen,
+                 tr_session *ss);
+
+void tr_utpClose( tr_session * );
+
+void tr_utpSendTo(void *closure, const unsigned char *buf, size_t buflen,
+                  const struct sockaddr *to, socklen_t tolen);
+
+#endif /* #ifndef _TR_UTP_H_ */
