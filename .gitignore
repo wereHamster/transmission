@@ -39,6 +39,8 @@ Makefile.in
 /libtransmission/test-peer-id
 /qt/qrc_application.cpp
 /qt/ui_mainwin.h
+/qt/qtr.pro.user
 /qt/moc_*.cpp
+/qt/translations/*.qm
 /third-party/miniupnp/miniupnpcstrings.h
 /libtransmission/version.h
