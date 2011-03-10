@@ -25,7 +25,7 @@
 
 #ifndef STATUS_ICON_SUPPORTED
 gpointer gtr_icon_new( TrCore * core UNUSED ) { return NULL; }
-void gtr_icon_refresh( gpointer vicon UNUSED ) { } 
+void gtr_icon_refresh( gpointer vicon UNUSED ) { }
 #else
 
 #ifdef HAVE_LIBAPPINDICATOR
@@ -65,7 +65,7 @@ gtr_icon_refresh( gpointer vicon )
     char tip[1024];
     const char * idle = _( "Idle" );
     GtkStatusIcon * icon = GTK_STATUS_ICON( vicon );
-    tr_session * session = tr_core_session( g_object_get_data( G_OBJECT( icon ), "tr-core" ) );
+    tr_session * session = gtr_core_session( g_object_get_data( G_OBJECT( icon ), "tr-core" ) );
 
     /* up */
     KBps = tr_sessionGetRawSpeed_KBps( session, TR_UP );

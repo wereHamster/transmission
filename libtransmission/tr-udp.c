@@ -186,7 +186,7 @@ rebind_ipv6(tr_session *ss, tr_bool force)
 static void
 event_callback(int s, short type UNUSED, void *sv)
 {
-    tr_session *ss = (tr_session*)sv;
+    tr_session *ss = sv;
     unsigned char *buf;
     struct sockaddr_storage from;
     socklen_t fromlen;
@@ -204,21 +204,20 @@ event_callback(int s, short type UNUSED, void *sv)
     fromlen = sizeof(from);
     rc = recvfrom(s, buf, 4096 - 1, 0,
                   (struct sockaddr*)&from, &fromlen);
-    if(rc <= 0)
-        return;
-
-    if( buf[0] == 'd' ) {
-        /* DHT packet. */
-        buf[rc] = '\0';
-        tr_dhtCallback(buf, rc, (struct sockaddr*)&from, fromlen, sv);
-    } else {
-        rc = tr_utpPacket(buf, rc, (struct sockaddr*)&from, fromlen, ss);
-        if(!rc)
-            tr_ndbg("UDP", "Unexpected UDP packet");
+    if(rc > 0) {
+        if( buf[0] == 'd' ) {
+            /* DHT packet. */
+            buf[rc] = '\0';
+            tr_dhtCallback(buf, rc, (struct sockaddr*)&from, fromlen, sv);
+        } else {
+            rc = tr_utpPacket(buf, rc, (struct sockaddr*)&from, fromlen, ss);
+            if(!rc)
+                tr_ndbg("UDP", "Unexpected UDP packet");
+        }
     }
 
     free(buf);
-}    
+}
 
 void
 tr_udpInit(tr_session *ss)

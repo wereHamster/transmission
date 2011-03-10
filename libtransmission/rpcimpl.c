@@ -556,15 +556,14 @@ addField( const tr_torrent * tor, tr_benc * d, const char * key )
     }
     else if( tr_streq( key, keylen, "peersGettingFromUs" ) )
         tr_bencDictAddInt( d, key, st->peersGettingFromUs );
-    else if( tr_streq( key, keylen, "peersKnown" ) )
-        tr_bencDictAddInt( d, key, st->peersKnown );
     else if( tr_streq( key, keylen, "peersSendingToUs" ) )
         tr_bencDictAddInt( d, key, st->peersSendingToUs );
     else if( tr_streq( key, keylen, "pieces" ) ) {
-        const tr_bitfield * pieces = tr_cpPieceBitfield( &tor->completion );
-        char * str = tr_base64_encode( pieces->bits, pieces->byteCount, NULL );
+        tr_bitfield * bf = tr_cpCreatePieceBitfield( &tor->completion );
+        char * str = tr_base64_encode( bf->bits, bf->byteCount, NULL );
         tr_bencDictAddStr( d, key, str!=NULL ? str : "" );
         tr_free( str );
+        tr_bitfieldFree( bf );
     }
     else if( tr_streq( key, keylen, "pieceCount" ) )
         tr_bencDictAddInt( d, key, inf->pieceCount );
@@ -1628,7 +1627,7 @@ sessionGet( tr_session               * s,
         default: str = "preferred"; break;
     }
     tr_bencDictAddStr( d, TR_PREFS_KEY_ENCRYPTION, str );
-    
+
     return NULL;
 }
 

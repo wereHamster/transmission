@@ -69,7 +69,7 @@ enum
 {
     [self clearView];
     
-    fTorrent = torrent;
+    fTorrent = (torrent && ![torrent isMagnet]) ? torrent : nil;
     if (fTorrent)
     {
         //determine relevant values

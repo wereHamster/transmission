@@ -31,12 +31,11 @@
 @class AddWindowController;
 @class Badger;
 @class DragOverlayWindow;
-@class FilterBarView;
-@class FilterButton;
+@class FilterBarController;
 @class InfoWindowController;
 @class MessageWindowController;
 @class PrefsController;
-@class StatusBarView;
+@class StatusBarController;
 @class Torrent;
 @class TorrentTableView;
 @class URLSheetWindowController;
@@ -71,19 +70,13 @@ typedef enum
     NSTimer                         * fTimer;
     
     IBOutlet NSMenuItem             * fOpenIgnoreDownloadFolder;
-    IBOutlet NSButton               * fActionButton, * fSpeedLimitButton;
+    IBOutlet NSButton               * fActionButton, * fSpeedLimitButton, * fClearCompletedButton;
     IBOutlet NSTextField            * fTotalTorrentsField;
     
-    IBOutlet StatusBarView          * fStatusBar;
-    IBOutlet NSButton               * fStatusButton;
-    IBOutlet NSTextField            * fTotalDLField, * fTotalULField;
-    IBOutlet NSImageView            * fTotalDLImageView;
+    StatusBarController             * fStatusBar;
     
-    IBOutlet FilterBarView          * fFilterBar;
-    IBOutlet FilterButton           * fNoFilterButton, * fActiveFilterButton, * fDownloadFilterButton,
-                                    * fSeedFilterButton, * fPauseFilterButton;
-    IBOutlet NSSearchField          * fSearchFilterField;
-    IBOutlet NSMenuItem             * fNextFilterItem, * fPrevFilterItem;
+    FilterBarController             * fFilterBar;
+    IBOutlet NSMenuItem             * fNextFilterItem;
                                 
     IBOutlet NSMenuItem             * fNextInfoTabItem, * fPrevInfoTabItem;
     
@@ -94,8 +87,7 @@ typedef enum
     IBOutlet NSMenu                 * fRatioStopMenu;
     IBOutlet NSMenuItem             * fCheckRatioItem, * fNoCheckRatioItem;
     
-    IBOutlet NSMenu                 * fGroupsSetMenu, * fGroupsSetContextMenu, * fGroupFilterMenu;
-    IBOutlet NSPopUpButton          * fGroupsButton;
+    IBOutlet NSMenu                 * fGroupsSetMenu, * fGroupsSetContextMenu;
     
     #warning change to QLPreviewPanel
     id                              fPreviewPanel;
@@ -187,10 +179,7 @@ typedef enum
 
 - (void) updateUI;
 
-- (void) resizeStatusButton;
 - (void) setBottomCountText: (BOOL) filtering;
-
-- (void) updateSpeedFieldsToolTips;
 
 - (void) updateTorrentsInQueue;
 - (NSUInteger) numToStartFromQueue: (BOOL) downloadQueue;
@@ -201,7 +190,7 @@ typedef enum
 
 - (void) updateTorrentHistory;
 
-- (void) applyFilter: (id) sender;
+- (void) applyFilter;
 
 - (void) sortTorrents;
 - (void) sortTorrentsIgnoreSelected;
@@ -209,16 +198,9 @@ typedef enum
 - (void) setSortByGroup: (id) sender;
 - (void) setSortReverse: (id) sender;
 
-- (void) setFilter: (id) sender;
-- (void) setFilterSearchType: (id) sender;
 - (void) switchFilter: (id) sender;
 
-- (void) setStatusLabel: (id) sender;
-
 - (void) setGroup: (id) sender; //used by delegate-generated menu items
-- (void) setGroupFilter: (id) sender;
-- (void) updateGroupsFilterButton;
-- (void) updateGroupsFilters: (NSNotification *) notification;
 
 - (void) toggleSpeedLimit: (id) sender;
 - (void) speedLimitChanged: (id) sender;
@@ -255,8 +237,6 @@ typedef enum
 
 - (void) setWindowSizeToFit;
 - (NSRect) sizedWindowFrame;
-
-- (void) resizeFilterBar;
 
 - (void) updateForExpandCollape;
 

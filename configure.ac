@@ -3,8 +3,8 @@ dnl STATUS: "X" for prerelease beta builds,
 dnl         "Z" for unsupported trunk builds,
 dnl         "0" for stable, supported releases
 dnl these should be the only two lines you need to change
-m4_define([user_agent_prefix],[2.21+])
-m4_define([peer_id_prefix],[-WH221Z-])
+m4_define([user_agent_prefix],[2.22+])
+m4_define([peer_id_prefix],[-WH222Z-])
 
 AC_INIT([transmission],
         [user_agent_prefix],
@@ -144,35 +144,35 @@ dnl ----------------------------------------------------------------------------
 dnl
 dnl file monitoring for the daemon
 
-AC_CHECK_HEADER([sys/inotify.h], 
-                [AC_CHECK_FUNC([inotify_init],[have_inotify="yes"],[have_inotify="no"])], 
-                [have_inotify="no"]) 
-AC_ARG_WITH([inotify], 
-            [AS_HELP_STRING([--with-inotify],[Enable inotify support (default=auto)])], 
-            [want_inotify=${withval}], 
-            [want_inotify=${have_inotify}]) 
-if test "x$want_inotify" = "xyes" ; then 
-    if test "x$have_inotify" = "xyes"; then 
-      AC_DEFINE([WITH_INOTIFY],[1]) 
-    else 
-      AC_MSG_ERROR("inotify not found!") 
-    fi 
-fi 
- 
-AC_CHECK_HEADER([sys/event.h], 
-                [AC_CHECK_FUNC([kqueue],[have_kqueue="yes"],[have_kqueue="no"])], 
-                [have_kqueue="no"]) 
-AC_ARG_WITH([kqueue], 
-            [AS_HELP_STRING([--with-kqueue],[Enable kqueue support (default=auto)])], 
-            [want_kqueue=${withval}], 
-            [want_kqueue=${have_kqueue}]) 
-if test "x$want_kqueue" = "xyes" ; then 
-    if test "x$have_kqueue" = "xyes"; then 
-      AC_DEFINE([WITH_KQUEUE],[1]) 
-    else 
-      AC_MSG_ERROR("kqueue not found!") 
-    fi 
-fi 
+AC_CHECK_HEADER([sys/inotify.h],
+                [AC_CHECK_FUNC([inotify_init],[have_inotify="yes"],[have_inotify="no"])],
+                [have_inotify="no"])
+AC_ARG_WITH([inotify],
+            [AS_HELP_STRING([--with-inotify],[Enable inotify support (default=auto)])],
+            [want_inotify=${withval}],
+            [want_inotify=${have_inotify}])
+if test "x$want_inotify" = "xyes" ; then
+    if test "x$have_inotify" = "xyes"; then
+      AC_DEFINE([WITH_INOTIFY],[1])
+    else
+      AC_MSG_ERROR("inotify not found!")
+    fi
+fi
+
+AC_CHECK_HEADER([sys/event.h],
+                [AC_CHECK_FUNC([kqueue],[have_kqueue="yes"],[have_kqueue="no"])],
+                [have_kqueue="no"])
+AC_ARG_WITH([kqueue],
+            [AS_HELP_STRING([--with-kqueue],[Enable kqueue support (default=auto)])],
+            [want_kqueue=${withval}],
+            [want_kqueue=${have_kqueue}])
+if test "x$want_kqueue" = "xyes" ; then
+    if test "x$have_kqueue" = "xyes"; then
+      AC_DEFINE([WITH_KQUEUE],[1])
+    else
+      AC_MSG_ERROR("kqueue not found!")
+    fi
+fi
 
 AC_CHECK_HEADERS([sys/statvfs.h \
                   xfs/xfs.h])
@@ -195,16 +195,6 @@ AC_TRY_LINK([#include <stdarg.h>], [va_list ap1, ap2; va_copy(ap1, ap2);],
 ])
 
 
-dnl libevent likes to link against librt if possible
-dnl for clock_gettime() and clock_settime()
-dnl TODO(libevent2): this can probably be removed after
-dnl we switch to libevent2, since it will have PKG_CONFIG
-AC_CHECK_LIB([rt],
-             [clock_gettime],
-             [libevent_extra_libs="-lrt"],
-             [libevent_extra_libs=""])
-
-
 dnl ----------------------------------------------------------------------------
 dnl
 dnl  dht
@@ -219,18 +209,39 @@ dnl ----------------------------------------------------------------------------
 dnl
 dnl  utp
 
+AC_CHECK_LIB([rt],
+             [clock_gettime],
+             [libutp_extra_libs="-lrt"],
+             [libutp_extra_libs=""])
+
+AC_MSG_CHECKING([µTP])
+build_utp="no"
+if test "x$CXX" = "x" ; then
+    have_utp="no"
+else
+    have_utp="yes"
+fi
 AC_ARG_ENABLE([utp],
               AS_HELP_STRING([--enable-utp],[build µTP support]),
-              [build_utp=${enableval}],
-              [build_utp=no])
-if test "x$build_utp" = "xyes" ; then
-    LIBUTP_CFLAGS="-I\$(top_srcdir)/third-party/"
-    LIBUTP_LIBS="\$(top_builddir)/third-party/libutp/libutp.a -lrt"
-    AC_DEFINE([WITH_UTP],[1])
+              [want_utp=${enableval}],
+              [want_utp=${have_utp}])
+if test "x$want_utp" = "xyes" ; then
+    if test "x$have_utp" = "xyes"; then
+        LIBUTP_CFLAGS="-I\$(top_srcdir)/third-party/"
+        LIBUTP_LIBS="\$(top_builddir)/third-party/libutp/libutp.a"
+	if test "x$libutp_extra_libs" != "x" ; then
+	   LIBUTP_LIBS="$LIBUTP_LIBS $libutp_extra_libs"
+	fi
+        AC_DEFINE([WITH_UTP],[1])
+        build_utp="yes"
+    else
+      AC_MSG_ERROR("Unable to build uTP support -- C++ compiler not found")
+    fi
 fi
 AC_SUBST(LIBUTP_CFLAGS)
 AC_SUBST(LIBUTP_LIBS)
 AM_CONDITIONAL([BUILD_UTP],[test "x$build_utp" = "xyes"])
+AC_MSG_RESULT([$build_utp])
 
 
 dnl ----------------------------------------------------------------------------
@@ -278,14 +289,14 @@ if test "x$build_gtk" = "xyes"; then
                       [libnotify >= $LIBNOTIFY_MINIMUM],
                       [have_libnotify=yes],
                       [have_libnotify=no])
-    AC_ARG_ENABLE([libnotify], 
-                  AS_HELP_STRING([--enable-libnotify],[enable notifications]),, 
-                  [enable_libnotify=yes]) 
+    AC_ARG_ENABLE([libnotify],
+                  AS_HELP_STRING([--enable-libnotify],[enable notifications]),,
+                  [enable_libnotify=yes])
     use_libnotify=no
     if test "x$have_libnotify" = "xyes"; then
         if test "x$enable_libnotify" = "xyes" ; then
             use_libnotify=yes
-            AC_DEFINE([HAVE_LIBNOTIFY], 1) 
+            AC_DEFINE([HAVE_LIBNOTIFY], 1)
         else
             LIBNOTIFY_CFLAGS=
             LIBNOTIFY_LIBS=
@@ -297,14 +308,14 @@ if test "x$build_gtk" = "xyes"; then
                       [have_libappindicator=yes],
                       [have_libappindicator=no])
 
-    AC_ARG_ENABLE([libappindicator], 
-                  AS_HELP_STRING([--enable-libappindicator],[enable AppIndicator support]),, 
+    AC_ARG_ENABLE([libappindicator],
+                  AS_HELP_STRING([--enable-libappindicator],[enable AppIndicator support]),,
                   [enable_libappindicator=yes])
     use_libappindicator=no
     if test "x$have_libappindicator" = "xyes"; then
         if test "x$enable_libappindicator" = "xyes" ; then
             use_libappindicator=yes
-            AC_DEFINE([HAVE_LIBAPPINDICATOR], 1) 
+            AC_DEFINE([HAVE_LIBAPPINDICATOR], 1)
         else
             LIBAPPINDICATOR_CFLAGS=
             LIBAPPINDICATOR_LIBS=
@@ -315,13 +326,13 @@ if test "x$build_gtk" = "xyes"; then
                       [libcanberra-gtk >= $CANBERRA_MINIMUM],
                       [have_libcanberra=yes],
                       [have_libcanberra=no])
-    AC_ARG_ENABLE([libcanberra], 
-                  AS_HELP_STRING([--enable-libcanberra],[enable sounds]),, 
-                  [enable_libcanberra=yes]) 
+    AC_ARG_ENABLE([libcanberra],
+                  AS_HELP_STRING([--enable-libcanberra],[enable sounds]),,
+                  [enable_libcanberra=yes])
     if test "x$have_libcanberra" = "xyes"; then
         if test "x$enable_libcanberra" = "xyes" ; then
             use_canberra=yes
-            AC_DEFINE([HAVE_LIBCANBERRA], 1) 
+            AC_DEFINE([HAVE_LIBCANBERRA], 1)
         else
             LIBCANBERRA_CFLAGS=
             LIBCANBERRA_LIBS=
@@ -332,13 +343,13 @@ if test "x$build_gtk" = "xyes"; then
                       [gconf-2.0 >= $GCONF2_MINIMUM],
                       [have_gconf2=yes],
                       [have_gconf2=no])
-    AC_ARG_ENABLE([gconf2], 
-                  AS_HELP_STRING([--enable-gconf2],[enable GConf support]),, 
-                  [enable_gconf2=yes]) 
+    AC_ARG_ENABLE([gconf2],
+                  AS_HELP_STRING([--enable-gconf2],[enable GConf support]),,
+                  [enable_gconf2=yes])
     if test "x$have_gconf2" = "xyes"; then
         if test "x$enable_gconf2" = "xyes" ; then
             use_gconf2=yes
-            AC_DEFINE([HAVE_GCONF2], 1) 
+            AC_DEFINE([HAVE_GCONF2], 1)
         else
             GCONF2_CFLAGS=
             GCONF2_LIBS=
@@ -361,7 +372,7 @@ if test "x$build_gtk" = "xyes"; then
     fi
 fi
 
-AC_ARG_ENABLE([nls], 
+AC_ARG_ENABLE([nls],
               AS_HELP_STRING([--enable-nls],[enable native language support]),,
               [enable_nls=yes])
 
@@ -428,9 +439,9 @@ AC_ARG_ENABLE([lightweight],
               AS_HELP_STRING([--enable-lightweight],[optimize libtransmission for low-resource systems: smaller cache size, prefer unencrypted peer connections, etc.]),
               [enable_lightweight=${enableval}],
               [enable_lightweight="no"])
-if test "x$enable_lightweight" = "xyes" ; then 
+if test "x$enable_lightweight" = "xyes" ; then
   AC_DEFINE([TR_LIGHTWEIGHT],[1],[optimize libtransmission for low-resource systems])
-fi 
+fi
 
 AC_ARG_ENABLE([cli],
               [AS_HELP_STRING([--enable-cli],[build command-line client])],

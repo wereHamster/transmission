@@ -81,13 +81,12 @@ getRandomPort( tr_session * s )
    characters, where x is the major version number, y is the
    minor version number, z is the maintenance number, and b
    designates beta (Azureus-style) */
-uint8_t*
-tr_peerIdNew( void )
+void
+tr_peerIdInit( uint8_t * buf )
 {
     int          i;
     int          val;
     int          total = 0;
-    uint8_t *    buf = tr_new( uint8_t, 21 );
     const char * pool = "0123456789abcdefghijklmnopqrstuvwxyz";
     const int    base = 36;
 
@@ -103,18 +102,6 @@ tr_peerIdNew( void )
     val = total % base ? base - ( total % base ) : 0;
     buf[19] = pool[val];
     buf[20] = '\0';
-
-    return buf;
-}
-
-const uint8_t*
-tr_getPeerId( void )
-{
-    static uint8_t * id = NULL;
-
-    if( id == NULL )
-        id = tr_peerIdNew( );
-    return id;
 }
 
 /***
@@ -315,7 +302,7 @@ tr_sessionGetDefaultSettings( const char * configDir UNUSED, tr_benc * d )
     tr_bencDictAddStr ( d, TR_PREFS_KEY_BLOCKLIST_URL,            "http://www.example.com/blocklist" );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_MAX_CACHE_SIZE_MB,        DEFAULT_CACHE_SIZE_MB );
     tr_bencDictAddBool( d, TR_PREFS_KEY_DHT_ENABLED,              TRUE );
-    tr_bencDictAddBool( d, TR_PREFS_KEY_UTP_ENABLED,              FALSE );
+    tr_bencDictAddBool( d, TR_PREFS_KEY_UTP_ENABLED,              TRUE );
     tr_bencDictAddBool( d, TR_PREFS_KEY_LPD_ENABLED,              FALSE );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_DOWNLOAD_DIR,             tr_getDefaultDownloadDir( ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_DSPEED_KBps,              100 );
@@ -325,7 +312,6 @@ tr_sessionGetDefaultSettings( const char * configDir UNUSED, tr_benc * d )
     tr_bencDictAddBool( d, TR_PREFS_KEY_IDLE_LIMIT_ENABLED,       FALSE );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_INCOMPLETE_DIR,           tr_getDefaultDownloadDir( ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_INCOMPLETE_DIR_ENABLED,   FALSE );
-    tr_bencDictAddBool( d, TR_PREFS_KEY_LAZY_BITFIELD,            TRUE );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_MSGLEVEL,                 TR_MSG_INF );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_OPEN_FILE_LIMIT,          atoi( TR_DEFAULT_OPEN_FILE_LIMIT_STR ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_LIMIT_GLOBAL,        atoi( TR_DEFAULT_PEER_LIMIT_GLOBAL_STR ) );
@@ -390,7 +376,6 @@ tr_sessionGetSettings( tr_session * s, struct tr_benc * d )
     tr_bencDictAddBool( d, TR_PREFS_KEY_IDLE_LIMIT_ENABLED,       tr_sessionIsIdleLimited( s ) );
     tr_bencDictAddStr ( d, TR_PREFS_KEY_INCOMPLETE_DIR,           tr_sessionGetIncompleteDir( s ) );
     tr_bencDictAddBool( d, TR_PREFS_KEY_INCOMPLETE_DIR_ENABLED,   tr_sessionIsIncompleteDirEnabled( s ) );
-    tr_bencDictAddBool( d, TR_PREFS_KEY_LAZY_BITFIELD,            s->useLazyBitfield );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_MSGLEVEL,                 tr_getMessageLevel( ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_OPEN_FILE_LIMIT,          tr_fdGetFileLimit( s ) );
     tr_bencDictAddInt ( d, TR_PREFS_KEY_PEER_LIMIT_GLOBAL,        tr_sessionGetPeerLimit( s ) );
@@ -582,6 +567,7 @@ tr_sessionInit( const char  * tag,
     session->tag = tr_strdup( tag );
     session->magicNumber = SESSION_MAGIC_NUMBER;
     session->buffer = tr_valloc( SESSION_BUFFER_SIZE );
+    tr_peerIdInit( session->peer_id );
     tr_bencInitList( &session->removedTorrents, 0 );
 
     /* nice to start logging at the very beginning */
@@ -758,8 +744,6 @@ sessionSetImpl( void * vdata )
     /* misc features */
     if( tr_bencDictFindInt( settings, TR_PREFS_KEY_MAX_CACHE_SIZE_MB, &i ) )
         tr_sessionSetCacheLimit_MB( session, i );
-    if( tr_bencDictFindBool( settings, TR_PREFS_KEY_LAZY_BITFIELD, &boolVal ) )
-        tr_sessionSetLazyBitfieldEnabled( session, boolVal );
     if( tr_bencDictFindInt( settings, TR_PREFS_KEY_PEER_LIMIT_TORRENT, &i ) )
         tr_sessionSetPeerLimitPerTorrent( session, i );
     if( tr_bencDictFindBool( settings, TR_PREFS_KEY_PEX_ENABLED, &boolVal ) )
@@ -2613,37 +2597,4 @@ void
 tr_sessionSetWebConfigFunc( tr_session * session, void (*func)(tr_session*, void*, const char* ) )
 {
     session->curl_easy_config_func = func;
-}
-
-/***
-****
-***/
-
-uint64_t
-tr_sessionGetTimeMsec( tr_session * session )
-{
-    struct timeval tv;
-
-    if( event_base_gettimeofday_cached( session->event_base, &tv ) )
-    {
-        return tr_time_msec( );
-    }
-    else
-    {
-        /* event_base_gettimeofday_cached() might be implemented using
-           clock_gettime(CLOCK_MONOTONIC), so calculate the offset to
-           real time... */
-        static uint64_t offset;
-        static tr_bool offset_calculated = FALSE;
-
-        const uint64_t val = (uint64_t) tv.tv_sec * 1000 + ( tv.tv_usec / 1000 );
-
-        if( !offset_calculated )
-        {
-            offset = tr_time_msec() - val;
-            offset_calculated = TRUE;
-        }
-
-        return val + offset;
-    }
 }

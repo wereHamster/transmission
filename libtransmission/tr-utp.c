@@ -101,7 +101,7 @@ static struct event *utp_timer = NULL;
 static void
 incoming(void *closure, struct UTPSocket *s)
 {
-    tr_session *ss = (tr_session*)closure;
+    tr_session *ss = closure;
     struct sockaddr_storage from_storage;
     struct sockaddr *from = (struct sockaddr*)&from_storage;
     socklen_t fromlen = sizeof(from_storage);
@@ -112,19 +112,10 @@ incoming(void *closure, struct UTPSocket *s)
         UTP_Close(s);
         return;
     }
-    
+
     UTP_GetPeerName(s, from, &fromlen);
-    if(from->sa_family == AF_INET) {
-        struct sockaddr_in *sin = (struct sockaddr_in*)from;
-        addr.type = TR_AF_INET;
-        addr.addr.addr4.s_addr = sin->sin_addr.s_addr;
-        port = sin->sin_port;
-    } else if(from->sa_family == AF_INET6) {
-        struct sockaddr_in6 *sin6 = (struct sockaddr_in6*)from;
-        addr.type = TR_AF_INET6;
-        addr.addr.addr6 = sin6->sin6_addr;
-        port = sin6->sin6_port;
-    } else {
+    if( !tr_ssToAddr( &addr, &port, &from_storage ) )
+    {
         tr_nerr("UTP", "Unknown socket family");
         UTP_Close(s);
         return;
@@ -137,7 +128,7 @@ void
 tr_utpSendTo(void *closure, const unsigned char *buf, size_t buflen,
              const struct sockaddr *to, socklen_t tolen)
 {
-    tr_session *ss = (tr_session*)closure;
+    tr_session *ss = closure;
 
     if(to->sa_family == AF_INET && ss->udp_socket)
         sendto(ss->udp_socket, buf, buflen, 0, to, tolen);

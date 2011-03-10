@@ -350,6 +350,7 @@ cached_file_close( struct tr_cached_file * o )
  */
 static int
 cached_file_open( struct tr_cached_file  * o,
+                  const char             * existing_dir,
                   const char             * filename,
                   tr_bool                  writable,
                   tr_preallocation_mode    allocation,
@@ -358,6 +359,14 @@ cached_file_open( struct tr_cached_file  * o,
     int flags;
     struct stat sb;
     tr_bool alreadyExisted;
+
+    /* confirm that existing_dir, if specified, exists on the disk */
+    if( existing_dir && *existing_dir && stat( existing_dir, &sb ) )
+    {
+        const int err = errno;
+        tr_err( _( "Couldn't open \"%1$s\": %2$s" ), existing_dir, tr_strerror( err ) );
+        return err;
+    }
 
     /* create subfolders, if any */
     if( writable )
@@ -565,6 +574,7 @@ int
 tr_fdFileCheckout( tr_session             * session,
                    int                      torrent_id,
                    tr_file_index_t          i,
+                   const char             * existing_dir,
                    const char             * filename,
                    tr_bool                  writable,
                    tr_preallocation_mode    allocation,
@@ -580,7 +590,7 @@ tr_fdFileCheckout( tr_session             * session,
 
     if( !cached_file_is_open( o ) )
     {
-        const int err = cached_file_open( o, filename, writable, allocation, file_size );
+        const int err = cached_file_open( o, existing_dir, filename, writable, allocation, file_size );
         if( err ) {
             errno = err;
             return -1;
@@ -660,37 +670,17 @@ tr_fdSocketAccept( tr_session * s, int sockfd, tr_address * addr, tr_port * port
     len = sizeof( struct sockaddr_storage );
     fd = accept( sockfd, (struct sockaddr *) &sock, &len );
 
-    if( ( fd >= 0 ) && gFd->socket_count > gFd->socket_limit )
-    {
-        tr_netCloseSocket( fd );
-        fd = -1;
-    }
-
     if( fd >= 0 )
     {
-        /* "The ss_family field of the sockaddr_storage structure will always
-         * align with the family field of any protocol-specific structure." */
-        if( sock.ss_family == AF_INET )
+        if( ( gFd->socket_count < gFd->socket_limit ) && tr_ssToAddr( addr, port, &sock ) )
         {
-            struct sockaddr_in *si;
-            union { struct sockaddr_storage dummy; struct sockaddr_in si; } s;
-            s.dummy = sock;
-            si = &s.si;
-            addr->type = TR_AF_INET;
-            addr->addr.addr4.s_addr = si->sin_addr.s_addr;
-            *port = si->sin_port;
+            ++gFd->socket_count;
         }
         else
         {
-            struct sockaddr_in6 *si;
-            union { struct sockaddr_storage dummy; struct sockaddr_in6 si; } s;
-            s.dummy = sock;
-            si = &s.si;
-            addr->type = TR_AF_INET6;
-            addr->addr.addr6 = si->sin6_addr;
-            *port = si->sin6_port;
+            tr_netCloseSocket( fd );
+            fd = -1;
         }
-        ++gFd->socket_count;
     }
 
     return fd;

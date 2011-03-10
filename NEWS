@@ -1,3 +1,25 @@
+=== Transmission 2.30 (2011/xx/yy) ===
+==== All Platforms ====
+  * The "lazy bitfield" feature has been superseded by the "Fast Extension" BEP6
+
+=== Transmission 2.22 (2011/03/04) ===
+==== All Platforms ====
+  * Faster endgame
+  * Fix bug where leechers might be disconnected while seeding in some situations
+  * Fix 2.20 bug that sometimes showed inaccurate upload/download speeds
+  * Support for unsorted blacklists
+  * Fix IPv6 DHT
+  * Re-add support to automatically close idle peers
+  * Fix bug where the resume file did not save the time checked for the last piece
+==== Mac ====
+  * Fixes for Dutch, German, and Russian localizations
+==== GTK+ ====
+  * Fix setting individual idle seeding time
+==== Qt ====
+  * Fix loading localizations on Linux
+==== CLI ====
+  * Fix bandwidth display issue
+
 === Transmission 2.21 (2011/02/08) ===
 ==== All Platforms ====
   * Fix compile error in the the 2.20 tarball
