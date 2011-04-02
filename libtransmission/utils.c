@@ -22,7 +22,7 @@
 #endif
 
 #include <assert.h>
-#include <ctype.h> /* isalpha(), tolower() */
+#include <ctype.h> /* isdigit(), isalpha(), tolower() */
 #include <errno.h>
 #include <float.h> /* DBL_EPSILON */
 #include <locale.h> /* localeconv() */
@@ -40,7 +40,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h> /* stat(), getcwd(), getpagesize() */
+#include <unistd.h> /* stat(), getcwd(), getpagesize(), unlink() */
 
 #include <event2/buffer.h>
 #include <event2/event.h>
@@ -57,23 +57,22 @@
 #include "fdlimit.h"
 #include "ConvertUTF.h"
 #include "list.h"
-#include "net.h"
 #include "utils.h"
-#include "platform.h"
+#include "platform.h" /* tr_lockLock() */
 #include "version.h"
 
 
 time_t       __tr_current_time   = 0;
 tr_msg_level __tr_message_level  = TR_MSG_ERR;
 
-static tr_bool        messageQueuing = FALSE;
+static bool           messageQueuing = false;
 static tr_msg_list *  messageQueue = NULL;
 static tr_msg_list ** messageQueueTail = &messageQueue;
 static int            messageQueueCount = 0;
 
 #ifndef WIN32
     /* make null versions of these win32 functions */
-    static inline int IsDebuggerPresent( void ) { return FALSE; }
+    static inline int IsDebuggerPresent( void ) { return false; }
     static inline void OutputDebugString( const void * unused UNUSED ) { }
 #endif
 
@@ -92,10 +91,10 @@ getMessageLock( void )
     return l;
 }
 
-FILE*
+void*
 tr_getLog( void )
 {
-    static tr_bool initialized = FALSE;
+    static bool initialized = false;
     static FILE * file = NULL;
 
     if( !initialized )
@@ -115,7 +114,7 @@ tr_getLog( void )
             default:
                 file = NULL; break;
         }
-        initialized = TRUE;
+        initialized = true;
     }
 
     return file;
@@ -128,12 +127,12 @@ tr_setMessageLevel( tr_msg_level level )
 }
 
 void
-tr_setMessageQueuing( tr_bool enabled )
+tr_setMessageQueuing( bool enabled )
 {
     messageQueuing = enabled;
 }
 
-tr_bool
+bool
 tr_getMessageQueuing( void )
 {
     return messageQueuing != 0;
@@ -207,7 +206,7 @@ tr_getLogTimeStr( char * buf, int buflen )
     return buf;
 }
 
-tr_bool
+bool
 tr_deepLoggingIsActive( void )
 {
     static int8_t deepLoggingIsActive = -1;
@@ -353,61 +352,6 @@ void*
 tr_memdup( const void * src, size_t byteCount )
 {
     return memcpy( tr_malloc( byteCount ), src, byteCount );
-}
-
-/***
-****
-***/
-
-void
-tr_set_compare( const void * va, size_t aCount,
-                const void * vb, size_t bCount,
-                int compare( const void * a, const void * b ),
-                size_t elementSize,
-                tr_set_func in_a_cb,
-                tr_set_func in_b_cb,
-                tr_set_func in_both_cb,
-                void * userData )
-{
-    const uint8_t * a = va;
-    const uint8_t * b = vb;
-    const uint8_t * aend = a + elementSize * aCount;
-    const uint8_t * bend = b + elementSize * bCount;
-
-    while( a != aend || b != bend )
-    {
-        if( a == aend )
-        {
-            ( *in_b_cb )( (void*)b, userData );
-            b += elementSize;
-        }
-        else if( b == bend )
-        {
-            ( *in_a_cb )( (void*)a, userData );
-            a += elementSize;
-        }
-        else
-        {
-            const int val = ( *compare )( a, b );
-
-            if( !val )
-            {
-                ( *in_both_cb )( (void*)a, userData );
-                a += elementSize;
-                b += elementSize;
-            }
-            else if( val < 0 )
-            {
-                ( *in_a_cb )( (void*)a, userData );
-                a += elementSize;
-            }
-            else if( val > 0 )
-            {
-                ( *in_b_cb )( (void*)b, userData );
-                b += elementSize;
-            }
-        }
-    }
 }
 
 /***
@@ -838,23 +782,23 @@ tr_strstrip( char * str )
     return str;
 }
 
-tr_bool
+bool
 tr_str_has_suffix( const char *str, const char *suffix )
 {
     size_t str_len;
     size_t suffix_len;
 
     if( !str )
-        return FALSE;
+        return false;
     if( !suffix )
-        return TRUE;
+        return true;
 
     str_len = strlen( str );
     suffix_len = strlen( suffix );
     if( str_len < suffix_len )
-        return FALSE;
+        return false;
 
-    return !strncasecmp( str + str_len - suffix_len, suffix, suffix_len );
+    return !evutil_ascii_strncasecmp( str + str_len - suffix_len, suffix, suffix_len );
 }
 
 /****
@@ -993,7 +937,7 @@ tr_hex_to_sha1( uint8_t * out, const char * in )
 ****
 ***/
 
-static tr_bool
+static bool
 isValidURLChars( const char * url, int url_len )
 {
     const char * c;
@@ -1008,55 +952,49 @@ isValidURLChars( const char * url, int url_len )
         "{}|\\^[]`";                 /* unwise */
 
     if( url == NULL )
-        return FALSE;
+        return false;
 
     for( c=url, end=c+url_len; c && *c && c!=end; ++c )
         if( !strchr( rfc2396_valid_chars, *c ) )
-            return FALSE;
+            return false;
 
-    return TRUE;
+    return true;
 }
 
-/** @brief return TRUE if the url is a http or https url that Transmission understands */
-tr_bool
+/** @brief return true if the URL is a http or https or UDP one that Transmission understands */
+bool
 tr_urlIsValidTracker( const char * url )
 {
-    tr_bool valid;
-    char * scheme = NULL;
+    bool valid;
     const int len = url ? strlen(url) : 0;
 
     valid = isValidURLChars( url, len )
-         && !tr_urlParse( url, len, &scheme, NULL, NULL, NULL )
-         && ( scheme != NULL )
-         && ( !strcmp(scheme,"http") || !strcmp(scheme,"https") );
+         && !tr_urlParse( url, len, NULL, NULL, NULL, NULL )
+         && ( !memcmp(url,"http://",7) || !memcmp(url,"https://",8) || !memcmp(url,"udp://",6) );
 
-    tr_free( scheme );
     return valid;
 }
 
-/** @brief return TRUE if the url is a http or https or ftp or sftp url that Transmission understands */
-tr_bool
+/** @brief return true if the URL is a http or https or ftp or sftp one that Transmission understands */
+bool
 tr_urlIsValid( const char * url, int url_len )
 {
-    tr_bool valid;
-    char * scheme = NULL;
+    bool valid;
     if( ( url_len < 0 ) && ( url != NULL ) )
         url_len = strlen( url );
 
     valid = isValidURLChars( url, url_len )
-         && !tr_urlParse( url, url_len, &scheme, NULL, NULL, NULL )
-         && ( scheme != NULL )
-         && ( !strcmp(scheme,"http") || !strcmp(scheme,"https") || !strcmp(scheme,"ftp") || !strcmp(scheme,"sftp") );
+         && !tr_urlParse( url, url_len, NULL, NULL, NULL, NULL )
+         && ( !memcmp(url,"http://",7) || !memcmp(url,"https://",8) || !memcmp(url,"ftp://",6) || !memcmp(url,"sftp://",7) );
 
-    tr_free( scheme );
     return valid;
 }
 
-tr_bool
-tr_addressIsIP( const char * address )
+bool
+tr_addressIsIP( const char * str )
 {
-    tr_address tempAddr;
-    return tr_pton(address, &tempAddr) != NULL;
+    tr_address tmp;
+    return tr_address_from_string( &tmp, str );
 }
 
 int
@@ -1106,10 +1044,11 @@ tr_urlParse( const char * url_in,
 
     if( !err && !port )
     {
-        if( !strcmp( protocol, "ftp" ) ) port = 21;
-        if( !strcmp( protocol, "sftp" ) ) port = 22;
-        if( !strcmp( protocol, "http" ) ) port = 80;
-        if( !strcmp( protocol, "https" ) ) port = 443;
+        if( !strcmp( protocol, "udp" ) ) port = 80;
+        else if( !strcmp( protocol, "ftp" ) ) port = 21;
+        else if( !strcmp( protocol, "sftp" ) ) port = 22;
+        else if( !strcmp( protocol, "http" ) ) port = 80;
+        else if( !strcmp( protocol, "https" ) ) port = 443;
     }
 
     if( !err )
@@ -1227,11 +1166,11 @@ tr_lowerBound( const void * key,
                size_t       nmemb,
                size_t       size,
                int       (* compar)(const void* key, const void* arrayMember),
-               tr_bool    * exact_match )
+               bool       * exact_match )
 {
     size_t first = 0;
     const char * cbase = base;
-    tr_bool exact = FALSE;
+    bool exact = false;
 
     while( nmemb != 0 )
     {
@@ -1241,7 +1180,7 @@ tr_lowerBound( const void * key,
 
         if( c <= 0 ) {
             if( c == 0 )
-                exact = TRUE;
+                exact = true;
             nmemb = half;
         } else {
             first = middle + 1;
@@ -1307,6 +1246,8 @@ to_utf8( const char * in, size_t inlen )
             iconv_close( cd );
         }
     }
+
+    tr_free( out );
 #endif
 
     if( ret == NULL )
@@ -1347,11 +1288,11 @@ struct number_range
  * This should be a single number (ex. "6") or a range (ex. "6-9").
  * Anything else is an error and will return failure.
  */
-static tr_bool
+static bool
 parseNumberSection( const char * str, int len, struct number_range * setme )
 {
     long a, b;
-    tr_bool success;
+    bool success;
     char * end;
     const int error = errno;
     char * tmp = tr_strndup( str, len );
@@ -1359,19 +1300,18 @@ parseNumberSection( const char * str, int len, struct number_range * setme )
     errno = 0;
     a = b = strtol( tmp, &end, 10 );
     if( errno || ( end == tmp ) ) {
-        success = FALSE;
+        success = false;
     } else if( *end != '-' ) {
-        b = a;
-        success = TRUE;
+        success = true;
     } else {
         const char * pch = end + 1;
         b = strtol( pch, &end, 10 );
         if( errno || ( pch == end ) )
-            success = FALSE;
+            success = false;
         else if( *end ) /* trailing data */
-            success = FALSE;
+            success = false;
         else
-            success = TRUE;
+            success = true;
     }
     tr_free( tmp );
 
@@ -1405,7 +1345,7 @@ tr_parseNumberRange( const char * str_in, int len, int * setmeCount )
     char * str = tr_strndup( str_in, len );
     const char * walk;
     tr_list * ranges = NULL;
-    tr_bool success = TRUE;
+    bool success = true;
 
     walk = str;
     while( walk && *walk && success ) {
@@ -1484,7 +1424,8 @@ tr_truncd( double x, int precision )
     return atof(buf);
 }
 
-char*
+/* return a truncated double as a string */
+static char*
 tr_strtruncd( char * buf, double x, int precision, size_t buflen )
 {
     tr_snprintf( buf, buflen, "%.*f", precision, tr_truncd( x, precision ) );
@@ -1520,7 +1461,7 @@ tr_strratio( char * buf, size_t buflen, double ratio, const char * infinity )
 ***/
 
 int
-tr_moveFile( const char * oldpath, const char * newpath, tr_bool * renamed )
+tr_moveFile( const char * oldpath, const char * newpath, bool * renamed )
 {
     int in;
     int out;
@@ -1587,7 +1528,7 @@ tr_moveFile( const char * oldpath, const char * newpath, tr_bool * renamed )
     return 0;
 }
 
-tr_bool
+bool
 tr_is_same_file( const char * filename1, const char * filename2 )
 {
     struct stat sb1, sb2;
@@ -1646,6 +1587,36 @@ tr_realpath( const char * path, char * resolved_path )
     return resolved_path;
 #else
     return realpath( path, resolved_path );
+#endif
+}
+
+/***
+****
+***/
+
+uint64_t
+tr_htonll( uint64_t x )
+{
+#ifdef HAVE_HTONLL
+    return htonll( x );
+#else
+    /* fallback code by Runner and Juan Carlos Cobas at
+     * http://www.codeproject.com/KB/cpp/endianness.aspx */
+    return (((uint64_t)(htonl((int)((x << 32) >> 32))) << 32) |
+                     (unsigned int)htonl(((int)(x >> 32))));
+#endif
+}
+
+uint64_t
+tr_ntohll( uint64_t x )
+{
+#ifdef HAVE_NTOHLL
+    return ntohll( x );
+#else
+    /* fallback code by Runner and Juan Carlos Cobas at
+     * http://www.codeproject.com/KB/cpp/endianness.aspx */
+    return (((uint64_t)(ntohl((int)((x << 32) >> 32))) << 32) |
+                     (unsigned int)ntohl(((int)(x >> 32))));
 #endif
 }
 

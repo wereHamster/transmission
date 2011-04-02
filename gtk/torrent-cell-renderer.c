@@ -10,7 +10,6 @@
  * $Id$
  */
 
-#include <string.h> /* strcmp() */
 #include <gtk/gtk.h>
 #include <glib/gi18n.h>
 #include <libtransmission/transmission.h>
@@ -35,6 +34,22 @@ enum
 #define SMALL_SCALE 0.9
 #define COMPACT_ICON_SIZE GTK_ICON_SIZE_MENU
 #define FULL_ICON_SIZE GTK_ICON_SIZE_DND
+
+/***
+****
+***/
+
+/* backwards-compatible wrapper around gtk_cell_renderer_get_padding() */
+static void
+gtr_cell_renderer_get_padding( GtkCellRenderer * cell, gint * xpad, gint * ypad )
+{
+#if GTK_CHECK_VERSION( 2,18,0 )
+    gtk_cell_renderer_get_padding( cell, xpad, ypad );
+#else
+    if( xpad != NULL ) *xpad = cell->xpad;
+    if( ypad != NULL ) *ypad = cell->ypad;
+#endif
+}
 
 /***
 ****

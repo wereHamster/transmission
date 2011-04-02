@@ -120,6 +120,20 @@ level_combo_changed_cb( GtkComboBox * combo_box, gpointer gdata )
         scroll_to_bottom( data );
 }
 
+/* similar to asctime, but is utf8-clean */
+static char*
+gtr_localtime( time_t time )
+{
+    char buf[256], *eoln;
+    const struct tm tm = *localtime( &time );
+
+    g_strlcpy( buf, asctime( &tm ), sizeof( buf ) );
+    if( ( eoln = strchr( buf, '\n' ) ) )
+        *eoln = '\0';
+
+    return g_locale_to_utf8( buf, -1, NULL, NULL, NULL );
+}
+
 static void
 doSave( GtkWindow * parent, struct MsgData * data, const char * filename )
 {
@@ -492,6 +506,7 @@ gtr_message_log_window_new( GtkWindow * parent, TrCore * core )
     data->filter = gtk_tree_model_filter_new( GTK_TREE_MODEL(
                                                   data->store ), NULL );
     data->sort = gtk_tree_model_sort_new_with_model( data->filter );
+    g_object_unref( data->filter );
     gtk_tree_sortable_set_sort_column_id( GTK_TREE_SORTABLE( data->sort ),
                                           COL_SEQUENCE,
                                           GTK_SORT_ASCENDING );
@@ -502,6 +517,7 @@ gtr_message_log_window_new( GtkWindow * parent, TrCore * core )
 
 
     view = gtk_tree_view_new_with_model( data->sort );
+    g_object_unref( data->sort );
     g_signal_connect( view, "button-release-event",
                       G_CALLBACK( on_tree_view_button_released ), NULL );
     data->view = GTK_TREE_VIEW( view );

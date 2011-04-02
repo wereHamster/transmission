@@ -22,12 +22,6 @@
 #include "utils.h" /* TR_GNUC_NULL_TERMINATED */
 
 /**
-***
-**/
-
-struct evbuffer;
-
-/**
 *** @addtogroup peers
 *** @{
 **/
@@ -101,7 +95,7 @@ void  tr_cryptoRandBuf( void * buf, size_t len );
 char*  tr_ssha1( const void * plaintext );
 
 /** @brief Validate a test password against the a ssha1 password */
-tr_bool tr_ssha1_matches( const char * ssha1, const char * pass );
+bool tr_ssha1_matches( const char * ssha1, const char * pass );
 
 /* @} */
 

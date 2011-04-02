@@ -1,6 +1,22 @@
 === Transmission 2.30 (2011/xx/yy) ===
 ==== All Platforms ====
+  * µTP support
+  * UDP tracker support
+  * Multiscrape support
+  * Download scarcest pieces first
   * The "lazy bitfield" feature has been superseded by the "Fast Extension" BEP6
+  * Scripts are passed the environment
+==== Mac ====
+  * An Intel Mac is now required
+  * Ability to remove all completed (finished seeding) transfers
+  * The Web Interface is published over Wide-Area Bonjour
+  * Enhanced grouping rules
+  * Interface tweaks
+==== GTK+ ====
+  * Added 256 x 256 icon by Andreas Nilsson
+  * Register as a magnet link handler in the .desktop file
+==== Web Client ====
+  * Peer and Network preferences
 
 === Transmission 2.22 (2011/03/04) ===
 ==== All Platforms ====

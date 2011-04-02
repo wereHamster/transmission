@@ -22,16 +22,15 @@ THE SOFTWARE.
 */
 
 #include <assert.h>
-#include <unistd.h>
 
 #include <event2/event.h>
+
 #include <libutp/utp.h>
 
 #include "transmission.h"
 #include "net.h"
 #include "session.h"
-#include "crypto.h"
-#include "peer-io.h"
+#include "crypto.h" /* tr_cryptoWeakRandInt() */
 #include "peer-mgr.h"
 #include "tr-utp.h"
 #include "utils.h"
@@ -68,7 +67,7 @@ UTP_Write(struct UTPSocket *socket, size_t count)
     tr_nerr( MY_NAME, "UTP_RBDrained(%p, %zu) was called.", socket, count );
     dbgmsg( "UTP_RBDrained(%p, %zu) was called.", socket, count );
     assert( 0 ); /* FIXME: this is too much for the long term, but probably needed in the short term */
-    return FALSE;
+    return false;
 }
 
 int tr_utpPacket(const unsigned char *buf UNUSED, size_t buflen UNUSED,
@@ -114,7 +113,7 @@ incoming(void *closure, struct UTPSocket *s)
     }
 
     UTP_GetPeerName(s, from, &fromlen);
-    if( !tr_ssToAddr( &addr, &port, &from_storage ) )
+    if( !tr_address_from_sockaddr_storage( &addr, &port, &from_storage ) )
     {
         tr_nerr("UTP", "Unknown socket family");
         UTP_Close(s);
@@ -169,7 +168,7 @@ tr_utpPacket(const unsigned char *buf, size_t buflen,
              const struct sockaddr *from, socklen_t fromlen,
              tr_session *ss)
 {
-    if(utp_timer == NULL)
+    if( !ss->isClosed && !utp_timer )
     {
         utp_timer = evtimer_new( ss->event_base, timer_callback, ss );
         if(utp_timer == NULL)

@@ -16,7 +16,6 @@
 
 #include "transmission.h"
 #include "bencode.h"
-#include "bitset.h"
 #include "completion.h"
 #include "metainfo.h" /* tr_metainfoGetBasename() */
 #include "peer-mgr.h" /* pex */
@@ -94,12 +93,12 @@ savePeers( tr_benc * dict, const tr_torrent * tor )
     int count;
     tr_pex * pex;
 
-    count = tr_peerMgrGetPeers( (tr_torrent*) tor, &pex, TR_AF_INET, TR_PEERS_ALL, MAX_REMEMBERED_PEERS );
+    count = tr_peerMgrGetPeers( (tr_torrent*) tor, &pex, TR_AF_INET, TR_PEERS_INTERESTING, MAX_REMEMBERED_PEERS );
     if( count > 0 )
         tr_bencDictAddRaw( dict, KEY_PEERS, pex, sizeof( tr_pex ) * count );
     tr_free( pex );
 
-    count = tr_peerMgrGetPeers( (tr_torrent*) tor, &pex, TR_AF_INET6, TR_PEERS_ALL, MAX_REMEMBERED_PEERS );
+    count = tr_peerMgrGetPeers( (tr_torrent*) tor, &pex, TR_AF_INET6, TR_PEERS_INTERESTING, MAX_REMEMBERED_PEERS );
     if( count > 0 )
         tr_bencDictAddRaw( dict, KEY_PEERS6, pex, sizeof( tr_pex ) * count );
 
@@ -157,27 +156,24 @@ loadPeers( tr_benc * dict, tr_torrent * tor )
 ***/
 
 static void
-saveDND( tr_benc *          dict,
-         const tr_torrent * tor )
+saveDND( tr_benc * dict, const tr_torrent * tor )
 {
-    const tr_info *       inf = tr_torrentInfo( tor );
+    tr_benc * list;
+    tr_file_index_t i;
+    const tr_info * const inf = tr_torrentInfo( tor );
     const tr_file_index_t n = inf->fileCount;
-    tr_file_index_t       i;
-    tr_benc *             list;
 
     list = tr_bencDictAddList( dict, KEY_DND, n );
-    for( i = 0; i < n; ++i )
+    for( i=0; i<n; ++i )
         tr_bencListAddInt( list, inf->files[i].dnd ? 1 : 0 );
 }
 
 static uint64_t
-loadDND( tr_benc *    dict,
-         tr_torrent * tor )
+loadDND( tr_benc * dict, tr_torrent * tor )
 {
-    uint64_t              ret = 0;
-    tr_info *             inf = &tor->info;
-    const tr_file_index_t n = inf->fileCount;
-    tr_benc *             list = NULL;
+    uint64_t ret = 0;
+    tr_benc * list = NULL;
+    const tr_file_index_t n = tor->info.fileCount;
 
     if( tr_bencDictFindList( dict, KEY_DND, &list )
       && ( tr_bencListSize( list ) == n ) )
@@ -187,7 +183,7 @@ loadDND( tr_benc *    dict,
         tr_file_index_t * dnd = tr_new( tr_file_index_t, n );
         tr_file_index_t   i, dlCount = 0, dndCount = 0;
 
-        for( i = 0; i < n; ++i )
+        for( i=0; i<n; ++i )
         {
             if( tr_bencGetInt( tr_bencListChild( list, i ), &tmp ) && tmp )
                 dnd[dndCount++] = i;
@@ -197,13 +193,13 @@ loadDND( tr_benc *    dict,
 
         if( dndCount )
         {
-            tr_torrentInitFileDLs ( tor, dnd, dndCount, FALSE );
+            tr_torrentInitFileDLs ( tor, dnd, dndCount, false );
             tr_tordbg( tor, "Resume file found %d files listed as dnd",
                        dndCount );
         }
         if( dlCount )
         {
-            tr_torrentInitFileDLs ( tor, dl, dlCount, TRUE );
+            tr_torrentInitFileDLs ( tor, dl, dlCount, true );
             tr_tordbg( tor,
                        "Resume file found %d files marked for download",
                        dlCount );
@@ -231,10 +227,10 @@ loadDND( tr_benc *    dict,
 static void
 saveFilePriorities( tr_benc * dict, const tr_torrent * tor )
 {
-    const tr_info *       inf = tr_torrentInfo( tor );
+    tr_benc * list;
+    tr_file_index_t i;
+    const tr_info * const inf = tr_torrentInfo( tor );
     const tr_file_index_t n = inf->fileCount;
-    tr_file_index_t       i;
-    tr_benc *             list;
 
     list = tr_bencDictAddList( dict, KEY_FILE_PRIORITIES, n );
     for( i = 0; i < n; ++i )
@@ -244,10 +240,9 @@ saveFilePriorities( tr_benc * dict, const tr_torrent * tor )
 static uint64_t
 loadFilePriorities( tr_benc * dict, tr_torrent * tor )
 {
-    uint64_t              ret = 0;
-    tr_info *             inf = &tor->info;
-    const tr_file_index_t n = inf->fileCount;
-    tr_benc *             list;
+    tr_benc * list;
+    uint64_t ret = 0;
+    const tr_file_index_t n = tor->info.fileCount;
 
     if( tr_bencDictFindList( dict, KEY_FILE_PRIORITIES, &list )
       && ( tr_bencListSize( list ) == n ) )
@@ -303,7 +298,7 @@ static void
 loadSingleSpeedLimit( tr_benc * d, tr_direction dir, tr_torrent * tor )
 {
     int64_t i;
-    tr_bool boolVal;
+    bool boolVal;
 
     if( tr_bencDictFindInt( d, KEY_SPEED_Bps, &i ) )
         tr_torrentSetSpeedLimit_Bps( tor, dir, i );
@@ -326,8 +321,9 @@ enum old_speed_modes
 static uint64_t
 loadSpeedLimits( tr_benc * dict, tr_torrent * tor )
 {
-    uint64_t  ret = 0;
     tr_benc * d;
+    uint64_t ret = 0;
+
 
     if( tr_bencDictFindDict( dict, KEY_SPEEDLIMIT_UP, &d ) )
     {
@@ -364,11 +360,10 @@ loadSpeedLimits( tr_benc * dict, tr_torrent * tor )
 }
 
 static uint64_t
-loadRatioLimits( tr_benc *    dict,
-                 tr_torrent * tor )
+loadRatioLimits( tr_benc * dict, tr_torrent * tor )
 {
-    uint64_t  ret = 0;
     tr_benc * d;
+    uint64_t ret = 0;
 
     if( tr_bencDictFindDict( dict, KEY_RATIOLIMIT, &d ) )
     {
@@ -385,11 +380,10 @@ loadRatioLimits( tr_benc *    dict,
 }
 
 static uint64_t
-loadIdleLimits( tr_benc *    dict,
-                      tr_torrent * tor )
+loadIdleLimits( tr_benc * dict, tr_torrent * tor )
 {
-    uint64_t  ret = 0;
     tr_benc * d;
+    uint64_t ret = 0;
 
     if( tr_bencDictFindDict( dict, KEY_IDLELIMIT, &d ) )
     {
@@ -407,6 +401,22 @@ loadIdleLimits( tr_benc *    dict,
 /***
 ****
 ***/
+
+static void
+bitfieldToBenc( const tr_bitfield * b, tr_benc * benc )
+{
+    if( tr_bitfieldHasAll( b ) )
+        tr_bencInitStr( benc, "all", 3 );
+    else if( tr_bitfieldHasNone( b ) )
+        tr_bencInitStr( benc, "none", 4 );
+    else {
+        size_t byte_count = 0;
+        uint8_t * raw = tr_bitfieldGetRaw( b, &byte_count );
+        tr_bencInitRaw( benc, raw, byte_count );
+        tr_free( raw );
+    }
+}
+
 
 static void
 saveProgress( tr_benc * dict, tr_torrent * tor )
@@ -427,7 +437,7 @@ saveProgress( tr_benc * dict, tr_torrent * tor )
         const tr_piece * pend;
         time_t oldest_nonzero = now;
         time_t newest = 0;
-        tr_bool has_zero = FALSE;
+        bool has_zero = false;
         const time_t mtime = tr_torrentGetFileMTime( tor, fi );
         const tr_file * f = &inf->files[fi];
 
@@ -435,7 +445,7 @@ saveProgress( tr_benc * dict, tr_torrent * tor )
         for( p=&inf->pieces[f->firstPiece], pend=&inf->pieces[f->lastPiece]; p!=pend; ++p )
         {
             if( !p->timeChecked )
-                has_zero = TRUE;
+                has_zero = true;
             else if( oldest_nonzero > p->timeChecked )
                 oldest_nonzero = p->timeChecked;
             if( newest < p->timeChecked )
@@ -469,8 +479,8 @@ saveProgress( tr_benc * dict, tr_torrent * tor )
         tr_bencDictAddStr( prog, KEY_PROGRESS_HAVE, "all" );
 
     /* add the blocks bitfield */
-    tr_bitsetToBenc( tr_cpBlockBitset( &tor->completion ),
-                     tr_bencDictAdd( prog, KEY_PROGRESS_BLOCKS ) );
+    bitfieldToBenc( &tor->completion.blockBitfield,
+                    tr_bencDictAdd( prog, KEY_PROGRESS_BLOCKS ) );
 }
 
 static uint64_t
@@ -492,7 +502,7 @@ loadProgress( tr_benc * dict, tr_torrent * tor )
         size_t rawlen;
         tr_benc * l;
         tr_benc * b;
-        struct tr_bitset bitset = TR_BITSET_INIT;
+        struct tr_bitfield blocks = TR_BITFIELD_INIT;
 
         if( tr_bencDictFindList( prog, KEY_PROGRESS_CHECKTIME, &l ) )
         {
@@ -567,32 +577,41 @@ loadProgress( tr_benc * dict, tr_torrent * tor )
         }
 
         err = NULL;
+        tr_bitfieldConstruct( &blocks, tor->blockCount );
 
         if(( b = tr_bencDictFind( prog, KEY_PROGRESS_BLOCKS )))
         {
-            if( !tr_bitsetFromBenc( &bitset, b ) )
-                err = "Invalid value for PIECES";
+            size_t buflen;
+            const uint8_t * buf;
+
+            if( !tr_bencGetRaw( b, &buf, &buflen ) )
+                err = "Invalid value for \"blocks\"";
+            else if( ( buflen == 3 ) && !memcmp( buf, "all", 3 ) )
+                tr_bitfieldSetHasAll( &blocks );
+            else if( ( buflen == 4 ) && !memcmp( buf, "none", 4 ) )
+                tr_bitfieldSetHasNone( &blocks );
+            else
+                tr_bitfieldSetRaw( &blocks, buf, buflen );
         }
         else if( tr_bencDictFindStr( prog, KEY_PROGRESS_HAVE, &str ) )
         {
             if( !strcmp( str, "all" ) )
-                tr_bitsetSetHaveAll( &bitset );
+                tr_bitfieldSetHasAll( &blocks );
             else
                 err = "Invalid value for HAVE";
         }
         else if( tr_bencDictFindRaw( prog, KEY_PROGRESS_BITFIELD, &raw, &rawlen ) )
         {
-            bitset.bitfield.bits = (void*) raw;
-            bitset.bitfield.byteCount = rawlen;
-            bitset.bitfield.bitCount = rawlen * 8;
+            tr_bitfieldSetRaw( &blocks, raw, rawlen );
         }
         else err = "Couldn't find 'pieces' or 'have' or 'bitfield'";
 
-        if( !err && !tr_cpBlockBitsetInit( &tor->completion, &bitset ) )
-            err = "Error loading bitfield";
         if( err != NULL )
             tr_tordbg( tor, "Torrent needs to be verified - %s", err );
+        else
+            tr_cpBlockInit( &tor->completion, &blocks );
 
+        tr_bitfieldDestruct( &blocks );
         ret = TR_FR_PROGRESS;
     }
 
@@ -648,16 +667,15 @@ tr_torrentSaveResume( tr_torrent * tor )
 }
 
 static uint64_t
-loadFromFile( tr_torrent * tor,
-              uint64_t     fieldsToLoad )
+loadFromFile( tr_torrent * tor, uint64_t fieldsToLoad )
 {
     int64_t  i;
     const char * str;
-    uint64_t fieldsLoaded = 0;
     char * filename;
     tr_benc top;
-    tr_bool boolVal;
-    const tr_bool  wasDirty = tor->isDirty;
+    bool boolVal;
+    uint64_t fieldsLoaded = 0;
+    const bool wasDirty = tor->isDirty;
 
     assert( tr_isTorrent( tor ) );
 
@@ -801,16 +819,13 @@ loadFromFile( tr_torrent * tor,
 }
 
 static uint64_t
-setFromCtor( tr_torrent *    tor,
-             uint64_t        fields,
-             const tr_ctor * ctor,
-             int             mode )
+setFromCtor( tr_torrent * tor, uint64_t fields, const tr_ctor * ctor, int mode )
 {
     uint64_t ret = 0;
 
     if( fields & TR_FR_RUN )
     {
-        uint8_t isPaused;
+        bool isPaused;
         if( !tr_ctorGetPaused( ctor, mode, &isPaused ) )
         {
             tor->isRunning = !isPaused;
@@ -837,17 +852,13 @@ setFromCtor( tr_torrent *    tor,
 }
 
 static uint64_t
-useManditoryFields( tr_torrent *    tor,
-                    uint64_t        fields,
-                    const tr_ctor * ctor )
+useManditoryFields( tr_torrent * tor, uint64_t fields, const tr_ctor * ctor )
 {
     return setFromCtor( tor, fields, ctor, TR_FORCE );
 }
 
 static uint64_t
-useFallbackFields( tr_torrent *    tor,
-                   uint64_t        fields,
-                   const tr_ctor * ctor )
+useFallbackFields( tr_torrent * tor, uint64_t fields, const tr_ctor * ctor )
 {
     return setFromCtor( tor, fields, ctor, TR_FALLBACK );
 }
@@ -877,4 +888,3 @@ tr_torrentRemoveResume( const tr_torrent * tor )
     unlink( filename );
     tr_free( filename );
 }
-

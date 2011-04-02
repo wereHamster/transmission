@@ -24,7 +24,7 @@
 
 #include <errno.h>
 #include <stdio.h>
-#include <stdlib.h>
+#include <stdlib.h> /* strtol() */
 #include <string.h>
 
 #include <unistd.h>
@@ -268,7 +268,7 @@ gtr_pref_double_set( const char * key, double value )
 gboolean
 gtr_pref_flag_get( const char * key )
 {
-    tr_bool boolVal;
+    bool boolVal;
     tr_bencDictFindBool( getPrefs( ), key, &boolVal );
     return boolVal != 0;
 }

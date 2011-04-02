@@ -12,7 +12,7 @@
 
 #include <ctype.h> /* isspace */
 #include <limits.h> /* USHRT_MAX */
-#include <stdlib.h> /* free() */
+#include <string.h> /* strcmp() */
 #include <unistd.h>
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
@@ -425,7 +425,7 @@ onBlocklistUpdateResponse( GtkDialog * dialog, gint response UNUSED, gpointer gd
 static void
 onBlocklistUpdated( TrCore * core, int n, gpointer gdata )
 {
-    const tr_bool success = n >= 0;
+    const bool success = n >= 0;
     const int count = n >=0 ? n : tr_blocklistGetRuleCount( gtr_core_session( core ) );
     const char * s = gtr_ngettext( "Blocklist has %'d rule.", "Blocklist has %'d rules.", count );
     struct blocklist_data * data = gdata;

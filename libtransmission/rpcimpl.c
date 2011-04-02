@@ -30,7 +30,6 @@
 #include "json.h"
 #include "rpcimpl.h"
 #include "session.h"
-#include "stats.h"
 #include "torrent.h"
 #include "utils.h"
 #include "version.h"
@@ -228,7 +227,7 @@ torrentStop( tr_session               * session,
 
         if( tor->isRunning )
         {
-            tor->isStopping = TRUE;
+            tor->isStopping = true;
             notify( session, TR_RPC_TORRENT_STOPPED, tor );
         }
     }
@@ -245,7 +244,7 @@ torrentRemove( tr_session               * session,
     int i;
     int torrentCount;
     tr_rpc_callback_type type;
-    tr_bool deleteFlag = FALSE;
+    bool deleteFlag = false;
     tr_torrent ** torrents = getTorrents( session, args_in, &torrentCount );
 
     assert( idle_data == NULL );
@@ -559,11 +558,12 @@ addField( const tr_torrent * tor, tr_benc * d, const char * key )
     else if( tr_streq( key, keylen, "peersSendingToUs" ) )
         tr_bencDictAddInt( d, key, st->peersSendingToUs );
     else if( tr_streq( key, keylen, "pieces" ) ) {
-        tr_bitfield * bf = tr_cpCreatePieceBitfield( &tor->completion );
-        char * str = tr_base64_encode( bf->bits, bf->byteCount, NULL );
+        size_t byte_count = 0;
+        void * bytes = tr_cpCreatePieceBitfield( &tor->completion, &byte_count );
+        char * str = tr_base64_encode( bytes, byte_count, NULL );
         tr_bencDictAddStr( d, key, str!=NULL ? str : "" );
         tr_free( str );
-        tr_bitfieldFree( bf );
+        tr_free( bytes );
     }
     else if( tr_streq( key, keylen, "pieceCount" ) )
         tr_bencDictAddInt( d, key, inf->pieceCount );
@@ -768,17 +768,17 @@ setFileDLs( tr_torrent * tor,
     return errmsg;
 }
 
-static tr_bool
+static bool
 findAnnounceUrl( const tr_tracker_info * t, int n, const char * url, int * pos )
 {
     int i;
-    tr_bool found = FALSE;
+    bool found = false;
 
     for( i=0; i<n; ++i )
     {
         if( !strcmp( t[i].announce, url ) )
         {
-            found = TRUE;
+            found = true;
             if( pos ) *pos = i;
             break;
         }
@@ -822,7 +822,7 @@ addTrackerUrls( tr_torrent * tor, tr_benc * urls )
     int tier;
     tr_benc * val;
     tr_tracker_info * trackers;
-    tr_bool changed = FALSE;
+    bool changed = false;
     const tr_info * inf = tr_torrentInfo( tor );
     const char * errmsg = NULL;
 
@@ -838,13 +838,13 @@ addTrackerUrls( tr_torrent * tor, tr_benc * urls )
         const char * announce = NULL;
 
         if(    tr_bencGetStr( val, &announce )
-            && tr_urlIsValid( announce, -1 )
+            && tr_urlIsValidTracker( announce )
             && !findAnnounceUrl( trackers, n, announce, NULL ) )
         {
             trackers[n].tier = ++tier; /* add a new tier */
             trackers[n].announce = tr_strdup( announce );
             ++n;
-            changed = TRUE;
+            changed = true;
         }
     }
 
@@ -863,7 +863,7 @@ replaceTrackers( tr_torrent * tor, tr_benc * urls )
     int i;
     tr_benc * pair[2];
     tr_tracker_info * trackers;
-    tr_bool changed = FALSE;
+    bool changed = false;
     const tr_info * inf = tr_torrentInfo( tor );
     const int n = inf->trackerCount;
     const char * errmsg = NULL;
@@ -888,7 +888,7 @@ replaceTrackers( tr_torrent * tor, tr_benc * urls )
         {
             tr_free( trackers[pos].announce );
             trackers[pos].announce = tr_strdup( newval );
-            changed = TRUE;
+            changed = true;
         }
 
         i += 2;
@@ -913,7 +913,7 @@ removeTrackers( tr_torrent * tor, tr_benc * ids )
     int * tids;
     tr_benc * val;
     tr_tracker_info * trackers;
-    tr_bool changed = FALSE;
+    bool changed = false;
     const tr_info * inf = tr_torrentInfo( tor );
     const char * errmsg = NULL;
 
@@ -944,7 +944,7 @@ removeTrackers( tr_torrent * tor, tr_benc * ids )
             continue;
         tr_removeElementFromArray( trackers, tids[t], sizeof( tr_tracker_info ), n-- );
         dup = tids[t];
-        changed = TRUE;
+        changed = true;
     }
 
     if( !changed )
@@ -975,16 +975,16 @@ torrentSet( tr_session               * session,
         double       d;
         tr_benc *    files;
         tr_benc *    trackers;
-        tr_bool      boolVal;
+        bool         boolVal;
         tr_torrent * tor = torrents[i];
 
         if( tr_bencDictFindInt( args_in, "bandwidthPriority", &tmp ) )
             if( tr_isPriority( tmp ) )
                 tr_torrentSetPriority( tor, tmp );
         if( !errmsg && tr_bencDictFindList( args_in, "files-unwanted", &files ) )
-            errmsg = setFileDLs( tor, FALSE, files );
+            errmsg = setFileDLs( tor, false, files );
         if( !errmsg && tr_bencDictFindList( args_in, "files-wanted", &files ) )
-            errmsg = setFileDLs( tor, TRUE, files );
+            errmsg = setFileDLs( tor, true, files );
         if( tr_bencDictFindInt( args_in, "peer-limit", &tmp ) )
             tr_torrentSetPeerLimit( tor, tmp );
         if( !errmsg &&  tr_bencDictFindList( args_in, "priority-high", &files ) )
@@ -1041,7 +1041,7 @@ torrentSetLocation( tr_session               * session,
     }
     else
     {
-        tr_bool move = FALSE;
+        bool move = false;
         int i, torrentCount;
         tr_torrent ** torrents = getTorrents( session, args_in, &torrentCount );
 
@@ -1066,8 +1066,8 @@ torrentSetLocation( tr_session               * session,
 
 static void
 portTested( tr_session       * session UNUSED,
-            tr_bool            did_connect UNUSED,
-            tr_bool            did_timeout UNUSED,
+            bool               did_connect UNUSED,
+            bool               did_timeout UNUSED,
             long               response_code,
             const void       * response,
             size_t             response_byte_count,
@@ -1083,7 +1083,7 @@ portTested( tr_session       * session UNUSED,
     }
     else /* success */
     {
-        const tr_bool isOpen = response_byte_count && *(char*)response == '1';
+        const bool isOpen = response_byte_count && *(char*)response == '1';
         tr_bencDictAddBool( data->args_out, "port-is-open", isOpen );
         tr_snprintf( result, sizeof( result ), "success" );
     }
@@ -1099,7 +1099,7 @@ portTest( tr_session               * session,
 {
     const int port = tr_sessionGetPeerPort( session );
     char * url = tr_strdup_printf( "http://portcheck.transmissionbt.com/%d", port );
-    tr_webRun( session, url, NULL, portTested, idle_data );
+    tr_webRun( session, url, NULL, NULL, portTested, idle_data );
     tr_free( url );
     return NULL;
 }
@@ -1110,8 +1110,8 @@ portTest( tr_session               * session,
 
 static void
 gotNewBlocklist( tr_session       * session,
-                 tr_bool            did_connect UNUSED,
-                 tr_bool            did_timeout UNUSED,
+                 bool               did_connect UNUSED,
+                 bool               did_timeout UNUSED,
                  long               response_code,
                  const void       * response,
                  size_t             response_byte_count,
@@ -1133,11 +1133,9 @@ gotNewBlocklist( tr_session       * session,
 
         errno = 0;
 
-        if( !errno ) {
-            fd = tr_open_file_for_writing( filename );
-            if( fd < 0 )
-                tr_snprintf( result, sizeof( result ), _( "Couldn't save file \"%1$s\": %2$s" ), filename, tr_strerror( errno ) );
-        }
+        fd = tr_open_file_for_writing( filename );
+        if( fd < 0 )
+            tr_snprintf( result, sizeof( result ), _( "Couldn't save file \"%1$s\": %2$s" ), filename, tr_strerror( errno ) );
 
         if( !errno ) {
             const char * buf = response;
@@ -1207,7 +1205,7 @@ blocklistUpdate( tr_session               * session,
                  tr_benc                  * args_out UNUSED,
                  struct tr_rpc_idle_data  * idle_data )
 {
-    tr_webRun( session, session->blocklist_url, NULL, gotNewBlocklist, idle_data );
+    tr_webRun( session, session->blocklist_url, NULL, NULL, gotNewBlocklist, idle_data );
     return NULL;
 }
 
@@ -1256,8 +1254,8 @@ struct add_torrent_idle_data
 
 static void
 gotMetadataFromURL( tr_session       * session UNUSED,
-                    tr_bool            did_connect UNUSED,
-                    tr_bool            did_timeout UNUSED,
+                    bool               did_connect UNUSED,
+                    bool               did_timeout UNUSED,
                     long               response_code,
                     const void       * response,
                     size_t             response_byte_count,
@@ -1284,11 +1282,11 @@ gotMetadataFromURL( tr_session       * session UNUSED,
     tr_free( data );
 }
 
-static tr_bool
+static bool
 isCurlURL( const char * filename )
 {
     if( filename == NULL )
-        return FALSE;
+        return false;
 
     return !strncmp( filename, "ftp://", 6 ) ||
            !strncmp( filename, "http://", 7 ) ||
@@ -1331,12 +1329,15 @@ torrentAdd( tr_session               * session,
     else
     {
         int64_t      i;
-        tr_bool      boolVal;
-        const char * str;
+        bool         boolVal;
         tr_benc    * l;
+        const char * str;
+        const char * cookies = NULL;
         tr_ctor    * ctor = tr_ctorNew( session );
 
         /* set the optional arguments */
+
+        tr_bencDictFindStr( args_in, "cookies", &cookies );
 
         if( tr_bencDictFindStr( args_in, TR_PREFS_KEY_DOWNLOAD_DIR, &str ) )
             tr_ctorSetDownloadDir( ctor, TR_FORCE, str );
@@ -1353,13 +1354,13 @@ torrentAdd( tr_session               * session,
         if( tr_bencDictFindList( args_in, "files-unwanted", &l ) ) {
             tr_file_index_t fileCount;
             tr_file_index_t * files = fileListFromList( l, &fileCount );
-            tr_ctorSetFilesWanted( ctor, files, fileCount, FALSE );
+            tr_ctorSetFilesWanted( ctor, files, fileCount, false );
             tr_free( files );
         }
         if( tr_bencDictFindList( args_in, "files-wanted", &l ) ) {
             tr_file_index_t fileCount;
             tr_file_index_t * files = fileListFromList( l, &fileCount );
-            tr_ctorSetFilesWanted( ctor, files, fileCount, TRUE );
+            tr_ctorSetFilesWanted( ctor, files, fileCount, true );
             tr_free( files );
         }
 
@@ -1389,7 +1390,7 @@ torrentAdd( tr_session               * session,
             struct add_torrent_idle_data * d = tr_new0( struct add_torrent_idle_data, 1 );
             d->data = idle_data;
             d->ctor = ctor;
-            tr_webRun( session, filename, NULL, gotMetadataFromURL, d );
+            tr_webRun( session, filename, NULL, cookies, gotMetadataFromURL, d );
         }
         else
         {
@@ -1433,7 +1434,7 @@ sessionSet( tr_session               * session,
 {
     int64_t      i;
     double       d;
-    tr_bool      boolVal;
+    bool         boolVal;
     const char * str;
 
     assert( idle_data == NULL );
@@ -1654,26 +1655,26 @@ typedef const char* ( *handler )( tr_session*, tr_benc*, tr_benc*, struct tr_rpc
 static struct method
 {
     const char *  name;
-    tr_bool       immediate;
+    bool          immediate;
     handler       func;
 }
 methods[] =
 {
-    { "port-test",             FALSE, portTest            },
-    { "blocklist-update",      FALSE, blocklistUpdate     },
-    { "session-close",         TRUE,  sessionClose        },
-    { "session-get",           TRUE,  sessionGet          },
-    { "session-set",           TRUE,  sessionSet          },
-    { "session-stats",         TRUE,  sessionStats        },
-    { "torrent-add",           FALSE, torrentAdd          },
-    { "torrent-get",           TRUE,  torrentGet          },
-    { "torrent-remove",        TRUE,  torrentRemove       },
-    { "torrent-set",           TRUE,  torrentSet          },
-    { "torrent-set-location",  TRUE,  torrentSetLocation  },
-    { "torrent-start",         TRUE,  torrentStart        },
-    { "torrent-stop",          TRUE,  torrentStop         },
-    { "torrent-verify",        TRUE,  torrentVerify       },
-    { "torrent-reannounce",    TRUE,  torrentReannounce   }
+    { "port-test",             false, portTest            },
+    { "blocklist-update",      false, blocklistUpdate     },
+    { "session-close",         true,  sessionClose        },
+    { "session-get",           true,  sessionGet          },
+    { "session-set",           true,  sessionSet          },
+    { "session-stats",         true,  sessionStats        },
+    { "torrent-add",           false, torrentAdd          },
+    { "torrent-get",           true,  torrentGet          },
+    { "torrent-remove",        true,  torrentRemove       },
+    { "torrent-set",           true,  torrentSet          },
+    { "torrent-set-location",  true,  torrentSetLocation  },
+    { "torrent-start",         true,  torrentStart        },
+    { "torrent-stop",          true,  torrentStop         },
+    { "torrent-verify",        true,  torrentVerify       },
+    { "torrent-reannounce",    true,  torrentReannounce   }
 };
 
 static void

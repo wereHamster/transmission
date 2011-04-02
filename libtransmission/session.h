@@ -27,6 +27,7 @@
  #endif
 #endif
 
+#include "bandwidth.h"
 #include "bencode.h"
 #include "bitfield.h"
 #include "utils.h"
@@ -41,9 +42,11 @@ enum
 void tr_peerIdInit( uint8_t * setme );
 
 struct event_base;
+struct evdns_base;
+
 struct tr_address;
 struct tr_announcer;
-struct tr_bandwidth;
+struct tr_announcer_udp;
 struct tr_bindsockets;
 struct tr_cache;
 struct tr_fdInfo;
@@ -56,10 +59,10 @@ struct tr_turtle_info
     int speedLimit_Bps[2];
 
     /* is turtle mode on right now? */
-    tr_bool isEnabled;
+    bool isEnabled;
 
     /* does turtle mode turn itself on and off at given times? */
-    tr_bool isClockEnabled;
+    bool isClockEnabled;
 
     /* when clock mode is on, minutes after midnight to turn on turtle mode */
     int beginMinute;
@@ -78,7 +81,7 @@ struct tr_turtle_info
 
     /* the callback's changedByUser argument.
      * indicates whether the change came from the user or from the clock. */
-    tr_bool changedByUser;
+    bool changedByUser;
 
     /* bitfield of all the minutes in a week.
      * Each bit's value indicates whether the scheduler wants turtle
@@ -89,29 +92,28 @@ struct tr_turtle_info
 /** @brief handle to an active libtransmission session */
 struct tr_session
 {
-    tr_bool                      isPortRandom;
-    tr_bool                      isPexEnabled;
-    tr_bool                      isDHTEnabled;
-    tr_bool                      isUTPEnabled;
-    tr_bool                      isLPDEnabled;
-    tr_bool                      isBlocklistEnabled;
-    tr_bool                      isPrefetchEnabled;
-    tr_bool                      isTorrentDoneScriptEnabled;
-    tr_bool                      isClosed;
-    tr_bool                      useLazyBitfield;
-    tr_bool                      isIncompleteFileNamingEnabled;
-    tr_bool                      isRatioLimited;
-    tr_bool                      isIdleLimited;
-    tr_bool                      isIncompleteDirEnabled;
-    tr_bool                      pauseAddedTorrent;
-    tr_bool                      deleteSourceTorrent;
+    bool                         isPortRandom;
+    bool                         isPexEnabled;
+    bool                         isDHTEnabled;
+    bool                         isUTPEnabled;
+    bool                         isLPDEnabled;
+    bool                         isBlocklistEnabled;
+    bool                         isPrefetchEnabled;
+    bool                         isTorrentDoneScriptEnabled;
+    bool                         isClosed;
+    bool                         isIncompleteFileNamingEnabled;
+    bool                         isRatioLimited;
+    bool                         isIdleLimited;
+    bool                         isIncompleteDirEnabled;
+    bool                         pauseAddedTorrent;
+    bool                         deleteSourceTorrent;
 
     tr_benc                      removedTorrents;
 
     int                          umask;
 
     int                          speedLimit_Bps[2];
-    tr_bool                      speedLimitEnabled[2];
+    bool                         speedLimitEnabled[2];
 
     struct tr_turtle_info        turtle;
 
@@ -124,6 +126,7 @@ struct tr_session
     tr_preallocation_mode        preallocationMode;
 
     struct event_base          * event_base;
+    struct evdns_base          * evdns_base;
     struct tr_event_handle     * events;
 
     uint16_t                     peerLimitPerTorrent;
@@ -186,6 +189,7 @@ struct tr_session
     struct tr_stats_handle     * sessionStats;
 
     struct tr_announcer        * announcer;
+    struct tr_announcer_udp    * announcer_udp;
 
     tr_benc                    * metainfoLookup;
 
@@ -193,9 +197,9 @@ struct tr_session
     struct event               * saveTimer;
 
     /* monitors the "global pool" speeds */
-    struct tr_bandwidth        * bandwidth;
+    struct tr_bandwidth          bandwidth;
 
-    double                       desiredRatio;
+    float                        desiredRatio;
 
     uint16_t                     idleLimitMinutes;
 
@@ -206,7 +210,7 @@ struct tr_session
      * @see SESSION_BUFFER_SIZE */
     void * buffer;
 
-    tr_bool bufferInUse;
+    bool bufferInUse;
 
     tr_web_config_func          * curl_easy_config_func;
 
@@ -225,9 +229,9 @@ tr_getPeerId( tr_session * session )
     return session->peer_id;
 }
 
-tr_bool      tr_sessionAllowsDHT( const tr_session * session );
+bool         tr_sessionAllowsDHT( const tr_session * session );
 
-tr_bool      tr_sessionAllowsLPD( const tr_session * session );
+bool         tr_sessionAllowsLPD( const tr_session * session );
 
 const char * tr_sessionFindTorrentFile( const tr_session * session,
                                         const char *       hashString );
@@ -236,18 +240,18 @@ void         tr_sessionSetTorrentFile( tr_session * session,
                                        const char * hashString,
                                        const char * filename );
 
-tr_bool      tr_sessionIsAddressBlocked( const tr_session        * session,
+bool         tr_sessionIsAddressBlocked( const tr_session        * session,
                                          const struct tr_address * addr );
 
 void         tr_sessionLock( tr_session * );
 
 void         tr_sessionUnlock( tr_session * );
 
-tr_bool      tr_sessionIsLocked( const tr_session * );
+bool         tr_sessionIsLocked( const tr_session * );
 
 const struct tr_address*  tr_sessionGetPublicAddress( const tr_session  * session,
                                                       int                 tr_af_type,
-                                                      tr_bool           * is_default_value );
+                                                      bool              * is_default_value );
 
 
 struct tr_bindsockets * tr_sessionGetBindSockets( tr_session * );
@@ -266,26 +270,26 @@ void* tr_sessionGetBuffer( tr_session * session );
 
 void tr_sessionReleaseBuffer( tr_session * session );
 
-static inline tr_bool tr_isSession( const tr_session * session )
+static inline bool tr_isSession( const tr_session * session )
 {
     return ( session != NULL ) && ( session->magicNumber == SESSION_MAGIC_NUMBER );
 }
 
-static inline tr_bool tr_isPreallocationMode( tr_preallocation_mode m  )
+static inline bool tr_isPreallocationMode( tr_preallocation_mode m  )
 {
     return ( m == TR_PREALLOCATE_NONE )
         || ( m == TR_PREALLOCATE_SPARSE )
         || ( m == TR_PREALLOCATE_FULL );
 }
 
-static inline tr_bool tr_isEncryptionMode( tr_encryption_mode m )
+static inline bool tr_isEncryptionMode( tr_encryption_mode m )
 {
     return ( m == TR_CLEAR_PREFERRED )
         || ( m == TR_ENCRYPTION_PREFERRED )
         || ( m == TR_ENCRYPTION_REQUIRED );
 }
 
-static inline tr_bool tr_isPriority( tr_priority_t p )
+static inline bool tr_isPriority( tr_priority_t p )
 {
     return ( p == TR_PRI_LOW )
         || ( p == TR_PRI_NORMAL )
@@ -313,8 +317,8 @@ int  tr_sessionGetPieceSpeed_Bps( const tr_session *, tr_direction );
 void tr_sessionSetSpeedLimit_Bps( tr_session *, tr_direction, int Bps );
 void tr_sessionSetAltSpeed_Bps  ( tr_session *, tr_direction, int Bps );
 
-tr_bool  tr_sessionGetActiveSpeedLimit_Bps( const tr_session  * session,
-                                            tr_direction        dir,
-                                            int               * setme );
+bool  tr_sessionGetActiveSpeedLimit_Bps( const tr_session  * session,
+                                         tr_direction        dir,
+                                         int               * setme );
 
 #endif

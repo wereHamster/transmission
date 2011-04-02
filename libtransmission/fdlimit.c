@@ -24,8 +24,6 @@
 #include <assert.h>
 #include <errno.h>
 #include <inttypes.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #ifdef SYS_DARWIN
  #include <fcntl.h>
@@ -47,7 +45,7 @@
  #include <sys/resource.h> /* getrlimit */
 #endif
 #include <fcntl.h> /* O_LARGEFILE posix_fadvise */
-#include <unistd.h>
+#include <unistd.h> /* lseek(), write(), ftruncate(), pread(), pwrite(), etc */
 
 #include "transmission.h"
 #include "fdlimit.h"
@@ -80,14 +78,14 @@
 #endif
 
 
-static tr_bool
+static bool
 preallocate_file_sparse( int fd, uint64_t length )
 {
     const char zero = '\0';
-    tr_bool success = 0;
+    bool success = 0;
 
     if( !length )
-        success = TRUE;
+        success = true;
 
 #ifdef HAVE_FALLOCATE64
     if( !success ) /* fallocate64 is always preferred, so try it first */
@@ -102,10 +100,10 @@ preallocate_file_sparse( int fd, uint64_t length )
     return success;
 }
 
-static tr_bool
+static bool
 preallocate_file_full( const char * filename, uint64_t length )
 {
-    tr_bool success = 0;
+    bool success = 0;
 
 #ifdef WIN32
 
@@ -163,7 +161,7 @@ preallocate_file_full( const char * filename, uint64_t length )
         {
             uint8_t buf[ 4096 ];
             memset( buf, 0, sizeof( buf ) );
-            success = TRUE;
+            success = true;
             while ( success && ( length > 0 ) )
             {
                 const int thisPass = MIN( length, sizeof( buf ) );
@@ -319,14 +317,14 @@ tr_close_file( int fd )
 
 struct tr_cached_file
 {
-    tr_bool          is_writable;
+    bool             is_writable;
     int              fd;
     int              torrent_id;
     tr_file_index_t  file_index;
     time_t           used_at;
 };
 
-static inline tr_bool
+static inline bool
 cached_file_is_open( const struct tr_cached_file * o )
 {
     assert( o != NULL );
@@ -352,13 +350,13 @@ static int
 cached_file_open( struct tr_cached_file  * o,
                   const char             * existing_dir,
                   const char             * filename,
-                  tr_bool                  writable,
+                  bool                     writable,
                   tr_preallocation_mode    allocation,
                   uint64_t                 file_size )
 {
     int flags;
     struct stat sb;
-    tr_bool alreadyExisted;
+    bool alreadyExisted;
 
     /* confirm that existing_dir, if specified, exists on the disk */
     if( existing_dir && *existing_dir && stat( existing_dir, &sb ) )
@@ -552,7 +550,7 @@ tr_fdFileClose( tr_session * s, const tr_torrent * tor, tr_file_index_t i )
 }
 
 int
-tr_fdFileGetCached( tr_session * s, int torrent_id, tr_file_index_t i, tr_bool writable )
+tr_fdFileGetCached( tr_session * s, int torrent_id, tr_file_index_t i, bool writable )
 {
     struct tr_cached_file * o = fileset_lookup( get_fileset( s ), torrent_id, i );
 
@@ -576,7 +574,7 @@ tr_fdFileCheckout( tr_session             * session,
                    tr_file_index_t          i,
                    const char             * existing_dir,
                    const char             * filename,
-                   tr_bool                  writable,
+                   bool                     writable,
                    tr_preallocation_mode    allocation,
                    uint64_t                 file_size )
 {
@@ -636,12 +634,12 @@ tr_fdSocketCreate( tr_session * session, int domain, int type )
 
     if( s >= 0 )
     {
-        static tr_bool buf_logged = FALSE;
+        static bool buf_logged = false;
         if( !buf_logged )
         {
             int i;
             socklen_t size = sizeof( int );
-            buf_logged = TRUE;
+            buf_logged = true;
             getsockopt( s, SOL_SOCKET, SO_SNDBUF, &i, &size );
             tr_dbg( "SO_SNDBUF size is %d", i );
             getsockopt( s, SOL_SOCKET, SO_RCVBUF, &i, &size );
@@ -672,7 +670,8 @@ tr_fdSocketAccept( tr_session * s, int sockfd, tr_address * addr, tr_port * port
 
     if( fd >= 0 )
     {
-        if( ( gFd->socket_count < gFd->socket_limit ) && tr_ssToAddr( addr, port, &sock ) )
+        if( ( gFd->socket_count < gFd->socket_limit )
+            && tr_address_from_sockaddr_storage( addr, port, &sock ) )
         {
             ++gFd->socket_count;
         }

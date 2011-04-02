@@ -55,12 +55,12 @@ test_bitfield_count_range( void )
     int count1;
     int count2;
     const int bitCount = 100 + tr_cryptoWeakRandInt( 1000 );
-    tr_bitfield * bf;
+    tr_bitfield bf;
 
     /* generate a random bitfield */
-    bf = tr_bitfieldNew( bitCount );
+    tr_bitfieldConstruct( &bf, bitCount );
     for( i=0, n=tr_cryptoWeakRandInt(bitCount); i<n; ++i )
-        tr_bitfieldAdd( bf, tr_cryptoWeakRandInt(bitCount) );
+        tr_bitfieldAdd( &bf, tr_cryptoWeakRandInt(bitCount) );
 
     begin = tr_cryptoWeakRandInt( bitCount );
     do {
@@ -74,12 +74,12 @@ test_bitfield_count_range( void )
 
     count1 = 0;
     for( i=begin; i<end; ++i )
-        if( tr_bitfieldHas( bf, i ) )
+        if( tr_bitfieldHas( &bf, i ) )
             ++count1;
-    count2 = tr_bitfieldCountRange( bf, begin, end );
+    count2 = tr_bitfieldCountRange( &bf, begin, end );
     check( count1 == count2 );
 
-    tr_bitfieldFree( bf );
+    tr_bitfieldDestruct( &bf );
     return 0;
 }
 
@@ -87,57 +87,59 @@ static int
 test_bitfields( void )
 {
     unsigned int  i;
-    unsigned int  bitcount = 5000000;
-    tr_bitfield * field = tr_bitfieldNew( bitcount );
+    unsigned int  bitcount = 500;
+    tr_bitfield field;
+
+    tr_bitfieldConstruct( &field, bitcount );
 
     /* test tr_bitfieldAdd */
     for( i = 0; i < bitcount; ++i )
         if( !( i % 7 ) )
-            tr_bitfieldAdd( field, i );
+            tr_bitfieldAdd( &field, i );
     for( i = 0; i < bitcount; ++i )
-        check( tr_bitfieldHas( field, i ) == ( !( i % 7 ) ) );
+        check( tr_bitfieldHas( &field, i ) == ( !( i % 7 ) ) );
 
     /* test tr_bitfieldAddRange */
-    tr_bitfieldAddRange( field, 0, bitcount );
+    tr_bitfieldAddRange( &field, 0, bitcount );
     for( i = 0; i < bitcount; ++i )
-        check( tr_bitfieldHas( field, i ) );
+        check( tr_bitfieldHas( &field, i ) );
 
     /* test tr_bitfieldRemRange in the middle of a boundary */
-    tr_bitfieldRemRange( field, 4, 21 );
+    tr_bitfieldRemRange( &field, 4, 21 );
     for( i = 0; i < 64; ++i )
-        check( tr_bitfieldHas( field, i ) == ( ( i < 4 ) || ( i >= 21 ) ) );
+        check( tr_bitfieldHas( &field, i ) == ( ( i < 4 ) || ( i >= 21 ) ) );
 
     /* test tr_bitfieldRemRange on the boundaries */
-    tr_bitfieldAddRange( field, 0, 64 );
-    tr_bitfieldRemRange( field, 8, 24 );
+    tr_bitfieldAddRange( &field, 0, 64 );
+    tr_bitfieldRemRange( &field, 8, 24 );
     for( i = 0; i < 64; ++i )
-        check( tr_bitfieldHas( field, i ) == ( ( i < 8 ) || ( i >= 24 ) ) );
+        check( tr_bitfieldHas( &field, i ) == ( ( i < 8 ) || ( i >= 24 ) ) );
 
     /* test tr_bitfieldRemRange when begin & end is on the same word */
-    tr_bitfieldAddRange( field, 0, 64 );
-    tr_bitfieldRemRange( field, 4, 5 );
+    tr_bitfieldAddRange( &field, 0, 64 );
+    tr_bitfieldRemRange( &field, 4, 5 );
     for( i = 0; i < 64; ++i )
-        check( tr_bitfieldHas( field, i ) == ( ( i < 4 ) || ( i >= 5 ) ) );
+        check( tr_bitfieldHas( &field, i ) == ( ( i < 4 ) || ( i >= 5 ) ) );
 
     /* test tr_bitfieldAddRange */
-    tr_bitfieldRemRange( field, 0, 64 );
-    tr_bitfieldAddRange( field, 4, 21 );
+    tr_bitfieldRemRange( &field, 0, 64 );
+    tr_bitfieldAddRange( &field, 4, 21 );
     for( i = 0; i < 64; ++i )
-        check( tr_bitfieldHas( field, i ) == ( ( 4 <= i ) && ( i < 21 ) ) );
+        check( tr_bitfieldHas( &field, i ) == ( ( 4 <= i ) && ( i < 21 ) ) );
 
     /* test tr_bitfieldAddRange on the boundaries */
-    tr_bitfieldRemRange( field, 0, 64 );
-    tr_bitfieldAddRange( field, 8, 24 );
+    tr_bitfieldRemRange( &field, 0, 64 );
+    tr_bitfieldAddRange( &field, 8, 24 );
     for( i = 0; i < 64; ++i )
-        check( tr_bitfieldHas( field, i ) == ( ( 8 <= i ) && ( i < 24 ) ) );
+        check( tr_bitfieldHas( &field, i ) == ( ( 8 <= i ) && ( i < 24 ) ) );
 
     /* test tr_bitfieldAddRange when begin & end is on the same word */
-    tr_bitfieldRemRange( field, 0, 64 );
-    tr_bitfieldAddRange( field, 4, 5 );
+    tr_bitfieldRemRange( &field, 0, 64 );
+    tr_bitfieldAddRange( &field, 4, 5 );
     for( i = 0; i < 64; ++i )
-        check( tr_bitfieldHas( field, i ) == ( ( 4 <= i ) && ( i < 5 ) ) );
+        check( tr_bitfieldHas( &field, i ) == ( ( 4 <= i ) && ( i < 5 ) ) );
 
-    tr_bitfieldFree( field );
+    tr_bitfieldDestruct( &field );
     return 0;
 }
 
@@ -299,12 +301,12 @@ test_lowerbound( void )
     int i;
     const int A[] = { 1, 2, 3, 3, 3, 5, 8 };
     const int expected_pos[] = { 0, 1, 2, 5, 5, 6, 6, 6, 7, 7 };
-    const int expected_exact[] = { TRUE, TRUE, TRUE, FALSE, TRUE, FALSE, FALSE, TRUE, FALSE, FALSE };
+    const int expected_exact[] = { true, true, true, false, true, false, false, true, false, false };
     const int N = sizeof(A) / sizeof(A[0]);
 
     for( i=1; i<=10; ++i )
     {
-        tr_bool exact;
+        bool exact;
         const int pos = tr_lowerBound( &i, A, N, sizeof(int), compareInts, &exact );
 
 #if 0
@@ -513,7 +515,7 @@ main( void )
             return i;
 
     /* bitfield count range */
-    for( l=0; l<1000000; ++l )
+    for( l=0; l<10000; ++l )
         if(( i = test_bitfield_count_range( )))
             return i;
 

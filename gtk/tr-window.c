@@ -157,6 +157,7 @@ makeview( PrivateData * p )
 
 
     gtk_tree_view_set_model( GTK_TREE_VIEW( view ), p->filter_model );
+    g_object_unref( p->filter_model );
 
     return view;
 }
@@ -348,7 +349,7 @@ onAltSpeedToggledIdle( gpointer vp )
 }
 
 static void
-onAltSpeedToggled( tr_session * s UNUSED, tr_bool isEnabled UNUSED, tr_bool byUser UNUSED, void * p )
+onAltSpeedToggled( tr_session * s UNUSED, bool isEnabled UNUSED, bool byUser UNUSED, void * p )
 {
     gtr_idle_add( onAltSpeedToggledIdle, p );
 }
@@ -874,7 +875,12 @@ gtr_window_set_busy( TrWindow * w, gboolean isBusy )
         gdk_window_set_cursor( gtr_widget_get_window( GTK_WIDGET( w ) ), cursor );
         gdk_display_flush( display );
 
-        if( cursor )
+        if( cursor ) {
+#if GTK_CHECK_VERSION(3,0,0)
+            g_object_unref( cursor );
+#else
             gdk_cursor_unref( cursor );
+#endif
+        }
     }
 }

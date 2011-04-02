@@ -10,8 +10,6 @@
  * $Id$
  */
 
-#include <string.h>
-
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
 
@@ -19,7 +17,6 @@
 #include <libtransmission/makemeta.h>
 #include <libtransmission/utils.h> /* tr_formatter_mem_B() */
 
-#include "conf.h"
 #include "hig.h"
 #include "makemeta-ui.h"
 #include "tr-core.h"

@@ -63,13 +63,6 @@ char* tr_strlratio( char * buf, double ratio, size_t buflen );
 /* return a human-readable string for the time given in seconds. */
 char* tr_strltime( char * buf, int secs, size_t buflen );
 
-/* similar to asctime, but is utf8-clean */
-char* gtr_localtime( time_t time );
-
-
-int gtr_compare_double( const double a, const double b, int decimal_places );
-
-
 /***
 ****
 ***/
@@ -136,14 +129,8 @@ gboolean gtr_widget_get_realized( GtkWidget * w );
 /* backwards-compatible wrapper around gtk_widget_set_visible() */
 void gtr_widget_set_visible( GtkWidget *, gboolean );
 
-/* backwards-compatible wrapper around gtk_cell_renderer_get_padding() */
-void gtr_cell_renderer_get_padding( GtkCellRenderer *, gint * xpad, gint * ypad );
-
 /* backwards-compatible wrapper around g_object_ref_sink() */
 gpointer gtr_object_ref_sink( gpointer object );
-
-/* backwards-compatible wrapper around g_strcmp0() */
-int gtr_strcmp0( const char * str1, const char * str2 );
 
 /* backwards-compatible wrapper around g_dngettext() */
 const gchar* gtr_ngettext( const gchar*, const gchar*, gulong );

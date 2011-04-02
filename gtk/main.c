@@ -26,7 +26,7 @@
 #include <signal.h>
 #include <string.h>
 #include <stdio.h>
-#include <stdlib.h>
+#include <stdlib.h> /* exit() */
 #include <sys/param.h>
 #include <time.h>
 #include <unistd.h>
@@ -504,10 +504,10 @@ on_rpc_changed( tr_session            * session,
             tr_sessionGetSettings( session, &tmp );
             for( i=0; tr_bencDictChild( &tmp, i, &key, &newval ); ++i )
             {
-                tr_bool changed;
+                bool changed;
                 tr_benc * oldval = tr_bencDictFind( oldvals, key );
                 if( !oldval )
-                    changed = TRUE;
+                    changed = true;
                 else {
                     char * a = tr_bencToStr( oldval, TR_FMT_BENC, NULL );
                     char * b = tr_bencToStr( newval, TR_FMT_BENC, NULL );
@@ -646,11 +646,11 @@ apply_desktop_proxy_settings( CURL * easy, GConfClient * client, const char * ho
 
             if( !tr_urlParse( url, strlen( url ), &scheme, NULL, NULL, NULL ) )
             {
-                if( !gtr_strcmp0( scheme, "socks4" ) )
+                if( !tr_strcmp0( scheme, "socks4" ) )
                     curl_easy_setopt( easy, CURLOPT_PROXYTYPE, (long)CURLPROXY_SOCKS4 );
-                else if( !gtr_strcmp0( scheme, "socks5" ) )
+                else if( !tr_strcmp0( scheme, "socks5" ) )
                     curl_easy_setopt( easy, CURLOPT_PROXYTYPE, (long)CURLPROXY_SOCKS5 );
-                else if( !gtr_strcmp0( scheme, "http" ) )
+                else if( !tr_strcmp0( scheme, "http" ) )
                     curl_easy_setopt( easy, CURLOPT_PROXYTYPE, (long)CURLPROXY_HTTP );
             }
 
@@ -689,22 +689,22 @@ curl_config_func( tr_session * session UNUSED, void * vcurl UNUSED, const char *
     {
         const char * mode = gconf_value_get_string( value );
 
-        if( !gtr_strcmp0( mode, "auto" ) )
+        if( !tr_strcmp0( mode, "auto" ) )
         {
             apply_desktop_proxy_settings( easy, client, "/system/proxy/autoconfig_url", NULL );
             use_http_proxy = FALSE;
         }
-        else if( !gtr_strcmp0( mode, "manual" ))
+        else if( !tr_strcmp0( mode, "manual" ))
         {
             char * scheme = NULL;
             if( !tr_urlParse( destination, strlen( destination ), &scheme, NULL, NULL, NULL ) )
             {
-                if( !gtr_strcmp0( scheme, "ftp" ) )
+                if( !tr_strcmp0( scheme, "ftp" ) )
                 {
                     apply_desktop_proxy_settings( easy, client, "/system/proxy/ftp_host", "/system/proxy/ftp_port" );
                     use_http_proxy = FALSE;
                 }
-                else if( !gtr_strcmp0( scheme, "https" ) )
+                else if( !tr_strcmp0( scheme, "https" ) )
                 {
                     apply_desktop_proxy_settings( easy, client, "/system/proxy/secure_host", "/system/proxy/secure_port" );
                     use_http_proxy = FALSE;
@@ -1103,6 +1103,8 @@ on_drag_data_received( GtkWidget         * widget          UNUSED,
             gtr_core_add_from_url( data->core, uri );
             success = TRUE;
         }
+
+        g_free( filename );
     }
 
     if( files )
@@ -1561,11 +1563,18 @@ update_model( gpointer gdata )
     return !done;
 }
 
+/* GTK+ versions before 2.18.0 don't have a default URI hook... */
+#if !GTK_CHECK_VERSION(2,18,0)
+ #define NEED_URL_HOOK
+#endif
+
+#ifdef NEED_URL_HOOK
 static void
 on_uri_clicked( GtkAboutDialog * u UNUSED, const gchar * uri, gpointer u2 UNUSED )
 {
     gtr_open_uri( uri );
 }
+#endif
 
 static void
 show_about_dialog( GtkWindow * parent )
@@ -1578,7 +1587,9 @@ show_about_dialog( GtkWindow * parent )
         NULL
     };
 
+#ifdef NEED_URL_HOOK
     gtk_about_dialog_set_url_hook( on_uri_clicked, NULL, NULL );
+#endif
 
     d = g_object_new( GTK_TYPE_ABOUT_DIALOG,
                       "authors", authors,

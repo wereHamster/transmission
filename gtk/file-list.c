@@ -12,7 +12,6 @@
 
 #include <stddef.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
@@ -581,6 +580,7 @@ gtr_file_list_set_torrent( GtkWidget * w, int torrentId )
 
     gtk_tree_view_set_model( GTK_TREE_VIEW( data->view ), data->model );
     gtk_tree_view_expand_all( GTK_TREE_VIEW( data->view ) );
+    g_object_unref( data->model );
 }
 
 /***
@@ -764,22 +764,21 @@ getAndSelectEventPath( GtkTreeView        * treeview,
 static gboolean
 onViewButtonPressed( GtkWidget * w, GdkEventButton * event, gpointer gdata )
 {
-    tr_torrent * tor;
+    GtkTreeViewColumn * col;
+    GtkTreePath * path = NULL;
     gboolean handled = FALSE;
+    GtkTreeView * treeview = GTK_TREE_VIEW( w );
     FileData * data = gdata;
 
-    if(( tor = gtr_core_find_torrent( data->core, data->torrentId )))
+    if( ( event->type == GDK_BUTTON_PRESS )
+         && ( event->button == 1 )
+         && !( event->state & ( GDK_SHIFT_MASK | GDK_CONTROL_MASK ) )
+         && getAndSelectEventPath( treeview, event, &col, &path ) )
     {
-        GtkTreePath * path;
-        GtkTreeViewColumn * col;
-        GtkTreeView * treeview = GTK_TREE_VIEW( w );
+        handled = onViewPathToggled( treeview, col, path, data );
 
-        if( event->type == GDK_BUTTON_PRESS && event->button == 1
-            && !( event->state & ( GDK_SHIFT_MASK | GDK_CONTROL_MASK ) )
-            && getAndSelectEventPath( treeview, event, &col, &path ) )
-            handled = onViewPathToggled( treeview, col, path, data );
-
-        gtk_tree_path_free( path );
+        if( path != NULL )
+            gtk_tree_path_free( path );
     }
 
     return handled;

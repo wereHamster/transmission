@@ -18,10 +18,11 @@ noinst_LIBRARIES = libtransmission.a
 
 libtransmission_a_SOURCES = \
     announcer.c \
+    announcer-http.c \
+    announcer-udp.c \
     bandwidth.c \
     bencode.c \
     bitfield.c \
-    bitset.c \
     blocklist.c \
     cache.c \
     clients.c \
@@ -69,10 +70,10 @@ libtransmission_a_SOURCES = \
 
 noinst_HEADERS = \
     announcer.h \
+    announcer-common.h \
     bandwidth.h \
     bencode.h \
     bitfield.h \
-    bitset.h \
     blocklist.h \
     cache.h \
     clients.h \

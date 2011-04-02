@@ -21,8 +21,11 @@ THE SOFTWARE.
 
 */
 
-#include <unistd.h>
 #include <assert.h>
+#include <string.h> /* memcmp(), memcpy(), memset() */
+#include <stdlib.h> /* malloc(), free() */
+
+#include <unistd.h> /* close() */
 
 #include <event2/event.h>
 
@@ -94,7 +97,7 @@ set_socket_buffers(int fd, int large)
 void
 tr_udpSetSocketBuffers(tr_session *session)
 {
-    tr_bool utp = tr_sessionIsUTPEnabled(session);
+    bool utp = tr_sessionIsUTPEnabled(session);
     if(session->udp_socket >= 0)
         set_socket_buffers(session->udp_socket, utp);
     if(session->udp6_socket >= 0)
@@ -108,9 +111,9 @@ tr_udpSetSocketBuffers(tr_session *session)
    IPv6 address, if I may say so myself. */
 
 static void
-rebind_ipv6(tr_session *ss, tr_bool force)
+rebind_ipv6(tr_session *ss, bool force)
 {
-    tr_bool is_default;
+    bool is_default;
     const struct tr_address * public_addr;
     struct sockaddr_in6 sin6;
     const unsigned char *ipv6 = tr_globalIPv6();
@@ -155,13 +158,11 @@ rebind_ipv6(tr_session *ss, tr_bool force)
 
     if(ss->udp6_socket < 0) {
         ss->udp6_socket = s;
-        s = -1;
     } else {
         rc = dup2(s, ss->udp6_socket);
         if(rc < 0)
             goto fail;
         close(s);
-        s = -1;
     }
 
     if(ss->udp6_bound == NULL)
@@ -205,7 +206,10 @@ event_callback(int s, short type UNUSED, void *sv)
     rc = recvfrom(s, buf, 4096 - 1, 0,
                   (struct sockaddr*)&from, &fromlen);
     if(rc > 0) {
-        if( buf[0] == 'd' ) {
+        if( tau_handle_message( ss, buf, rc ) ) {
+            tr_ndbg("UDP", "Received UDP Tracker packet");
+        }
+        else if( buf[0] == 'd' ) {
             /* DHT packet. */
             buf[rc] = '\0';
             tr_dhtCallback(buf, rc, (struct sockaddr*)&from, fromlen, sv);
@@ -222,7 +226,7 @@ event_callback(int s, short type UNUSED, void *sv)
 void
 tr_udpInit(tr_session *ss)
 {
-    tr_bool is_default;
+    bool is_default;
     const struct tr_address * public_addr;
     struct sockaddr_in sin;
     int rc;
@@ -261,7 +265,7 @@ tr_udpInit(tr_session *ss)
 
  ipv6:
     if(tr_globalIPv6())
-        rebind_ipv6(ss, TRUE);
+        rebind_ipv6(ss, true);
     if(ss->udp6_socket >= 0) {
         ss->udp6_event =
             event_new(ss->event_base, ss->udp6_socket, EV_READ | EV_PERSIST,
@@ -284,8 +288,6 @@ tr_udpInit(tr_session *ss)
 void
 tr_udpUninit(tr_session *ss)
 {
-    tr_dhtUninit(ss);
-
     if(ss->udp_socket >= 0) {
         tr_netCloseSocket( ss->udp_socket );
         ss->udp_socket = -1;

@@ -22,6 +22,7 @@
  * DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 
+#include <math.h> /* pow() */
 #include <string.h> /* strcmp, strlen */
 
 #include <gtk/gtk.h>
@@ -248,6 +249,7 @@ core_init( GTypeInstance * instance, gpointer g_class UNUSED )
 
     p->raw_model = GTK_TREE_MODEL( store );
     p->sorted_model = gtk_tree_model_sort_new_with_model( p->raw_model );
+    g_object_unref( p->raw_model );
 
 #ifdef HAVE_DBUS_GLIB
     if( our_instance_adds_remote_torrents )
@@ -348,7 +350,7 @@ gtr_core_session( TrCore * core )
 ****  BUSY
 ***/
 
-static tr_bool
+static bool
 core_is_busy( TrCore * core )
 {
     return core->priv->busy_count > 0;
@@ -357,7 +359,7 @@ core_is_busy( TrCore * core )
 static void
 core_add_to_busy( TrCore * core, int addMe )
 {
-    const tr_bool wasBusy = core_is_busy( core );
+    const bool wasBusy = core_is_busy( core );
 
     core->priv->busy_count += addMe;
 
@@ -442,7 +444,7 @@ compare_by_name( GtkTreeModel * m, GtkTreeIter * a, GtkTreeIter * b, gpointer us
         char *ca, *cb;
         gtk_tree_model_get( m, a, MC_NAME_COLLATED, &ca, -1 );
         gtk_tree_model_get( m, b, MC_NAME_COLLATED, &cb, -1 );
-        ret = gtr_strcmp0( ca, cb );
+        ret = tr_strcmp0( ca, cb );
         g_free( cb );
         g_free( ca );
     }
@@ -755,7 +757,7 @@ core_watchdir_update( TrCore * core )
     const gboolean is_enabled = gtr_pref_flag_get( PREF_KEY_DIR_WATCH_ENABLED );
     struct TrCorePrivate * p = TR_CORE( core )->priv;
 
-    if( p->monitor && ( !is_enabled || gtr_strcmp0( dir, p->monitor_dir ) ) )
+    if( p->monitor && ( !is_enabled || tr_strcmp0( dir, p->monitor_dir ) ) )
     {
         g_signal_handler_disconnect( p->monitor, p->monitor_tag );
         g_free( p->monitor_dir );
@@ -877,7 +879,7 @@ on_torrent_completeness_changed_idle( gpointer gdata )
 static void
 on_torrent_completeness_changed( tr_torrent       * tor,
                                  tr_completeness    completeness,
-                                 tr_bool            was_running,
+                                 bool               was_running,
                                  void             * gcore )
 {
     if( was_running && ( completeness != TR_LEECH ) && ( tr_torrentStat( tor )->sizeWhenDone != 0 ) )
@@ -971,7 +973,7 @@ core_create_new_torrent( TrCore * core, tr_ctor * ctor )
 {
     int errcode = 0;
     tr_torrent * tor;
-    uint8_t do_trash = FALSE;
+    bool do_trash = false;
     tr_session * session = gtr_core_session( core );
 
     /* let the gtk client handle the removal, since libT
@@ -1108,8 +1110,8 @@ struct url_dialog_data
     tr_ctor * ctor;
     char * url;
 
-    tr_bool did_connect;
-    tr_bool did_timeout;
+    bool did_connect;
+    bool did_timeout;
     long response_code;
 };
 
@@ -1143,8 +1145,8 @@ on_url_done_idle( gpointer vdata )
 
 static void
 on_url_done( tr_session   * session,
-             tr_bool        did_connect,
-             tr_bool        did_timeout,
+             bool           did_connect,
+             bool           did_timeout,
              long           response_code,
              const void   * response,
              size_t         response_byte_count,
@@ -1194,7 +1196,7 @@ gtr_core_add_from_url( TrCore * core, const char * url )
         data->core = core;
         data->url = g_strdup( url );
         core_inc_busy( data->core );
-        tr_webRun( session, url, NULL, on_url_done, data );
+        tr_webRun( session, url, NULL, NULL, on_url_done, data );
     }
 }
 
@@ -1344,6 +1346,16 @@ gtr_core_clear( TrCore * self )
 ****
 ***/
 
+static int
+gtr_compare_double( const double a, const double b, int decimal_places )
+{
+    const int64_t ia = (int64_t)(a * pow( 10, decimal_places ) );
+    const int64_t ib = (int64_t)(b * pow( 10, decimal_places ) );
+    if( ia < ib ) return -1;
+    if( ia > ib ) return  1;
+    return 0;
+}
+
 static gboolean
 update_foreach( GtkTreeModel * model,
                 GtkTreePath  * path UNUSED,
@@ -1353,7 +1365,7 @@ update_foreach( GtkTreeModel * model,
     int oldActivity, newActivity;
     int oldActivePeerCount, newActivePeerCount;
     int oldError, newError;
-    tr_bool oldFinished, newFinished;
+    bool oldFinished, newFinished;
     tr_priority_t oldPriority, newPriority;
     char * oldCollatedName, * newCollatedName;
     char * oldTrackers, * newTrackers;
@@ -1402,8 +1414,8 @@ update_foreach( GtkTreeModel * model,
         || ( newPriority != oldPriority )
         || ( newError != oldError )
         || ( newActivePeerCount != oldActivePeerCount )
-        || gtr_strcmp0( oldTrackers, newTrackers )
-        || gtr_strcmp0( oldCollatedName, newCollatedName )
+        || tr_strcmp0( oldTrackers, newTrackers )
+        || tr_strcmp0( oldCollatedName, newCollatedName )
         || gtr_compare_double( newUpSpeed, oldUpSpeed, 3 )
         || gtr_compare_double( newDownSpeed, oldDownSpeed, 3 )
         || gtr_compare_double( newRecheckProgress, oldRecheckProgress, 2 ) )
@@ -1582,7 +1594,7 @@ core_commit_prefs_change( TrCore * core, const char * key )
 void
 gtr_core_set_pref( TrCore * self, const char * key, const char * newval )
 {
-    if( gtr_strcmp0( newval, gtr_pref_string_get( key ) ) )
+    if( tr_strcmp0( newval, gtr_pref_string_get( key ) ) )
     {
         gtr_pref_string_set( key, newval );
         core_commit_prefs_change( self, key );
@@ -1717,7 +1729,7 @@ static void
 on_port_test_response( TrCore * core, tr_benc * response, gpointer u UNUSED )
 {
     tr_benc * args;
-    tr_bool is_open = FALSE;
+    bool is_open = FALSE;
 
     if( tr_bencDictFindDict( response, "arguments", &args ) )
         tr_bencDictFindBool( args, "port-is-open", &is_open );

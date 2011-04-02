@@ -21,7 +21,7 @@ struct tr_address;
 typedef struct tr_blocklist tr_blocklist;
 
 tr_blocklist* _tr_blocklistNew         ( const char              * filename,
-                                         tr_bool                   isEnabled );
+                                         bool                   isEnabled );
 
 int           _tr_blocklistExists      ( const tr_blocklist      * b );
 
@@ -34,7 +34,7 @@ void          _tr_blocklistFree        ( tr_blocklist * );
 int           _tr_blocklistIsEnabled   ( tr_blocklist            * b );
 
 void          _tr_blocklistSetEnabled  ( tr_blocklist            * b,
-                                         int                       isEnabled );
+                                         bool                      isEnabled );
 
 int           _tr_blocklistHasAddress  ( tr_blocklist            * b,
                                          const struct tr_address * addr );

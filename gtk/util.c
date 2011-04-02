@@ -12,10 +12,8 @@
 
 #include <ctype.h> /* isxdigit() */
 #include <errno.h>
-#include <math.h> /* pow() */
 #include <stdarg.h>
-#include <stdlib.h> /* free() */
-#include <string.h> /* strcmp() */
+#include <string.h> /* strchr(), strrchr(), strlen(), strncmp(), strstr() */
 
 #include <sys/types.h> /* for gtr_lockfile()'s open() */
 #include <sys/stat.h> /* for gtr_lockfile()'s open() */
@@ -32,13 +30,11 @@
 #endif
 
 #include <libtransmission/transmission.h> /* TR_RATIO_NA, TR_RATIO_INF */
-#include <libtransmission/utils.h> /* tr_inf */
+#include <libtransmission/utils.h> /* tr_strratio() */
 #include <libtransmission/web.h> /* tr_webResponseStr() */
-#include <libtransmission/version.h> /* tr_inf */
+#include <libtransmission/version.h> /* SHORT_VERSION_STRING */
 
-#include "conf.h"
 #include "hig.h"
-#include "tr-prefs.h"
 #include "util.h"
 
 /***
@@ -115,20 +111,6 @@ gtr_lockfile( const char * filename )
 ****
 ***/
 
-int
-gtr_compare_double( const double a, const double b, int decimal_places )
-{
-    const int64_t ia = (int64_t)(a * pow( 10, decimal_places ) );
-    const int64_t ib = (int64_t)(b * pow( 10, decimal_places ) );
-    if( ia < ib ) return -1;
-    if( ia > ib ) return  1;
-    return 0;
-}
-
-/***
-****
-***/
-
 const char*
 gtr_get_unicode_string( int i )
 {
@@ -183,35 +165,33 @@ tr_strltime( char * buf, int seconds, size_t buflen )
     g_snprintf( m, sizeof( m ), gtr_ngettext( "%'d minute", "%'d minutes", minutes ), minutes );
     g_snprintf( s, sizeof( s ), gtr_ngettext( "%'d second", "%'d seconds", seconds ), seconds );
 
-    if( days >= 4 )
-        g_strlcpy( buf, d, buflen );
-    else if( days )
-        g_snprintf( buf, buflen, "%s, %s", d, h );
-    else if( hours >= 4 )
-        g_strlcpy( buf, h, buflen );
+    if( days )
+    {
+        if( days >= 4 || !hours )
+            g_strlcpy( buf, d, buflen );
+        else
+            g_snprintf( buf, buflen, "%s, %s", d, h );
+    }
     else if( hours )
-        g_snprintf( buf, buflen, "%s, %s", h, m );
-    else if( minutes >= 4 )
-        g_strlcpy( buf, m, buflen );
+    {
+        if( hours >= 4 || !minutes )
+            g_strlcpy( buf, h, buflen );
+        else
+            g_snprintf( buf, buflen, "%s, %s", h, m );
+    }
     else if( minutes )
-        g_snprintf( buf, buflen, "%s, %s", m, s );
+    {
+        if( minutes >= 4 || !seconds )
+            g_strlcpy( buf, m, buflen );
+        else
+            g_snprintf( buf, buflen, "%s, %s", m, s );
+    }
     else
+    {
         g_strlcpy( buf, s, buflen );
+    }
 
     return buf;
-}
-
-char *
-gtr_localtime( time_t time )
-{
-    char buf[256], *eoln;
-    const struct tm tm = *localtime( &time );
-
-    g_strlcpy( buf, asctime( &tm ), sizeof( buf ) );
-    if( ( eoln = strchr( buf, '\n' ) ) )
-        *eoln = '\0';
-
-    return g_locale_to_utf8( buf, -1, NULL, NULL, NULL );
 }
 
 int
@@ -389,19 +369,6 @@ gtr_object_ref_sink( gpointer object )
     return object;
 }
 
-int
-gtr_strcmp0( const char * str1, const char * str2 )
-{
-#if GLIB_CHECK_VERSION( 2, 16, 0 )
-    return g_strcmp0( str1, str2 );
-#else
-    if( str1 && str2 ) return strcmp( str1, str2 );
-    if( str1 ) return 1;
-    if( str2 ) return -1;
-    return 0;
-#endif
-}
-
 const gchar *
 gtr_ngettext( const gchar * msgid,
               const gchar * msgid_plural,
@@ -485,6 +452,11 @@ gtr_open_uri( const char * uri )
     if( uri )
     {
         gboolean opened = FALSE;
+
+#if GTK_CHECK_VERSION(2,14,0)
+        if( !opened )
+            opened = gtk_show_uri( NULL, uri, GDK_CURRENT_TIME, NULL );
+#endif
 
 #ifdef HAVE_GIO
         if( !opened )
@@ -740,17 +712,6 @@ gtr_widget_set_visible( GtkWidget * w, gboolean b )
 #endif
 }
 
-void
-gtr_cell_renderer_get_padding( GtkCellRenderer * cell, gint * xpad, gint * ypad )
-{
-#if GTK_CHECK_VERSION( 2,18,0 )
-    gtk_cell_renderer_get_padding( cell, xpad, ypad );
-#else
-    if( xpad != NULL ) *xpad = cell->xpad;
-    if( ypad != NULL ) *ypad = cell->ypad;
-#endif
-}
-
 static GtkWidget*
 gtr_dialog_get_content_area( GtkDialog * dialog )
 {
@@ -929,6 +890,6 @@ gtr_label_set_text( GtkLabel * lb, const char * newstr )
 {
     const char * oldstr = gtk_label_get_text( lb );
 
-    if( ( oldstr == NULL ) || strcmp( oldstr, newstr ) )
+    if( tr_strcmp0( oldstr, newstr ) )
         gtk_label_set_text( lb, newstr );
 }

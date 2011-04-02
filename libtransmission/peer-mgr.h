@@ -24,9 +24,8 @@
 #endif
 
 #include "bitfield.h"
-#include "bitset.h"
 #include "history.h"
-#include "net.h"
+#include "net.h" /* tr_address */
 #include "peer-common.h" /* struct peer_request */
 
 /**
@@ -89,11 +88,11 @@ struct peer_atom;
  */
 typedef struct tr_peer
 {
-    tr_bool                  peerIsChoked;
-    tr_bool                  peerIsInterested;
-    tr_bool                  clientIsChoked;
-    tr_bool                  clientIsInterested;
-    tr_bool                  doPurge;
+    bool                     peerIsChoked;
+    bool                     peerIsInterested;
+    bool                     clientIsChoked;
+    bool                     clientIsInterested;
+    bool                     doPurge;
 
     /* number of bad pieces they've contributed to */
     uint8_t                  strikes;
@@ -110,8 +109,8 @@ typedef struct tr_peer
     struct tr_peerIo       * io;
     struct peer_atom       * atom;
 
-    struct tr_bitfield     * blame;
-    struct tr_bitset         have;
+    struct tr_bitfield       blame;
+    struct tr_bitfield       have;
 
     /** how complete the peer's copy of the torrent is. [0.0...1.0] */
     float                    progress;
@@ -136,10 +135,10 @@ void tr_peerConstruct( struct tr_peer * peer );
 void tr_peerDestruct( tr_torrent * tor, struct tr_peer * peer );
 
 
-static inline tr_bool
+static inline bool
 tr_isPex( const tr_pex * pex )
 {
-    return pex && tr_isAddress( &pex->addr );
+    return pex && tr_address_is_valid( &pex->addr );
 }
 
 const tr_address * tr_peerAddress( const tr_peer * );
@@ -150,7 +149,7 @@ tr_peerMgr* tr_peerMgrNew( tr_session * );
 
 void tr_peerMgrFree( tr_peerMgr * manager );
 
-tr_bool tr_peerMgrPeerIsSeed( const tr_torrent * tor,
+bool tr_peerMgrPeerIsSeed( const tr_torrent * tor,
                               const tr_address * addr );
 
 void tr_peerMgrSetUtpSupported( tr_torrent       * tor,
@@ -158,7 +157,7 @@ void tr_peerMgrSetUtpSupported( tr_torrent       * tor,
 
 void tr_peerMgrSetUtpFailed( tr_torrent *tor,
                              const tr_address *addr,
-                             tr_bool failed );
+                             bool failed );
 
 void tr_peerMgrGetNextRequests( tr_torrent          * torrent,
                                 tr_peer             * peer,
@@ -166,9 +165,9 @@ void tr_peerMgrGetNextRequests( tr_torrent          * torrent,
                                 tr_block_index_t    * setme,
                                 int                 * numgot );
 
-tr_bool tr_peerMgrDidPeerRequest( const tr_torrent  * torrent,
-                                  const tr_peer     * peer,
-                                  tr_block_index_t    block );
+bool tr_peerMgrDidPeerRequest( const tr_torrent  * torrent,
+                               const tr_peer     * peer,
+                               tr_block_index_t    block );
 
 void tr_peerMgrRebuildRequests( tr_torrent * torrent );
 
@@ -207,7 +206,7 @@ void tr_peerMgrMarkAllAsSeeds( tr_torrent * tor );
 enum
 {
     TR_PEERS_CONNECTED,
-    TR_PEERS_ALL
+    TR_PEERS_INTERESTING
 };
 
 int  tr_peerMgrGetPeers( tr_torrent      * tor,
@@ -229,7 +228,7 @@ void tr_peerMgrTorrentAvailability( const tr_torrent * tor,
                                     int8_t           * tab,
                                     unsigned int       tabCount );
 
-struct tr_bitfield* tr_peerMgrGetAvailable( const tr_torrent * tor );
+uint64_t tr_peerMgrGetDesiredAvailable( const tr_torrent * tor );
 
 void tr_peerMgrOnTorrentGotMetainfo( tr_torrent * tor );
 
@@ -237,7 +236,6 @@ void tr_peerMgrOnBlocklistChanged( tr_peerMgr * manager );
 
 void tr_peerMgrTorrentStats( tr_torrent * tor,
                              int * setmePeersConnected,
-                             int * setmeSeedsConnected,
                              int * setmeWebseedsSendingToUs,
                              int * setmePeersSendingToUs,
                              int * setmePeersGettingFromUs,

@@ -33,11 +33,6 @@ uint64 UTGetTickCount64()
 	return (uint64)GetTickCount();
 }
 
-uint32 UTP_GetMilliseconds()
-{
-	return GetTickCount();
-}
-
 void Time_Initialize()
 {
 	HMODULE kernel32 = GetModuleHandleA("kernel32.dll");
@@ -54,7 +49,7 @@ void Time_Initialize()
 
 int64 abs64(int64 x) { return x < 0 ? -x : x; }
 
-uint64 UTP_GetMicroseconds()
+static uint64 GetMicroseconds()
 {
 	static bool time_init = false;
 	if (!time_init) {
@@ -94,7 +89,7 @@ uint64 UTP_GetMicroseconds()
 #if defined(__APPLE__)
 #include <mach/mach_time.h>
 
-uint64 UTP_GetMicroseconds()
+static uint64 GetMicroseconds()
 {
 	// http://developer.apple.com/mac/library/qa/qa2004/qa1398.html
 	// http://www.macresearch.org/tutorial_performance_and_time
@@ -112,13 +107,13 @@ uint64 UTP_GetMicroseconds()
 	return ((tick - start_tick) * sTimebaseInfo.numer) / (sTimebaseInfo.denom * 1000);
 }
 
-#else
+#else //!__APPLE__
 
 /* Unfortunately, #ifdef CLOCK_MONOTONIC is not enough to make sure that
    POSIX clocks work -- we could be running a recent libc with an ancient
    kernel (think OpenWRT). -- jch */
 
-uint64 UTP_GetMicroseconds()
+static uint64_t GetMicroseconds()
 {
 	static int have_posix_clocks = -1;
 	int rc;
@@ -141,26 +136,33 @@ uint64 UTP_GetMicroseconds()
 	}
 #endif
 	{
-		static time_t offset = 0, previous = 0;
 		struct timeval tv;
 		rc = gettimeofday(&tv, NULL);
-		tv.tv_sec += offset;
-		if (previous > tv.tv_sec) {
-			offset += previous - tv.tv_sec;
-			tv.tv_sec = previous;
-		}
-		previous = tv.tv_sec;
 		return uint64(tv.tv_sec) * 1000000 + tv.tv_usec;
 	}
 }
-#endif
+#endif //!__APPLE__
+
+#endif //!WIN32
+
+uint64 UTP_GetMicroseconds()
+{
+	static uint64 offset = 0, previous = 0;
+
+	uint64 now = GetMicroseconds() + offset;
+	if (previous > now) {
+		/* Eek! */
+		offset += previous - now;
+		now = previous;
+	}
+	previous = now;
+	return now;
+}
 
 uint32 UTP_GetMilliseconds()
 {
 	return UTP_GetMicroseconds() / 1000;
 }
-
-#endif
 
 
 #define ETHERNET_MTU 1500

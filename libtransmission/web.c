@@ -10,6 +10,9 @@
  * $Id$
  */
 
+#include <string.h> /* strlen(), strstr() */
+#include <stdlib.h> /* getenv() */
+
 #ifdef WIN32
   #include <ws2tcpip.h>
 #else
@@ -73,12 +76,13 @@ struct tr_web_task
 {
     long code;
     long timeout_secs;
-    tr_bool did_connect;
-    tr_bool did_timeout;
+    bool did_connect;
+    bool did_timeout;
     struct evbuffer * response;
     struct evbuffer * freebuf;
     char * url;
     char * range;
+    char * cookies;
     tr_session * session;
     tr_web_done_func * done_func;
     void * done_func_user_data;
@@ -89,6 +93,7 @@ task_free( struct tr_web_task * task )
 {
     if( task->freebuf )
         evbuffer_free( task->freebuf );
+    tr_free( task->cookies );
     tr_free( task->range );
     tr_free( task->url );
     tr_free( task );
@@ -113,8 +118,8 @@ static int
 sockoptfunction( void * vtask, curl_socket_t fd, curlsocktype purpose UNUSED )
 {
     struct tr_web_task * task = vtask;
-    const tr_bool isScrape = strstr( task->url, "scrape" ) != NULL;
-    const tr_bool isAnnounce = strstr( task->url, "announce" ) != NULL;
+    const bool isScrape = strstr( task->url, "scrape" ) != NULL;
+    const bool isAnnounce = strstr( task->url, "announce" ) != NULL;
 
     /* announce and scrape requests have tiny payloads. */
     if( isScrape || isAnnounce )
@@ -148,7 +153,7 @@ static CURL *
 createEasy( tr_session * s, struct tr_web_task * task )
 {
     const tr_address * addr;
-    tr_bool is_default_value;
+    bool is_default_value;
     CURL * e = curl_easy_init( );
     const long verbose = getenv( "TR_CURL_VERBOSE" ) != NULL;
     char * cookie_filename = tr_buildPath( s->configDir, "cookies.txt", NULL );
@@ -176,9 +181,12 @@ createEasy( tr_session * s, struct tr_web_task * task )
     curl_easy_setopt( e, CURLOPT_WRITEFUNCTION, writeFunc );
 
     if((( addr = tr_sessionGetPublicAddress( s, TR_AF_INET, &is_default_value ))) && !is_default_value )
-        curl_easy_setopt( e, CURLOPT_INTERFACE, tr_ntop_non_ts( addr ) );
+        curl_easy_setopt( e, CURLOPT_INTERFACE, tr_address_to_string( addr ) );
     else if ((( addr = tr_sessionGetPublicAddress( s, TR_AF_INET6, &is_default_value ))) && !is_default_value )
-        curl_easy_setopt( e, CURLOPT_INTERFACE, tr_ntop_non_ts( addr ) );
+        curl_easy_setopt( e, CURLOPT_INTERFACE, tr_address_to_string( addr ) );
+
+    if( task->cookies != NULL )
+        curl_easy_setopt( e, CURLOPT_COOKIE, task->cookies );
 
     if( task->range )
         curl_easy_setopt( e, CURLOPT_RANGE, task->range );
@@ -220,10 +228,11 @@ void
 tr_webRun( tr_session         * session,
            const char         * url,
            const char         * range,
+           const char         * cookies,
            tr_web_done_func     done_func,
            void               * done_func_user_data )
 {
-    tr_webRunWithBuffer( session, url, range,
+    tr_webRunWithBuffer( session, url, range, cookies,
                          done_func, done_func_user_data,
                          NULL );
 }
@@ -232,6 +241,7 @@ void
 tr_webRunWithBuffer( tr_session         * session,
                      const char         * url,
                      const char         * range,
+                     const char         * cookies,
                      tr_web_done_func     done_func,
                      void               * done_func_user_data,
                      struct evbuffer    * buffer )
@@ -245,6 +255,7 @@ tr_webRunWithBuffer( tr_session         * session,
         task->session = session;
         task->url = tr_strdup( url );
         task->range = tr_strdup( range );
+        task->cookies = tr_strdup( cookies);
         task->done_func = done_func;
         task->done_func_user_data = done_func_user_data;
         task->response = buffer ? buffer : evbuffer_new( );
@@ -319,7 +330,7 @@ tr_webThreadFunc( void * vsession )
 
         if( web->close_mode == TR_WEB_CLOSE_NOW )
             break;
-        if( ( web->close_mode == TR_WEB_CLOSE_WHEN_IDLE ) && !taskCount )
+        if( ( web->close_mode == TR_WEB_CLOSE_WHEN_IDLE ) && ( web->tasks == NULL ) )
             break;
 
         /* add tasks from the queue */
@@ -338,6 +349,8 @@ tr_webThreadFunc( void * vsession )
         curl_multi_timeout( multi, &msec );
         if( msec < 0 )
             msec = THREADFUNC_MAX_SLEEP_MSEC;
+        if( session->isClosed )
+            msec = 100; /* on shutdown, call perform() more frequently */
         if( msec > 0 )
         {
             int usec;
@@ -357,7 +370,6 @@ tr_webThreadFunc( void * vsession )
             usec = msec * 1000;
             t.tv_sec =  usec / 1000000;
             t.tv_usec = usec % 1000000;
-
             tr_select( max_fd+1, &r_fd_set, &w_fd_set, &c_fd_set, &t );
         }
 
@@ -388,6 +400,15 @@ tr_webThreadFunc( void * vsession )
                 --taskCount;
             }
         }
+
+#if 0
+{
+tr_list * l;
+for( l=web->tasks; l!=NULL; l=l->next )
+    fprintf( stderr, "still pending: %s\n", ((struct tr_web_task*)l->data)->url );
+}
+fprintf( stderr, "loop is ending... web is closing\n" );
+#endif
     }
 
     /* Discard any remaining tasks.
@@ -480,7 +501,7 @@ tr_webGetResponseStr( long code )
 
 void
 tr_http_escape( struct evbuffer  * out,
-                const char * str, int len, tr_bool escape_slashes )
+                const char * str, int len, bool escape_slashes )
 {
     const char * end;
 
@@ -508,4 +529,31 @@ tr_http_unescape( const char * str, int len )
     char * ret = tr_strdup( tmp );
     curl_free( tmp );
     return ret;
+}
+
+static int
+is_rfc2396_alnum( uint8_t ch )
+{
+    return ( '0' <= ch && ch <= '9' )
+        || ( 'A' <= ch && ch <= 'Z' )
+        || ( 'a' <= ch && ch <= 'z' )
+        || ch == '.'
+        || ch == '-'
+        || ch == '_'
+        || ch == '~';
+}
+
+void
+tr_http_escape_sha1( char * out, const uint8_t * sha1_digest )
+{
+    const uint8_t * in = sha1_digest;
+    const uint8_t * end = in + SHA_DIGEST_LENGTH;
+
+    while( in != end )
+        if( is_rfc2396_alnum( *in ) )
+            *out++ = (char) *in++;
+        else
+            out += tr_snprintf( out, 4, "%%%02x", (unsigned int)*in++ );
+
+    *out = '\0';
 }

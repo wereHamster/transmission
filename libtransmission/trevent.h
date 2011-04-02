@@ -17,18 +17,15 @@
 #ifndef TR_EVENT_H
 #define TR_EVENT_H
 
-#include <stddef.h> /* size_t */
-#include <inttypes.h> /* uint64_t */
-
 /**
 **/
 
-void      tr_eventInit( tr_session * );
+void   tr_eventInit( tr_session * );
 
-void      tr_eventClose( tr_session * );
+void   tr_eventClose( tr_session * );
 
-tr_bool   tr_amInEventThread( const tr_session * );
+bool   tr_amInEventThread( const tr_session * );
 
-void      tr_runInEventThread( tr_session *, void func( void* ), void * user_data );
+void   tr_runInEventThread( tr_session *, void func( void* ), void * user_data );
 
 #endif

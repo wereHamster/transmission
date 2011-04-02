@@ -26,6 +26,8 @@
 /* ansi */
 #include <errno.h>
 #include <stdio.h>
+#include <string.h> /* memcpy(), memset(), memchr(), strlen() */
+#include <stdlib.h> /* atoi() */
 
 /* posix */
 #include <signal.h> /* sig_atomic_t */
@@ -225,6 +227,7 @@ dht_bootstrap(void *closure)
                 if(bootstrap_done(cl->session, 0))
                     break;
             }
+            fclose( f );
         }
 
         tr_free( bootstrap_file );
@@ -260,7 +263,7 @@ tr_dhtInit(tr_session *ss)
 {
     tr_benc benc;
     int rc;
-    tr_bool have_id = FALSE;
+    bool have_id = false;
     char * dat_file;
     uint8_t * nodes = NULL, * nodes6 = NULL;
     const uint8_t * raw;
@@ -390,7 +393,7 @@ tr_dhtUninit(tr_session *ss)
     session = NULL;
 }
 
-tr_bool
+bool
 tr_dhtEnabled( const tr_session * ss )
 {
     return ss && ( ss == session );
@@ -456,7 +459,7 @@ int
 tr_dhtAddNode( tr_session       * ss,
                const tr_address * address,
                tr_port            port,
-               tr_bool            bootstrap )
+               bool            bootstrap )
 {
     int af = address->type == TR_AF_INET ? AF_INET : AF_INET6;
 
@@ -544,8 +547,8 @@ callback( void *ignore UNUSED, int event,
     }
 }
 
-int
-tr_dhtAnnounce(tr_torrent *tor, int af, tr_bool announce)
+static int
+tr_dhtAnnounce(tr_torrent *tor, int af, bool announce)
 {
     int rc, status, numnodes, ret = 0;
 
@@ -568,9 +571,9 @@ tr_dhtAnnounce(tr_torrent *tor, int af, tr_bool announce)
                       af == AF_INET6 ? " IPv6" : "",
                       tr_dhtPrintableStatus(status), numnodes);
             if(af == AF_INET)
-                tor->dhtAnnounceInProgress = TRUE;
+                tor->dhtAnnounceInProgress = true;
             else
-                tor->dhtAnnounce6InProgress = TRUE;
+                tor->dhtAnnounce6InProgress = true;
             ret = 1;
         } else {
             tr_torerr(tor, "%sDHT announce failed (%s, %d nodes): %s",
@@ -585,6 +588,37 @@ tr_dhtAnnounce(tr_torrent *tor, int af, tr_bool announce)
     }
 
     return ret;
+}
+
+void
+tr_dhtUpkeep( tr_session * session )
+{
+    tr_torrent * tor = NULL;
+    const time_t now = tr_time( );
+
+    while(( tor = tr_torrentNext( session, tor )))
+    {
+        if( !tor->isRunning || !tr_torrentAllowsDHT( tor ) )
+            continue;
+
+        if( tor->dhtAnnounceAt <= now )
+        {
+            const int rc = tr_dhtAnnounce(tor, AF_INET, 1);
+
+            tor->dhtAnnounceAt = now + ((rc == 0)
+                                     ? 5 + tr_cryptoWeakRandInt( 5 )
+                                     : 25 * 60 + tr_cryptoWeakRandInt( 3*60 ));
+        }
+
+        if( tor->dhtAnnounce6At <= now )
+        {
+            const int rc = tr_dhtAnnounce(tor, AF_INET6, 1);
+
+            tor->dhtAnnounce6At = now + ((rc == 0)
+                                      ? 5 + tr_cryptoWeakRandInt( 5 )
+                                      : 25 * 60 + tr_cryptoWeakRandInt( 3*60 ));
+        }
+    }
 }
 
 void
