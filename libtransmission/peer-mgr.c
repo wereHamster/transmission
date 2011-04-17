@@ -375,11 +375,6 @@ tr_peerConstruct( tr_peer * peer )
     memset( peer, 0, sizeof( tr_peer ) );
 
     peer->have = TR_BITFIELD_INIT;
-
-    tr_historyConstruct( &peer->blocksSentToClient,  CANCEL_HISTORY_SEC, ( RECHOKE_PERIOD_MSEC / 1000 ) );
-    tr_historyConstruct( &peer->blocksSentToPeer,    CANCEL_HISTORY_SEC, ( RECHOKE_PERIOD_MSEC / 1000 ) );
-    tr_historyConstruct( &peer->cancelsSentToClient, CANCEL_HISTORY_SEC, ( RECHOKE_PERIOD_MSEC / 1000 ) );
-    tr_historyConstruct( &peer->cancelsSentToPeer,   CANCEL_HISTORY_SEC, ( REFILL_UPKEEP_PERIOD_MSEC / 1000 ) );
 }
 
 static tr_peer*
@@ -430,11 +425,6 @@ tr_peerDestruct( tr_torrent * tor, tr_peer * peer )
         tr_peerIoClear( peer->io );
         tr_peerIoUnref( peer->io ); /* balanced by the ref in handshakeDoneCB() */
     }
-
-    tr_historyDestruct( &peer->blocksSentToClient  );
-    tr_historyDestruct( &peer->blocksSentToPeer    );
-    tr_historyDestruct( &peer->cancelsSentToClient );
-    tr_historyDestruct( &peer->cancelsSentToPeer   );
 
     tr_bitfieldDestruct( &peer->have );
     tr_bitfieldDestruct( &peer->blame );
@@ -2925,7 +2915,10 @@ rechokeDownloads( Torrent * t )
                     bad[badCount++] = peer;
             }
 
-            tr_removeElementFromArray( peers, i, sizeof(tr_peer*), n-- );
+            /* remove 'peer' from the array 'peers' */
+            if( i != n - 1 )
+                peers[i] = peers[n-1];
+            --n;
         }
 
         tr_free( peers );
@@ -3157,7 +3150,7 @@ rechokePulse( int foo UNUSED, short bar UNUSED, void * vmgr )
     while(( tor = tr_torrentNext( mgr->session, tor ))) {
         if( tor->isRunning ) {
             Torrent * t = tor->torrentPeers;
-            if( tr_ptrArraySize( &t->peers ) == 0 )
+            if( tr_ptrArrayEmpty( &t->peers ) )
                 continue;
             rechokeUploads( t, now );
             if( !tr_torrentIsSeed( tor ) )
@@ -3327,12 +3320,15 @@ removeAllPeers( Torrent * t )
 static void
 closeBadPeers( Torrent * t, const time_t now_sec )
 {
-    int i;
-    int peerCount;
-    struct tr_peer ** peers = getPeersToClose( t, now_sec, &peerCount );
-    for( i=0; i<peerCount; ++i )
-        closePeer( t, peers[i] );
-    tr_free( peers );
+    if( !tr_ptrArrayEmpty( &t->peers ) )
+    {
+        int i;
+        int peerCount;
+        struct tr_peer ** peers = getPeersToClose( t, now_sec, &peerCount );
+        for( i=0; i<peerCount; ++i )
+            closePeer( t, peers[i] );
+        tr_free( peers );
+    }
 }
 
 struct peer_liveliness

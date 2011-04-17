@@ -93,28 +93,40 @@ struct TrCorePrivate
     GtkTreeModel * raw_model;
     GtkTreeModel * sorted_model;
     tr_session   * session;
+    GStringChunk * string_chunk;
 };
 
 static int
 core_is_disposed( const TrCore * core )
 {
-    return !core || !core->priv;
+    return !core || !core->priv->sorted_model;
 }
 
 static void
-core_dispose( GObject * obj )
+core_dispose( GObject * o )
 {
-    TrCore * core = TR_CORE( obj );
+    TrCore * core = TR_CORE( o );
+    GObjectClass * parent = g_type_class_peek( g_type_parent( TR_CORE_TYPE ) );
 
-    if( !core_is_disposed( core ) )
+    if( core->priv->sorted_model != NULL )
     {
-        GObjectClass * parent;
-
-        core->priv = NULL;
-
-        parent = g_type_class_peek( g_type_parent( TR_CORE_TYPE ) );
-        parent->dispose( obj );
+        g_object_unref( core->priv->sorted_model );
+        core->priv->sorted_model = NULL;
+        core->priv->raw_model = NULL;
     }
+
+    parent->dispose( o );
+}
+
+static void
+core_finalize( GObject * o )
+{
+    TrCore * core = TR_CORE( o );
+    GObjectClass * parent = g_type_class_peek( g_type_parent( TR_CORE_TYPE ) );
+
+    g_string_chunk_free( core->priv->string_chunk );
+
+    parent->finalize( o );
 }
 
 static void
@@ -126,6 +138,7 @@ gtr_core_class_init( gpointer g_class, gpointer g_class_data UNUSED )
 
     gobject_class = G_OBJECT_CLASS( g_class );
     gobject_class->dispose = core_dispose;
+    gobject_class->finalize = core_finalize;
 
     core_signals[ADD_ERROR_SIGNAL] = g_signal_new(
         "add-error",
@@ -224,8 +237,7 @@ core_init( GTypeInstance * instance, gpointer g_class UNUSED )
 
     /* column types for the model used to store torrent information */
     /* keep this in sync with the enum near the bottom of tr_core.h */
-    GType types[] = { G_TYPE_STRING,    /* name */
-                      G_TYPE_STRING,    /* collated name */
+    GType types[] = { G_TYPE_POINTER,   /* collated name */
                       G_TYPE_POINTER,   /* tr_torrent* */
                       G_TYPE_INT,       /* torrent id */
                       G_TYPE_DOUBLE,    /* tr_stat.pieceUploadSpeed_KBps */
@@ -235,7 +247,7 @@ core_init( GTypeInstance * instance, gpointer g_class UNUSED )
                       G_TYPE_INT,       /* tr_stat.activity */
                       G_TYPE_UCHAR,     /* tr_stat.finished */
                       G_TYPE_CHAR,      /* tr_priority_t */
-                      G_TYPE_STRING,    /* concatenated trackers string */
+                      G_TYPE_UINT,      /* build_torrent_trackers_hash() */
                       G_TYPE_INT,       /* MC_ERROR */
                       G_TYPE_INT };     /* MC_ACTIVE_PEER_COUNT */
 
@@ -249,6 +261,7 @@ core_init( GTypeInstance * instance, gpointer g_class UNUSED )
 
     p->raw_model = GTK_TREE_MODEL( store );
     p->sorted_model = gtk_tree_model_sort_new_with_model( p->raw_model );
+    p->string_chunk = g_string_chunk_new( 2048 );
     g_object_unref( p->raw_model );
 
 #ifdef HAVE_DBUS_GLIB
@@ -438,18 +451,10 @@ compare_time( time_t a, time_t b )
 static int
 compare_by_name( GtkTreeModel * m, GtkTreeIter * a, GtkTreeIter * b, gpointer user_data UNUSED )
 {
-    int ret = 0;
-
-    if( !ret ) {
-        char *ca, *cb;
-        gtk_tree_model_get( m, a, MC_NAME_COLLATED, &ca, -1 );
-        gtk_tree_model_get( m, b, MC_NAME_COLLATED, &cb, -1 );
-        ret = tr_strcmp0( ca, cb );
-        g_free( cb );
-        g_free( ca );
-    }
-
-    return ret;
+    const char *ca, *cb;
+    gtk_tree_model_get( m, a, MC_NAME_COLLATED, &ca, -1 );
+    gtk_tree_model_get( m, b, MC_NAME_COLLATED, &cb, -1 );
+    return tr_strcmp0( ca, cb );
 }
 
 static int
@@ -893,33 +898,102 @@ on_torrent_completeness_changed( tr_torrent       * tor,
 }
 
 /***
+****  METADATA CALLBACK
+***/
+
+static const char*
+get_collated_name( TrCore * core, const tr_torrent * tor )
+{
+    char buf[2048];
+    const char * name = tr_torrentName( tor );
+    char * down = g_utf8_strdown( name ? name : "", -1 );
+    const tr_info * inf = tr_torrentInfo( tor );
+    g_snprintf( buf, sizeof( buf ), "%s\t%s", down, inf->hashString );
+    g_free( down );
+    return g_string_chunk_insert_const( core->priv->string_chunk, buf );
+}
+
+struct metadata_callback_data
+{
+    TrCore * core;
+    int torrent_id;
+};
+
+static gboolean
+find_row_from_torrent_id( GtkTreeModel * model, int id, GtkTreeIter * setme )
+{
+    GtkTreeIter iter;
+    gboolean match = FALSE;
+
+    if( gtk_tree_model_iter_children( model, &iter, NULL ) ) do
+    {
+        int row_id;
+        gtk_tree_model_get( model, &iter, MC_TORRENT_ID, &row_id, -1 );
+        match = id == row_id;
+    }
+    while( !match && gtk_tree_model_iter_next( model, &iter ) );
+
+    if( match )
+        *setme = iter;
+
+    return match;
+}
+
+static gboolean
+on_torrent_metadata_changed_idle( gpointer gdata )
+{
+    struct notify_callback_data * data = gdata;
+    tr_session * session = gtr_core_session( data->core );
+    tr_torrent * tor = tr_torrentFindFromId( session, data->torrent_id );
+
+    /* update the torrent's collated name */
+    if( tor != NULL ) {
+        GtkTreeIter iter;
+        GtkTreeModel * model = core_raw_model( data->core );
+        if( find_row_from_torrent_id( model, data->torrent_id, &iter ) ) {
+            const char * collated = get_collated_name( data->core, tor );
+            GtkListStore * store = GTK_LIST_STORE( model );
+            gtk_list_store_set( store, &iter, MC_NAME_COLLATED, collated, -1 );
+        }
+    }
+
+    /* cleanup */
+    g_object_unref( G_OBJECT( data->core ) );
+    g_free( data );
+    return FALSE;
+}
+
+/* this is called in the libtransmission thread, *NOT* the GTK+ thread,
+   so delegate to the GTK+ thread before changing our list store... */
+static void
+on_torrent_metadata_changed( tr_torrent * tor, void * gcore )
+{
+    struct notify_callback_data * data = g_new( struct notify_callback_data, 1 );
+    data->core = gcore;
+    data->torrent_id = tr_torrentId( tor );
+    g_object_ref( G_OBJECT( data->core ) );
+    gtr_idle_add( on_torrent_metadata_changed_idle, data );
+}
+
+/***
 ****
 ****  ADDING TORRENTS
 ****
 ***/
 
-static char*
-get_collated_name( const tr_torrent * tor )
-{
-    const char * name = tr_torrentName( tor );
-    const tr_info * inf = tr_torrentInfo( tor );
-    char * down = g_utf8_strdown( name ? name : "", -1 );
-    char * collated = g_strdup_printf( "%s\t%s", down, inf->hashString );
-    g_free( down );
-    return collated;
-}
-
-static char *
-build_torrent_tracker_string( tr_torrent * tor )
+static unsigned int
+build_torrent_trackers_hash( tr_torrent * tor )
 {
     int i;
-    GString * str = g_string_new( NULL );
-    const tr_info * inf = tr_torrentInfo( tor );
+    const char * pch;
+    uint64_t hash = 0;
+    const tr_info * const inf = tr_torrentInfo( tor );
 
     for( i=0; i<inf->trackerCount; ++i )
-        g_string_append( str, inf->trackers[i].announce );
+        for( pch=inf->trackers[i].announce; *pch; ++pch )
+            hash = (hash<<4) ^ (hash>>28) ^ *pch;
 
-    return g_string_free( str, FALSE );
+    return hash;
 }
 
 static gboolean
@@ -937,13 +1011,11 @@ gtr_core_add_torrent( TrCore * core, tr_torrent * tor, gboolean do_notify )
     {
         GtkTreeIter unused;
         const tr_stat * st = tr_torrentStat( tor );
-        const char * name = tr_torrentName( tor );
-        char * collated = get_collated_name( tor );
-        char * trackers = build_torrent_tracker_string( tor );
+        const char * collated = get_collated_name( core, tor );
+        const unsigned int trackers_hash = build_torrent_trackers_hash( tor );
         GtkListStore * store = GTK_LIST_STORE( core_raw_model( core ) );
 
         gtk_list_store_insert_with_values( store, &unused, 0,
-            MC_NAME,              name,
             MC_NAME_COLLATED,     collated,
             MC_TORRENT,           tor,
             MC_TORRENT_ID,        tr_torrentId( tor ),
@@ -954,17 +1026,14 @@ gtr_core_add_torrent( TrCore * core, tr_torrent * tor, gboolean do_notify )
             MC_ACTIVITY,          st->activity,
             MC_FINISHED,          st->finished,
             MC_PRIORITY,          tr_torrentGetPriority( tor ),
-            MC_TRACKERS,          trackers,
+            MC_TRACKERS,          trackers_hash,
             -1 );
 
         if( do_notify )
-            gtr_notify_torrent_added( name );
+            gtr_notify_torrent_added( tr_torrentName( tor ) );
 
+        tr_torrentSetMetadataCallback( tor, on_torrent_metadata_changed, core );
         tr_torrentSetCompletenessCallback( tor, on_torrent_completeness_changed, core );
-
-        /* cleanup */
-        g_free( collated );
-        g_free( trackers );
     }
 }
 
@@ -1276,26 +1345,6 @@ gtr_core_torrents_added( TrCore * self )
     core_emit_err( self, TR_CORE_ERR_NO_MORE_TORRENTS, NULL );
 }
 
-static gboolean
-find_row_from_torrent_id( GtkTreeModel * model, int id, GtkTreeIter * setme )
-{
-    GtkTreeIter iter;
-    gboolean match = FALSE;
-
-    if( gtk_tree_model_iter_children( model, &iter, NULL ) ) do
-    {
-        int row_id;
-        gtk_tree_model_get( model, &iter, MC_TORRENT_ID, &row_id, -1 );
-        match = id == row_id;
-    }
-    while( !match && gtk_tree_model_iter_next( model, &iter ) );
-
-    if( match )
-        *setme = iter;
-
-    return match;
-}
-
 void
 gtr_core_remove_torrent( TrCore * core, int id, gboolean delete_local_data )
 {
@@ -1356,19 +1405,15 @@ gtr_compare_double( const double a, const double b, int decimal_places )
     return 0;
 }
 
-static gboolean
-update_foreach( GtkTreeModel * model,
-                GtkTreePath  * path UNUSED,
-                GtkTreeIter  * iter,
-                gpointer       data UNUSED )
+static void
+update_foreach( GtkTreeModel * model, GtkTreeIter * iter )
 {
     int oldActivity, newActivity;
     int oldActivePeerCount, newActivePeerCount;
     int oldError, newError;
     bool oldFinished, newFinished;
     tr_priority_t oldPriority, newPriority;
-    char * oldCollatedName, * newCollatedName;
-    char * oldTrackers, * newTrackers;
+    unsigned int oldTrackers, newTrackers;
     double oldUpSpeed, newUpSpeed;
     double oldDownSpeed, newDownSpeed;
     double oldRecheckProgress, newRecheckProgress;
@@ -1379,7 +1424,6 @@ update_foreach( GtkTreeModel * model,
     /* get the old states */
     gtk_tree_model_get( model, iter,
                         MC_TORRENT,  &tor,
-                        MC_NAME_COLLATED, &oldCollatedName,
                         MC_ACTIVE, &oldActive,
                         MC_ACTIVE_PEER_COUNT, &oldActivePeerCount,
                         MC_ERROR, &oldError,
@@ -1398,13 +1442,12 @@ update_foreach( GtkTreeModel * model,
     newActivity = st->activity;
     newFinished = st->finished;
     newPriority = tr_torrentGetPriority( tor );
-    newTrackers = build_torrent_tracker_string( tor );
+    newTrackers = build_torrent_trackers_hash( tor );
     newUpSpeed = st->pieceUploadSpeed_KBps;
     newDownSpeed = st->pieceDownloadSpeed_KBps;
     newRecheckProgress = st->recheckProgress;
     newActivePeerCount = st->peersSendingToUs + st->peersGettingFromUs + st->webseedsSendingToUs;
     newError = st->error;
-    newCollatedName = get_collated_name( tor );
 
     /* updating the model triggers off resort/refresh,
        so don't do it unless something's actually changed... */
@@ -1414,8 +1457,7 @@ update_foreach( GtkTreeModel * model,
         || ( newPriority != oldPriority )
         || ( newError != oldError )
         || ( newActivePeerCount != oldActivePeerCount )
-        || tr_strcmp0( oldTrackers, newTrackers )
-        || tr_strcmp0( oldCollatedName, newCollatedName )
+        || ( newTrackers != oldTrackers )
         || gtr_compare_double( newUpSpeed, oldUpSpeed, 3 )
         || gtr_compare_double( newDownSpeed, oldDownSpeed, 3 )
         || gtr_compare_double( newRecheckProgress, oldRecheckProgress, 2 ) )
@@ -1425,7 +1467,6 @@ update_foreach( GtkTreeModel * model,
                             MC_ACTIVE_PEER_COUNT, newActivePeerCount,
                             MC_ERROR, newError,
                             MC_ACTIVITY, newActivity,
-                            MC_NAME_COLLATED, newCollatedName,
                             MC_FINISHED, newFinished,
                             MC_PRIORITY, newPriority,
                             MC_TRACKERS, newTrackers,
@@ -1434,21 +1475,21 @@ update_foreach( GtkTreeModel * model,
                             MC_RECHECK_PROGRESS, newRecheckProgress,
                             -1 );
     }
-
-    /* cleanup */
-    g_free( newCollatedName );
-    g_free( oldCollatedName );
-    g_free( newTrackers );
-    g_free( oldTrackers );
-    return FALSE;
 }
 
 void
 gtr_core_update( TrCore * core )
 {
-    /* refresh the model */
-    gtk_tree_model_foreach( core_raw_model( core ), update_foreach, NULL );
+    GtkTreeIter iter;
+    GtkTreeModel * model;
 
+    /* update the model */
+    model = core_raw_model( core );
+    if( gtk_tree_model_iter_nth_child( model, &iter, NULL, 0 ) ) do
+        update_foreach( model, &iter );
+    while( gtk_tree_model_iter_next( model, &iter ) );
+
+    /* update hibernation */
     core_maybe_inhibit_hibernation( core );
 }
 
@@ -1810,7 +1851,7 @@ gtr_core_get_active_torrent_count( TrCore * core )
     size_t activeCount = 0;
     GtkTreeModel * model = core_raw_model( core );
 
-    if( gtk_tree_model_get_iter_first( model, &iter ) ) do
+    if( gtk_tree_model_iter_nth_child( model, &iter, NULL, 0 ) ) do
     {
         int activity;
         gtk_tree_model_get( model, &iter, MC_ACTIVITY, &activity, -1 );

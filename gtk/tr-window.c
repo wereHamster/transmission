@@ -39,18 +39,6 @@
 #include "tr-window.h"
 #include "util.h"
 
-#if !GTK_CHECK_VERSION( 2, 8, 0 )
-static void
-gtk_tree_view_column_queue_resize( GtkTreeViewColumn * column ) /* yuck */
-{
-    const int spacing = gtk_tree_view_column_get_spacing( column );
-
-    gtk_tree_view_column_set_spacing( column, spacing + 1 );
-    gtk_tree_view_column_set_spacing( column, spacing );
-}
-
-#endif
-
 typedef struct
 {
     GtkWidget *           speedlimit_on_item[2];
@@ -79,12 +67,18 @@ typedef struct
 }
 PrivateData;
 
-#define PRIVATE_DATA_KEY "private-data"
+static GQuark
+get_private_data_key( void )
+{
+    static GQuark q = 0;
+    if( !q ) q = g_quark_from_static_string( "private-data" );
+    return q;
+}
 
 static PrivateData*
 get_private_data( TrWindow * w )
 {
-    return g_object_get_data ( G_OBJECT( w ), PRIVATE_DATA_KEY );
+    return g_object_get_qdata ( G_OBJECT( w ), get_private_data_key( ) );
 }
 
 /***
@@ -579,8 +573,7 @@ gtr_window_new( GtkUIManager * ui_mgr, TrCore * core )
 
     /* make the window */
     self = gtk_window_new ( GTK_WINDOW_TOPLEVEL );
-    g_object_set_data_full( G_OBJECT(
-                                self ), PRIVATE_DATA_KEY, p, privateFree );
+    g_object_set_qdata_full( G_OBJECT(self), get_private_data_key( ), p, privateFree );
     win = GTK_WINDOW( self );
     gtk_window_set_title( win, g_get_application_name( ) );
     gtk_window_set_role( win, "tr-main" );
@@ -826,7 +819,7 @@ updateSpeeds( PrivateData * p )
         GtkTreeIter iter;
         GtkTreeModel * model = gtr_core_model( p->core );
 
-        if( gtk_tree_model_get_iter_first( model, &iter ) ) do
+        if( gtk_tree_model_iter_nth_child( model, &iter, NULL, 0 ) ) do
         {
             double u, d;
             gtk_tree_model_get( model, &iter, MC_SPEED_UP, &u,

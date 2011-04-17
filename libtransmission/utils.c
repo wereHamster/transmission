@@ -1010,8 +1010,10 @@ tr_urlParse( const char * url_in,
     int          n;
     char *       tmp;
     char *       pch;
-    const char * protocol = NULL;
+    size_t       host_len;
+    size_t       protocol_len;
     const char * host = NULL;
+    const char * protocol = NULL;
     const char * path = NULL;
 
     tmp = tr_strndup( url_in, len );
@@ -1019,14 +1021,17 @@ tr_urlParse( const char * url_in,
     {
         *pch = '\0';
         protocol = tmp;
+        protocol_len = pch - protocol;
         pch += 3;
 /*fprintf( stderr, "protocol is [%s]... what's left is [%s]\n", protocol, pch);*/
         if( ( n = strcspn( pch, ":/" ) ) )
         {
             const int havePort = pch[n] == ':';
             host = pch;
+            host_len = n;
             pch += n;
-            *pch++ = '\0';
+            if( pch && *pch )
+                *pch++ = '\0';
 /*fprintf( stderr, "host is [%s]... what's left is [%s]\n", host, pch );*/
             if( havePort )
             {
@@ -1053,11 +1058,12 @@ tr_urlParse( const char * url_in,
 
     if( !err )
     {
-        if( setme_protocol ) *setme_protocol = tr_strdup( protocol );
+        if( setme_protocol ) *setme_protocol = tr_strndup( protocol, protocol_len );
 
         if( setme_host ){ ( (char*)host )[-3] = ':'; *setme_host =
-                              tr_strdup( host ); }
-        if( setme_path ){ if( path[0] == '/' ) *setme_path = tr_strdup( path );
+                              tr_strndup( host, host_len ); }
+        if( setme_path ){ if( !*path ) *setme_path = tr_strdup( "/" );
+                          else if( path[0] == '/' ) *setme_path = tr_strdup( path );
                           else { ( (char*)path )[-1] = '/'; *setme_path = tr_strdup( path - 1 ); } }
         if( setme_port ) *setme_port = port;
     }

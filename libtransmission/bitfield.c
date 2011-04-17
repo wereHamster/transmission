@@ -56,13 +56,6 @@ countArray( const tr_bitfield * b )
     return ret;
 }
 
-size_t
-tr_bitfieldCountTrueBits( const tr_bitfield * b )
-{
-    assert( b->true_count == ( b->bit_count ? tr_bitfieldCountRange( b, 0, b->bit_count ) : countArray ( b ) ) );
-    return b->true_count;
-}
-
 static size_t
 countRange( const tr_bitfield * b, size_t begin, size_t end )
 {
@@ -148,6 +141,13 @@ tr_bitfieldIsValid( const tr_bitfield * b )
     return true;
 }
 
+size_t
+tr_bitfieldCountTrueBits( const tr_bitfield * b )
+{
+    tr_bitfieldIsValid( b );
+    return b->true_count;
+}
+
 static size_t
 get_bytes_needed( size_t bit_count )
 {
@@ -170,7 +170,6 @@ tr_bitfieldGetRaw( const tr_bitfield * b, size_t * byte_count )
     uint8_t * bits = tr_new0( uint8_t, n );
 
     assert( b->bit_count > 0 );
-    assert( n >= b->alloc_count );
 
     if( b->alloc_count )
         memcpy( bits, b->bits, b->alloc_count );
@@ -303,15 +302,12 @@ tr_bitfieldSetRaw( tr_bitfield * b, const void * bits, size_t byte_count )
 void
 tr_bitfieldAdd( tr_bitfield * b, size_t nth )
 {
-    assert( tr_bitfieldIsValid(  b ) );
-
     if( !tr_bitfieldHas( b, nth ) )
     {
         tr_bitfieldEnsureBitsAlloced( b, nth );
         b->bits[nth >> 3u] |= ( 0x80 >> ( nth & 7u ) );
         tr_bitfieldIncTrueCount( b, 1 );
     }
-    assert( tr_bitfieldIsValid(  b ) );
 }
 
 /* Sets bit range [begin, end) to 1 */

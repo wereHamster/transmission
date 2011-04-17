@@ -24,7 +24,6 @@
 #include "session.h"
 #include "bandwidth.h"
 #include "crypto.h"
-#include "list.h"
 #include "net.h"
 #include "peer-common.h" /* MAX_BLOCK_SIZE */
 #include "peer-io.h"
@@ -77,12 +76,69 @@ guessPacketOverhead( size_t d )
             tr_deepLog( __FILE__, __LINE__, tr_peerIoGetAddrStr( io ), __VA_ARGS__ ); \
     } while( 0 )
 
+/**
+***
+**/
+
 struct tr_datatype
 {
-    bool    isPieceData;
-    size_t  length;
+    struct tr_datatype * next;
+    size_t length;
+    bool isPieceData;
 };
 
+static struct tr_datatype * datatype_pool = NULL;
+
+static const struct tr_datatype TR_DATATYPE_INIT = { NULL, 0, false };
+
+static struct tr_datatype *
+datatype_new( void )
+{
+    struct tr_datatype * ret;
+
+    if( datatype_pool == NULL )
+        ret = tr_new( struct tr_datatype, 1 );
+    else {
+        ret = datatype_pool;
+        datatype_pool = datatype_pool->next;
+    }
+
+    *ret = TR_DATATYPE_INIT;
+    return ret;
+}
+
+static void
+datatype_free( struct tr_datatype * datatype )
+{
+    datatype->next = datatype_pool;
+    datatype_pool = datatype;
+}
+
+static void
+peer_io_pull_datatype( tr_peerIo * io )
+{
+    struct tr_datatype * tmp;
+
+    if(( tmp = io->outbuf_datatypes ))
+    {
+        io->outbuf_datatypes = tmp->next;
+        datatype_free( tmp );
+    }
+}
+
+static void
+peer_io_push_datatype( tr_peerIo * io, struct tr_datatype * datatype )
+{
+    struct tr_datatype * tmp;
+
+    if(( tmp = io->outbuf_datatypes )) {
+        while( tmp->next != NULL )
+            tmp = tmp->next;
+        tmp->next = datatype;
+    } else {
+        io->outbuf_datatypes = datatype;
+    }
+}
 
 /***
 ****
@@ -93,7 +149,7 @@ didWriteWrapper( tr_peerIo * io, unsigned int bytes_transferred )
 {
      while( bytes_transferred && tr_isPeerIo( io ) )
      {
-        struct tr_datatype * next = io->outbuf_datatypes->data;
+        struct tr_datatype * next = io->outbuf_datatypes;
 
         const unsigned int payload = MIN( next->length, bytes_transferred );
         /* For uTP sockets, the overhead is computed in utp_on_overhead. */
@@ -113,10 +169,8 @@ didWriteWrapper( tr_peerIo * io, unsigned int bytes_transferred )
         {
             bytes_transferred -= payload;
             next->length -= payload;
-            if( !next->length ) {
-                tr_list_pop_front( &io->outbuf_datatypes );
-                tr_free( next );
-            }
+            if( !next->length )
+                peer_io_pull_datatype( io );
         }
     }
 }
@@ -243,8 +297,8 @@ event_read_cb( int fd, short event UNUSED, void * vio )
             what |= BEV_EVENT_ERROR;
         }
 
-        tr_net_strerror( errstr, sizeof( errstr ), e );
-        dbgmsg( io, "event_read_cb got an error. res is %d, what is %hd, errno is %d (%s)", res, what, e, errstr );
+        dbgmsg( io, "event_read_cb got an error. res is %d, what is %hd, errno is %d (%s)",
+                res, what, e, tr_net_strerror( errstr, sizeof( errstr ), e ) );
 
         if( io->gotError != NULL )
             io->gotError( io, what, io->userData );
@@ -542,7 +596,7 @@ tr_peerIoNew( tr_session       * session,
     io = tr_new0( tr_peerIo, 1 );
     io->magicNumber = PEER_IO_MAGIC_NUMBER;
     io->refCount = 1;
-    io->crypto = tr_cryptoNew( torrentHash, isIncoming );
+    tr_cryptoConstruct( &io->crypto, torrentHash, isIncoming );
     io->session = session;
     io->addr = *addr;
     io->isSeed = isSeed;
@@ -754,8 +808,10 @@ io_dtor( void * vio )
     evbuffer_free( io->outbuf );
     evbuffer_free( io->inbuf );
     io_close_socket( io );
-    tr_cryptoFree( io->crypto );
-    tr_list_free( &io->outbuf_datatypes, tr_free );
+    tr_cryptoDestruct( &io->crypto );
+
+    while( io->outbuf_datatypes != NULL )
+        peer_io_pull_datatype( io );
 
     memset( io, ~0, sizeof( tr_peerIo ) );
     tr_free( io );
@@ -883,25 +939,23 @@ tr_peerIoSetTorrentHash( tr_peerIo *     io,
 {
     assert( tr_isPeerIo( io ) );
 
-    tr_cryptoSetTorrentHash( io->crypto, hash );
+    tr_cryptoSetTorrentHash( &io->crypto, hash );
 }
 
 const uint8_t*
 tr_peerIoGetTorrentHash( tr_peerIo * io )
 {
     assert( tr_isPeerIo( io ) );
-    assert( io->crypto );
 
-    return tr_cryptoGetTorrentHash( io->crypto );
+    return tr_cryptoGetTorrentHash( &io->crypto );
 }
 
 int
 tr_peerIoHasTorrentHash( const tr_peerIo * io )
 {
     assert( tr_isPeerIo( io ) );
-    assert( io->crypto );
 
-    return tr_cryptoHasTorrentHash( io->crypto );
+    return tr_cryptoHasTorrentHash( &io->crypto );
 }
 
 /**
@@ -909,8 +963,7 @@ tr_peerIoHasTorrentHash( const tr_peerIo * io )
 **/
 
 void
-tr_peerIoSetPeersId( tr_peerIo *     io,
-                     const uint8_t * peer_id )
+tr_peerIoSetPeersId( tr_peerIo * io, const uint8_t * peer_id )
 {
     assert( tr_isPeerIo( io ) );
 
@@ -973,23 +1026,10 @@ static void
 addDatatype( tr_peerIo * io, size_t byteCount, bool isPieceData )
 {
     struct tr_datatype * d;
-
-    d = tr_new( struct tr_datatype, 1 );
+    d = datatype_new( );
     d->isPieceData = isPieceData != 0;
     d->length = byteCount;
-    tr_list_append( &io->outbuf_datatypes, d );
-}
-
-static struct evbuffer_iovec *
-evbuffer_peek_all( struct evbuffer * buf, size_t * setme_vecCount )
-{
-    const size_t byteCount = evbuffer_get_length( buf );
-    const int vecCount = evbuffer_peek( buf, byteCount, NULL, NULL, 0 );
-    struct evbuffer_iovec * iovec = tr_new0( struct evbuffer_iovec, vecCount );
-    const int n = evbuffer_peek( buf, byteCount, NULL, iovec, vecCount );
-    assert( n == vecCount );
-    *setme_vecCount = n;
-    return iovec;
+    peer_io_push_datatype( io, d );
 }
 
 static void
@@ -997,13 +1037,13 @@ maybeEncryptBuffer( tr_peerIo * io, struct evbuffer * buf )
 {
     if( io->encryption_type == PEER_ENCRYPTION_RC4 )
     {
-        size_t i, n;
-        struct evbuffer_iovec * iovec = evbuffer_peek_all( buf, &n );
-
-        for( i=0; i<n; ++i )
-            tr_cryptoEncrypt( io->crypto, iovec[i].iov_len, iovec[i].iov_base, iovec[i].iov_base );
-
-        tr_free( iovec );
+        struct evbuffer_ptr pos;
+        struct evbuffer_iovec iovec;
+        evbuffer_ptr_set( buf, &pos, 0, EVBUFFER_PTR_SET );
+        do {
+            evbuffer_peek( buf, -1, &pos, &iovec, 1 );
+            tr_cryptoEncrypt( &io->crypto, iovec.iov_len, iovec.iov_base, iovec.iov_base );
+        } while( !evbuffer_ptr_set( buf, &pos, iovec.iov_len, EVBUFFER_PTR_ADD ) );
     }
 }
 
@@ -1061,6 +1101,34 @@ evbuffer_add_uint64( struct evbuffer * outbuf, uint64_t addme_hll )
 ***/
 
 void
+tr_peerIoReadBytesToBuf( tr_peerIo * io, struct evbuffer * inbuf, struct evbuffer * outbuf, size_t byteCount )
+{
+    struct evbuffer * tmp;
+    const size_t old_length = evbuffer_get_length( outbuf );
+
+    assert( tr_isPeerIo( io ) );
+    assert( evbuffer_get_length( inbuf ) >= byteCount );
+
+    /* append it to outbuf */
+    tmp = evbuffer_new( );
+    evbuffer_remove_buffer( inbuf, tmp, byteCount );
+    evbuffer_add_buffer( outbuf, tmp );
+    evbuffer_free( tmp );
+
+    /* decrypt if needed */
+    if( io->encryption_type == PEER_ENCRYPTION_RC4 ) {
+        struct evbuffer_ptr pos;
+        struct evbuffer_iovec iovec;
+        evbuffer_ptr_set( outbuf, &pos, old_length, EVBUFFER_PTR_SET );
+        do {
+            evbuffer_peek( outbuf, byteCount, &pos, &iovec, 1 );
+            tr_cryptoDecrypt( &io->crypto, iovec.iov_len, iovec.iov_base, iovec.iov_base );
+            byteCount -= iovec.iov_len;
+        } while( !evbuffer_ptr_set( outbuf, &pos, iovec.iov_len, EVBUFFER_PTR_ADD ) );
+    }
+}
+
+void
 tr_peerIoReadBytes( tr_peerIo * io, struct evbuffer * inbuf, void * bytes, size_t byteCount )
 {
     assert( tr_isPeerIo( io ) );
@@ -1074,7 +1142,7 @@ tr_peerIoReadBytes( tr_peerIo * io, struct evbuffer * inbuf, void * bytes, size_
 
         case PEER_ENCRYPTION_RC4:
             evbuffer_remove( inbuf, bytes, byteCount );
-            tr_cryptoDecrypt( io->crypto, byteCount, bytes, bytes );
+            tr_cryptoDecrypt( &io->crypto, byteCount, bytes, bytes );
             break;
 
         default:
@@ -1106,8 +1174,8 @@ tr_peerIoDrain( tr_peerIo       * io,
                 struct evbuffer * inbuf,
                 size_t            byteCount )
 {
-    void * buf = tr_sessionGetBuffer( io->session );
-    const size_t buflen = SESSION_BUFFER_SIZE;
+    char buf[4096];
+    const size_t buflen = sizeof( buf );
 
     while( byteCount > 0 )
     {
@@ -1115,8 +1183,6 @@ tr_peerIoDrain( tr_peerIo       * io,
         tr_peerIoReadBytes( io, inbuf, buf, thisPass );
         byteCount -= thisPass;
     }
-
-    tr_sessionReleaseBuffer( io->session );
 }
 
 /***
@@ -1157,8 +1223,8 @@ tr_peerIoTryRead( tr_peerIo * io, size_t howmuch )
                 short what = BEV_EVENT_READING | BEV_EVENT_ERROR;
                 if( res == 0 )
                     what |= BEV_EVENT_EOF;
-                tr_net_strerror( errstr, sizeof( errstr ), e );
-                dbgmsg( io, "tr_peerIoTryRead got an error. res is %d, what is %hd, errno is %d (%s)", res, what, e, errstr );
+                dbgmsg( io, "tr_peerIoTryRead got an error. res is %d, what is %hd, errno is %d (%s)",
+                        res, what, e, tr_net_strerror( errstr, sizeof( errstr ), e ) );
                 io->gotError( io, what, io->userData );
             }
         }
@@ -1201,8 +1267,8 @@ tr_peerIoTryWrite( tr_peerIo * io, size_t howmuch )
                 char errstr[512];
                 const short what = BEV_EVENT_WRITING | BEV_EVENT_ERROR;
 
-                tr_net_strerror( errstr, sizeof( errstr ), e );
-                dbgmsg( io, "tr_peerIoTryWrite got an error. res is %d, what is %hd, errno is %d (%s)", n, what, e, errstr );
+                dbgmsg( io, "tr_peerIoTryWrite got an error. res is %d, what is %hd, errno is %d (%s)",
+                        n, what, e, tr_net_strerror( errstr, sizeof( errstr ), e ) );
 
                 if( io->gotError != NULL )
                     io->gotError( io, what, io->userData );
@@ -1234,19 +1300,15 @@ int
 tr_peerIoFlushOutgoingProtocolMsgs( tr_peerIo * io )
 {
     size_t byteCount = 0;
-    tr_list * it;
+    const struct tr_datatype * it;
 
     /* count up how many bytes are used by non-piece-data messages
        at the front of our outbound queue */
     for( it=io->outbuf_datatypes; it!=NULL; it=it->next )
-    {
-        struct tr_datatype * d = it->data;
-
-        if( d->isPieceData )
+        if( it->isPieceData )
             break;
-
-        byteCount += d->length;
-    }
+        else
+            byteCount += it->length;
 
     return tr_peerIoFlush( io, TR_UP, byteCount );
 }

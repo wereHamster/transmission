@@ -297,12 +297,15 @@ tr_tier;
 static time_t
 get_next_scrape_time( int interval )
 {
+    time_t ret;
     const time_t now = tr_time( );
 
     /* Add the interval, and then increment to the nearest 10th second.
-     * The latter step is to increas the odds of several torrents coming
+     * The latter step is to increase the odds of several torrents coming
      * due at the same time to improve multiscrape. */
-    return (now+interval) + (10-((now+interval)%10));
+    ret = now + interval;
+    while( ret % 10 ) ++ret;
+    return ret;
 }
 
 static void
@@ -585,8 +588,9 @@ filter_trackers( tr_tracker_info * input, int input_count, int * setme_count )
      * (note: this can leave gaps in the `tier' values, but since the calling
      * function doesn't care, there's no point in removing the gaps...) */
     for( i=0, in=n; i<in; ++i )
-        for( j=0, jn=n; j<jn; ++j )
-            if( (i!=j) && (tmp[i].port==tmp[j].port)
+        for( j=i+1, jn=n; j<jn; ++j )
+            if( (tmp[i].info.tier!=tmp[j].info.tier)
+                       && (tmp[i].port==tmp[j].port)
                        && !tr_strcmp0(tmp[i].host,tmp[j].host)
                        && !tr_strcmp0(tmp[i].path,tmp[j].path) )
                 tmp[j].info.tier = tmp[i].info.tier;
@@ -688,7 +692,7 @@ bool
 tr_announcerCanManualAnnounce( const tr_torrent * tor )
 {
     int i;
-    struct tr_torrent_tiers * tt;
+    struct tr_torrent_tiers * tt = NULL;
 
     assert( tr_isTorrent( tor ) );
     assert( tor->tiers != NULL );
@@ -964,6 +968,7 @@ on_announce_error( tr_tier * tier, const char * err, tr_announce_event e )
     /* schedule a reannounce */
     interval = getRetryInterval( tier->currentTracker );
     dbgmsg( tier, "Retrying announce in %d seconds.", interval );
+    tr_torinf( tier->tor, "Retrying announce in %d seconds.", interval );
     tier_announce_event_push( tier, e, tr_time( ) + interval );
 }
 
@@ -1182,7 +1187,8 @@ on_scrape_error( tr_tier * tier, const char * errmsg )
 
     /* schedule a rescrape */
     interval = getRetryInterval( tier->currentTracker );
-    dbgmsg( tier, "Retrying scrape in %d seconds.", interval );
+    dbgmsg( tier, "Retrying scrape in %zu seconds.", (size_t)interval );
+    tr_torinf( tier->tor, "Retrying scrape in %zu seconds.", (size_t)interval );
     tier->lastScrapeSucceeded = false;
     tier->scrapeAt = get_next_scrape_time( interval );
 }
@@ -1446,6 +1452,7 @@ announceMore( tr_announcer * announcer )
     n = MIN( tr_ptrArraySize( &announceMe ), announcer->slotsAvailable );
     for( i=0; i<n; ++i ) {
         tr_tier * tier = tr_ptrArrayNth( &announceMe, i );
+        tr_tordbg( tier->tor, "%s", "Announcing to tracker" );
         dbgmsg( tier, "announcing tier %d of %d", i, n );
         tierAnnounce( announcer, tier );
     }
@@ -1618,6 +1625,7 @@ copy_tier_attributes_impl( struct tr_tier * tgt, int trackerIndex, const tr_tier
     /* ...fix the fields that can't be cleanly bitwise-copied */
     tgt->wasCopied = true;
     tgt->trackers = keep.trackers;
+    tgt->tracker_count = keep.tracker_count;
     tgt->announce_events = tr_memdup( src->announce_events, sizeof( tr_announce_event ) * src->announce_event_count );
     tgt->announce_event_count = src->announce_event_count;
     tgt->announce_event_alloc = src->announce_event_count;

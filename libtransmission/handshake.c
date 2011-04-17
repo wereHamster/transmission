@@ -55,7 +55,6 @@ enum
     PadC_MAXLEN                    = 512,
     PadD_MAXLEN                    = 512,
     VC_LENGTH                      = 8,
-    KEY_LEN                        = 96,
     CRYPTO_PROVIDE_PLAINTEXT       = 1,
     CRYPTO_PROVIDE_CRYPTO          = 2,
 
@@ -234,7 +233,6 @@ buildHandshakeMessage( tr_handshake * handshake, uint8_t * buf )
     memcpy( walk, peer_id, PEER_ID_LEN );
     walk += PEER_ID_LEN;
 
-    assert( strlen( ( const char* )peer_id ) == PEER_ID_LEN );
     assert( walk - buf == HANDSHAKE_SIZE );
 }
 
@@ -571,16 +569,13 @@ readPadD( tr_handshake *    handshake,
           struct evbuffer * inbuf )
 {
     const size_t needlen = handshake->pad_d_len;
-    uint8_t *    tmp;
 
     dbgmsg( handshake, "pad d: need %zu, got %zu",
             needlen, evbuffer_get_length( inbuf ) );
     if( evbuffer_get_length( inbuf ) < needlen )
         return READ_LATER;
 
-    tmp = tr_new( uint8_t, needlen );
-    tr_peerIoReadBytes( handshake->io, inbuf, tmp, needlen );
-    tr_free( tmp );
+    tr_peerIoDrain( handshake->io, inbuf, needlen );
 
     tr_peerIoSetEncryption( handshake->io, handshake->crypto_select );
 
@@ -599,7 +594,7 @@ readHandshake( tr_handshake *    handshake,
                struct evbuffer * inbuf )
 {
     uint8_t   pstrlen;
-    uint8_t * pstr;
+    uint8_t   pstr[20];
     uint8_t   reserved[HANDSHAKE_FLAGS_LEN];
     uint8_t   hash[SHA_DIGEST_LENGTH];
 
@@ -649,15 +644,11 @@ readHandshake( tr_handshake *    handshake,
     evbuffer_drain( inbuf, 1 );
 
     /* pstr (BitTorrent) */
-    pstr = tr_new( uint8_t, pstrlen + 1 );
+    assert( pstrlen == 19 );
     tr_peerIoReadBytes( handshake->io, inbuf, pstr, pstrlen );
     pstr[pstrlen] = '\0';
-    if( strcmp( (char*)pstr, "BitTorrent protocol" ) )
-    {
-        tr_free( pstr );
+    if( memcmp( pstr, "BitTorrent protocol", 19 ) )
         return tr_handshakeDone( handshake, false );
-    }
-    tr_free( pstr );
 
     /* reserved bytes */
     tr_peerIoReadBytes( handshake->io, inbuf, reserved, sizeof( reserved ) );

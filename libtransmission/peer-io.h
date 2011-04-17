@@ -25,14 +25,14 @@
 
 #include "transmission.h"
 #include "bandwidth.h"
+#include "crypto.h"
 #include "net.h" /* tr_address */
 #include "utils.h" /* tr_time() */
 
 struct evbuffer;
 struct tr_bandwidth;
-struct tr_crypto;
+struct tr_datatype;
 struct tr_peerIo;
-struct tr_list;
 
 /**
  * @addtogroup networked_io Networked IO
@@ -107,11 +107,11 @@ typedef struct tr_peerIo
     void *                userData;
 
     struct tr_bandwidth   bandwidth;
-    struct tr_crypto    * crypto;
+    tr_crypto             crypto;
 
     struct evbuffer     * inbuf;
     struct evbuffer     * outbuf;
-    struct tr_list      * outbuf_datatypes; /* struct tr_datatype */
+    struct tr_datatype  * outbuf_datatypes;
 
     struct event        * event_read;
     struct event        * event_write;
@@ -282,9 +282,9 @@ void    tr_peerIoWriteBuf       ( tr_peerIo         * io,
 ***
 **/
 
-static inline struct tr_crypto * tr_peerIoGetCrypto( tr_peerIo * io )
+static inline tr_crypto * tr_peerIoGetCrypto( tr_peerIo * io )
 {
-    return io->crypto;
+    return &io->crypto;
 }
 
 void tr_peerIoSetEncryption( tr_peerIo * io, tr_encryption_type encryption_type );
@@ -315,6 +315,11 @@ evbuffer_add_hton_64( struct evbuffer * buf, uint64_t val )
 {
    evbuffer_add_uint64( buf, val );
 }
+
+void tr_peerIoReadBytesToBuf( tr_peerIo       * io,
+                              struct evbuffer * inbuf,
+                              struct evbuffer * outbuf,
+                              size_t            byteCount );
 
 void tr_peerIoReadBytes( tr_peerIo        * io,
                          struct evbuffer  * inbuf,
