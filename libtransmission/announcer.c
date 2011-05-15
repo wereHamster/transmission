@@ -628,7 +628,7 @@ addTorrentToTier( tr_torrent_tiers * tt, tr_torrent * tor )
     tr_tracker_info * infos = filter_trackers( tor->info.trackers,
                                                tor->info.trackerCount, &n );
 
-    /* build the array of trackers */ 
+    /* build the array of trackers */
     tt->trackers = tr_new0( tr_tracker, n );
     tt->tracker_count = n;
     for( i=0; i<n; ++i )
@@ -729,7 +729,6 @@ dbgmsg_tier_announce_queue( const tr_tier * tier )
     if( tr_deepLoggingIsActive( ) )
     {
         int i;
-        char * str;
         char name[128];
         struct evbuffer * buf = evbuffer_new( );
 
@@ -740,9 +739,9 @@ dbgmsg_tier_announce_queue( const tr_tier * tier )
             const char * str = tr_announce_event_get_string( e );
             evbuffer_add_printf( buf, "[%d:%s]", i, str );
         }
-        str = evbuffer_free_to_str( buf );
-        tr_deepLog( __FILE__, __LINE__, name, "announce queue is %s", str );
-        tr_free( str );
+
+        tr_deepLog( __FILE__, __LINE__, name, "announce queue is %s", evbuffer_pullup( buf, -1 ) );
+        evbuffer_free( buf );
     }
 }
 
@@ -1209,7 +1208,7 @@ find_tier( tr_torrent * tor, const char * scrape )
 }
 
 static void
-on_scrape_done( const tr_scrape_response  * response, void * vsession )
+on_scrape_done( const tr_scrape_response * response, void * vsession )
 {
     int i;
     const time_t now = tr_time( );
@@ -1296,7 +1295,7 @@ on_scrape_done( const tr_scrape_response  * response, void * vsession )
 
 static void
 scrape_request_delegate( tr_announcer             * announcer,
-                         tr_scrape_request        * request,
+                         const tr_scrape_request  * request,
                          tr_scrape_response_func  * callback,
                          void                     * callback_data )
 {

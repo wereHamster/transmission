@@ -160,10 +160,10 @@ tr_strltime( char * buf, int seconds, size_t buflen )
     minutes = ( seconds % 3600 ) / 60;
     seconds = ( seconds % 3600 ) % 60;
 
-    g_snprintf( d, sizeof( d ), gtr_ngettext( "%'d day", "%'d days", days ), days );
-    g_snprintf( h, sizeof( h ), gtr_ngettext( "%'d hour", "%'d hours", hours ), hours );
-    g_snprintf( m, sizeof( m ), gtr_ngettext( "%'d minute", "%'d minutes", minutes ), minutes );
-    g_snprintf( s, sizeof( s ), gtr_ngettext( "%'d second", "%'d seconds", seconds ), seconds );
+    g_snprintf( d, sizeof( d ), ngettext( "%'d day", "%'d days", days ), days );
+    g_snprintf( h, sizeof( h ), ngettext( "%'d hour", "%'d hours", hours ), hours );
+    g_snprintf( m, sizeof( m ), ngettext( "%'d minute", "%'d minutes", minutes ), minutes );
+    g_snprintf( s, sizeof( s ), ngettext( "%'d second", "%'d seconds", seconds ), seconds );
 
     if( days )
     {
@@ -208,22 +208,28 @@ gtr_mkdir_with_parents( const char * path, int mode )
 void
 gtr_get_host_from_url( char * buf, size_t buflen, const char * url )
 {
-    char * h = NULL;
+    char host[1024];
+    const char * pch;
 
-    tr_urlParse( url, -1, NULL, &h, NULL, NULL );
+    if(( pch = strstr( url, "://" ))) {
+        const size_t hostlen = strcspn( pch+3, ":/" );
+        const size_t copylen = MIN( hostlen, sizeof(host)-1 );
+        memcpy( host, pch+3, copylen );
+        host[copylen] = '\0';
+    } else {
+        *host = '\0';
+    }
 
-    if( tr_addressIsIP( h ) )
+    if( tr_addressIsIP( host ) )
         g_strlcpy( buf, url, buflen );
     else {
-        const char * first_dot = strchr( h, '.' );
-        const char * last_dot = strrchr( h, '.' );
+        const char * first_dot = strchr( host, '.' );
+        const char * last_dot = strrchr( host, '.' );
         if( ( first_dot ) && ( last_dot ) && ( first_dot != last_dot ) )
             g_strlcpy( buf, first_dot + 1, buflen );
         else
-            g_strlcpy( buf, h, buflen );
+            g_strlcpy( buf, host, buflen );
     }
-
-    tr_free( h );
 }
 
 gboolean
@@ -365,18 +371,6 @@ gtr_object_ref_sink( gpointer object )
     gtk_object_sink( GTK_OBJECT( object ) );
 #endif
     return object;
-}
-
-const gchar *
-gtr_ngettext( const gchar * msgid,
-              const gchar * msgid_plural,
-              gulong n )
-{
-#if GLIB_CHECK_VERSION( 2, 18, 0 )
-    return g_dngettext( NULL, msgid, msgid_plural, n );
-#else
-    return ngettext( msgid, msgid_plural, n );
-#endif
 }
 
 int

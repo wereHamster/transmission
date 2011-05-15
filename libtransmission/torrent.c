@@ -868,18 +868,10 @@ torrentInit( tr_torrent * tor, const tr_ctor * ctor )
         tr_torrentSetIdleLimit( tor, tr_sessionGetIdleLimit( tor->session ) );
     }
 
-    {
-        tr_torrent * it = NULL;
-        tr_torrent * last = NULL;
-        while( ( it = tr_torrentNext( session, it ) ) )
-            last = it;
-
-        if( !last )
-            session->torrentList = tor;
-        else
-            last->next = tor;
-        ++session->torrentCount;
-    }
+    /* add the torrent to tr_session.torrentList */
+    tor->next = session->torrentList;
+    session->torrentList = tor;
+    ++session->torrentCount;
 
     /* if we don't have a local .torrent file already, assume the torrent is new */
     isNewTorrent = stat( tor->info.torrent, &st );
@@ -2372,7 +2364,8 @@ time_t
 tr_torrentGetFileMTime( const tr_torrent * tor, tr_file_index_t i )
 {
     time_t mtime = 0;
-    tr_torrentFindFile2( tor, i, NULL, NULL, &mtime );
+    if( !tr_fdFileGetCachedMTime( tor->session, tor->uniqueId, i, &mtime ) )
+        tr_torrentFindFile2( tor, i, NULL, NULL, &mtime );
     return mtime;
 }
 
@@ -2952,6 +2945,13 @@ tr_torrentFileCompleted( tr_torrent * tor, tr_file_index_t fileNum )
 ****
 ***/
 
+#ifdef SYS_DARWIN
+ #define TR_STAT_MTIME(sb) ((sb).st_mtimespec.tv_sec)
+#else
+ #define TR_STAT_MTIME(sb) ((sb).st_mtime)
+#endif
+
+
 static bool
 fileExists( const char * filename, time_t * mtime )
 {
@@ -2959,13 +2959,7 @@ fileExists( const char * filename, time_t * mtime )
     const bool ok = !stat( filename, &sb );
 
     if( ok && ( mtime != NULL ) )
-    {
-#ifdef SYS_DARWIN
-        *mtime = sb.st_mtimespec.tv_sec;
-#else
-        *mtime = sb.st_mtime;
-#endif
-    }
+        *mtime = TR_STAT_MTIME( sb );
 
     return ok;
 }

@@ -94,16 +94,16 @@ struct tr_rpc_idle_data
 static void
 tr_idle_function_done( struct tr_rpc_idle_data * data, const char * result )
 {
-    struct evbuffer * buf = evbuffer_new( );
+    struct evbuffer * buf;
 
     if( result == NULL )
         result = "success";
     tr_bencDictAddStr( data->response, "result", result );
 
-    tr_bencToBuf( data->response, TR_FMT_JSON_LEAN, buf );
+    buf = tr_bencToBuf( data->response, TR_FMT_JSON_LEAN );
     (*data->callback)( data->session, buf, data->callback_user_data );
-
     evbuffer_free( buf );
+
     tr_bencFree( data->response );
     tr_free( data->response );
     tr_free( data );
@@ -463,10 +463,12 @@ addPeers( const tr_torrent * tor,
 #define tr_streq(a,alen,b) ((alen+1==sizeof(b)) && !memcmp(a,b,alen))
 
 static void
-addField( const tr_torrent * tor, tr_benc * d, const char * key )
+addField( const tr_torrent * const tor,
+          const tr_info    * const inf,
+          const tr_stat    * const st,
+          tr_benc          * const d,
+          const char       * const key )
 {
-    const tr_info * inf = tr_torrentInfo( tor );
-    const tr_stat * st = tr_torrentStat( (tr_torrent*)tor );
     const size_t keylen = strlen( key );
 
     if( tr_streq( key, keylen, "activityDate" ) )
@@ -634,19 +636,23 @@ addField( const tr_torrent * tor, tr_benc * d, const char * key )
 }
 
 static void
-addInfo( const tr_torrent * tor,
-         tr_benc *          d,
-         tr_benc *          fields )
+addInfo( const tr_torrent * tor, tr_benc * d, tr_benc * fields )
 {
-    int          i;
-    const int    n = tr_bencListSize( fields );
     const char * str;
+    const int n = tr_bencListSize( fields );
 
     tr_bencInitDict( d, n );
 
-    for( i = 0; i < n; ++i )
-        if( tr_bencGetStr( tr_bencListChild( fields, i ), &str ) )
-            addField( tor, d, str );
+    if( n > 0 )
+    {
+        int i;
+        const tr_info const * inf = tr_torrentInfo( tor );
+        const tr_stat const * st = tr_torrentStat( (tr_torrent*)tor );
+
+        for( i=0; i<n; ++i )
+            if( tr_bencGetStr( tr_bencListChild( fields, i ), &str ) )
+                addField( tor, inf, st, d, str );
+    }
 }
 
 static const char*
@@ -1715,17 +1721,18 @@ request_exec( tr_session             * session,
     {
         int64_t tag;
         tr_benc response;
-        struct evbuffer * buf = evbuffer_new( );
+        struct evbuffer * buf;
 
         tr_bencInitDict( &response, 3 );
         tr_bencDictAddDict( &response, "arguments", 0 );
         tr_bencDictAddStr( &response, "result", result );
         if( tr_bencDictFindInt( request, "tag", &tag ) )
             tr_bencDictAddInt( &response, "tag", tag );
-        tr_bencToBuf( &response, TR_FMT_JSON_LEAN, buf );
-        (*callback)( session, buf, callback_user_data );
 
+        buf = tr_bencToBuf( &response, TR_FMT_JSON_LEAN );
+        (*callback)( session, buf, callback_user_data );
         evbuffer_free( buf );
+
         tr_bencFree( &response );
     }
     else if( methods[i].immediate )
@@ -1733,7 +1740,7 @@ request_exec( tr_session             * session,
         int64_t tag;
         tr_benc response;
         tr_benc * args_out;
-        struct evbuffer * buf = evbuffer_new( );
+        struct evbuffer * buf;
 
         tr_bencInitDict( &response, 3 );
         args_out = tr_bencDictAddDict( &response, "arguments", 0 );
@@ -1743,10 +1750,11 @@ request_exec( tr_session             * session,
         tr_bencDictAddStr( &response, "result", result );
         if( tr_bencDictFindInt( request, "tag", &tag ) )
             tr_bencDictAddInt( &response, "tag", tag );
-        tr_bencToBuf( &response, TR_FMT_JSON_LEAN, buf );
-        (*callback)( session, buf, callback_user_data );
 
+        buf = tr_bencToBuf( &response, TR_FMT_JSON_LEAN );
+        (*callback)( session, buf, callback_user_data );
         evbuffer_free( buf );
+
         tr_bencFree( &response );
     }
     else

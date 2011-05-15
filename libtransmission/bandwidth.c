@@ -167,7 +167,7 @@ allocateBandwidth( tr_bandwidth  * b,
                    unsigned int    period_msec,
                    tr_ptrArray   * peer_pool )
 {
-    tr_priority_t priority;
+    const tr_priority_t priority = MAX( parent_priority, b->priority );
 
     assert( tr_isBandwidth( b ) );
     assert( tr_isDirection( dir ) );
@@ -185,8 +185,6 @@ allocateBandwidth( tr_bandwidth  * b,
                          b->band[dir].bytesLeft );
 #endif
     }
-
-    priority = MAX( parent_priority, b->priority );
 
     /* add this bandwidth's peer, if any, to the peer pool */
     if( b->peer != NULL ) {
@@ -225,7 +223,11 @@ phaseOne( tr_ptrArray * peerArray, tr_direction dir )
     i = n ? tr_cryptoWeakRandInt( n ) : 0; /* pick a random starting point */
     while( n > 0 )
     {
-        const size_t increment = 1024;
+        /* value of 3000 bytes chosen so that when using uTP we'll send a full-size
+         * frame right away and leave enough buffered data for the next frame to go
+         * out in a timely manner. */
+        const size_t increment = 3000;
+
         const int bytesUsed = tr_peerIoFlush( peers[i], dir, increment );
 
         dbgmsg( "peer #%d of %d used %d bytes in this pass", i, n, bytesUsed );
@@ -318,7 +320,7 @@ tr_bandwidthSetPeer( tr_bandwidth * b, tr_peerIo * peer )
 
 static unsigned int
 bandwidthClamp( const tr_bandwidth  * b,
-                const uint64_t        now,
+                uint64_t              now,
                 tr_direction          dir,
                 unsigned int          byteCount )
 {
@@ -335,9 +337,16 @@ bandwidthClamp( const tr_bandwidth  * b,
              * clamp down harder on the bytes available */
             if( byteCount > 0 )
             {
-                double current = tr_bandwidthGetRawSpeed_Bps( b, now, TR_DOWN );
-                double desired = tr_bandwidthGetDesiredSpeed_Bps( b, TR_DOWN );
-                double r = desired >= 1 ? current / desired : 0;
+                double current;
+                double desired;
+                double r;
+
+                if( now == 0 )
+                    now = tr_time_msec( );
+
+                current = tr_bandwidthGetRawSpeed_Bps( b, now, TR_DOWN );
+                desired = tr_bandwidthGetDesiredSpeed_Bps( b, TR_DOWN );
+                r = desired >= 1 ? current / desired : 0;
 
                      if( r > 1.0 ) byteCount = 0;
                 else if( r > 0.9 ) byteCount *= 0.8;
@@ -356,8 +365,7 @@ tr_bandwidthClamp( const tr_bandwidth  * b,
                    tr_direction          dir,
                    unsigned int          byteCount )
 {
-    const uint64_t now_msec = tr_time_msec( );
-    return bandwidthClamp( b, now_msec, dir, byteCount );
+    return bandwidthClamp( b, 0, dir, byteCount );
 }
 
 
