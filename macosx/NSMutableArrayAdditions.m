@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2008-2011 Transmission authors and contributors
+ * Copyright (c) 2011 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -22,36 +22,31 @@
  * DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 
-#import <Cocoa/Cocoa.h>
+#import "NSMutableArrayAdditions.h"
 
-@interface FileListNode : NSObject <NSCopying>
+@implementation NSMutableArray (NSMutableArrayAdditions)
+
+- (void) moveObjectAtIndex: (NSUInteger) fromIndex toIndex: (NSUInteger) toIndex
 {
-    NSString * fName, * fPath;
-    BOOL fIsFolder;
-    NSMutableIndexSet * fIndexes;
+    if (fromIndex == toIndex)
+        return;
     
-    uint64_t fSize;
-    NSImage * fIcon;
+    id object = [[self objectAtIndex: fromIndex] retain];
     
-    NSMutableArray * fChildren;
+    //shift objects - more efficient than simply removing the object and re-inserting the object
+    if (fromIndex < toIndex)
+    {
+        for (NSUInteger i = fromIndex; i < toIndex; ++i)
+            [self replaceObjectAtIndex: i withObject: [self objectAtIndex: i+1]];
+    }
+    else
+    {
+        for (NSUInteger i = fromIndex; i >= toIndex; --i)
+            [self replaceObjectAtIndex: i withObject: [self objectAtIndex: i-1]];
+    }
+    [self replaceObjectAtIndex: toIndex withObject: object];
+    
+    [object release];
 }
-
-- (id) initWithFolderName: (NSString *) name path: (NSString *) path;
-- (id) initWithFileName: (NSString *) name path: (NSString *) path size: (uint64_t) size index: (NSUInteger) index;
-
-- (void) insertChild: (FileListNode *) child;
-- (void) insertIndex: (NSUInteger) index withSize: (uint64_t) size;
-
-- (NSString *) description;
-
-- (BOOL) isFolder;
-- (NSString *) name;
-- (NSString *) path;
-- (NSIndexSet *) indexes;
-
-- (uint64_t) size;
-- (NSImage *) icon;
-
-- (NSMutableArray *) children;
 
 @end

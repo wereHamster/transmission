@@ -1881,7 +1881,7 @@ tr_sessionLoadTorrents( tr_session * session,
                 tr_ctorSetMetainfoFromFile( ctor, path );
                 if(( tor = tr_torrentNew( ctor, NULL )))
                 {
-                    tr_list_append( &list, tor );
+                    tr_list_prepend( &list, tor );
                     ++n;
                 }
                 tr_free( path );
@@ -2568,15 +2568,4 @@ tr_sessionSetTorrentDoneScript( tr_session * session, const char * scriptFilenam
         tr_free( session->torrentDoneScript );
         session->torrentDoneScript = tr_strdup( scriptFilename );
     }
-}
-
-/***
-****
-***/
-
-void
-tr_sessionSetWebConfigFunc( tr_session * session, void (*func)(tr_session*, void*, const char*, void* ), void * user_data )
-{
-    session->curl_easy_config_func = func;
-    session->curl_easy_config_user_data = user_data;
 }
