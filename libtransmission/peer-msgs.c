@@ -1663,9 +1663,8 @@ updateDesiredRequestCount( tr_peermsgs * msgs )
 {
     const tr_torrent * const torrent = msgs->torrent;
 
-   
     /* there are lots of reasons we might not want to request any blocks... */
-    if( tr_torrentIsSeed( torrent ) || !tr_torrentHasMetadata( torrent ) 
+    if( tr_torrentIsSeed( torrent ) || !tr_torrentHasMetadata( torrent )
                                     || msgs->peer->clientIsChoked
                                     || !msgs->peer->clientIsInterested )
     {
@@ -1749,7 +1748,7 @@ updateBlockRequests( tr_peermsgs * msgs )
         const int numwant = msgs->desiredRequestCount - msgs->peer->pendingReqsToPeer;
         tr_block_index_t * blocks = alloca( sizeof( tr_block_index_t ) * numwant );
 
-        tr_peerMgrGetNextRequests( msgs->torrent, msgs->peer, numwant, blocks, &n );
+        tr_peerMgrGetNextRequests( msgs->torrent, msgs->peer, numwant, blocks, &n, false );
 
         for( i=0; i<n; ++i )
         {

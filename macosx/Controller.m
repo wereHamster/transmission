@@ -88,6 +88,7 @@ typedef enum
 #define SORT_TRACKER    @"Tracker"
 #define SORT_ORDER      @"Order"
 #define SORT_ACTIVITY   @"Activity"
+#define SORT_SIZE       @"Size"
 
 typedef enum
 {
@@ -97,7 +98,8 @@ typedef enum
     SORT_PROGRESS_TAG = 3,
     SORT_STATE_TAG = 4,
     SORT_TRACKER_TAG = 5,
-    SORT_ACTIVITY_TAG = 6
+    SORT_ACTIVITY_TAG = 6,
+    SORT_SIZE_TAG = 7
 } sortTag;
 
 typedef enum
@@ -386,14 +388,11 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     [fWindow setExcludedFromWindowsMenu: YES];
     
     //set table size
-    if ([fDefaults boolForKey: @"SmallView"])
+    const BOOL small = [fDefaults boolForKey: @"SmallView"];
+    if (small)
         [fTableView setRowHeight: ROW_HEIGHT_SMALL];
+    [fTableView setUsesAlternatingRowBackgroundColors: !small];
     
-    //window min height
-    NSSize contentMinSize = [fWindow contentMinSize];
-    contentMinSize.height = [[fWindow contentView] frame].size.height - [[fTableView enclosingScrollView] frame].size.height
-                                + [fTableView rowHeight] + [fTableView intercellSpacing].height;
-    [fWindow setContentMinSize: contentMinSize];
     [fWindow setContentBorderThickness: NSMinY([[fTableView enclosingScrollView] frame]) forEdge: NSMinYEdge];
     [fWindow setMovableByWindowBackground: YES];
     
@@ -414,7 +413,14 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     
     [fTableView registerForDraggedTypes: [NSArray arrayWithObject: TORRENT_TABLE_VIEW_DATA_TYPE]];
     [fWindow registerForDraggedTypes: [NSArray arrayWithObjects: NSFilenamesPboardType, NSURLPboardType, nil]];
+    
+    //you would think this would be called later in this method from updateUI, but it's not reached in awakeFromNib
+    //this must be called after showStatusBar:
+    [fStatusBar updateWithDownload: 0.0 upload: 0.0];
 
+    //this should also be after the rest of the setup
+    [self updateForAutoSize];
+    
     //register for sleep notifications
     IONotificationPortRef notify;
     io_object_t iterator;
@@ -470,7 +476,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     [nc addObserver: self selector: @selector(changeAutoImport)
                     name: @"AutoImportSettingChange" object: nil];
     
-    [nc addObserver: self selector: @selector(setWindowSizeToFit)
+    [nc addObserver: self selector: @selector(updateForAutoSize)
                     name: @"AutoSizeSettingChange" object: nil];
     
     [nc addObserver: self selector: @selector(updateForExpandCollape)
@@ -1339,6 +1345,9 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         //let's expand all groups that have removed items - they either don't exist anymore, are already expanded, or are collapsed (rpc)
         [fTableView removeCollapsedGroup: [torrent groupValue]];
         
+        //we can't assume the window is active - RPC removal, for example
+        [fBadger removeTorrent: torrent];
+        
         [torrent closeRemoveTorrent: deleteData];
     }
     
@@ -1792,7 +1801,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
                                     iconData: nil priority: 0 isSticky: NO clickContext: clickContext];
         
         if (![fWindow isMainWindow])
-            [fBadger incrementCompleted];
+            [fBadger addCompletedTorrent: torrent];
         
         //bounce download stack
         [[NSDistributedNotificationCenter defaultCenter] postNotificationName: @"com.apple.DownloadFileFinished"
@@ -1891,6 +1900,9 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         case SORT_ACTIVITY_TAG:
             sortType = SORT_ACTIVITY;
             break;
+        case SORT_SIZE_TAG:
+            sortType = SORT_SIZE;
+            break;
         default:
             NSAssert1(NO, @"Unknown sort tag received: %d", [sender tag]);
             return;
@@ -1982,6 +1994,12 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
             NSSortDescriptor * dateDescriptor = [[[NSSortDescriptor alloc] initWithKey: @"dateAdded" ascending: asc] autorelease];
             
             descriptors = [[NSArray alloc] initWithObjects: dateDescriptor, nameDescriptor, nil];
+        }
+        else if ([sortType isEqualToString: SORT_SIZE])
+        {
+            NSSortDescriptor * sizeDescriptor = [[[NSSortDescriptor alloc] initWithKey: @"size" ascending: asc] autorelease];
+            
+            descriptors = [[NSArray alloc] initWithObjects: sizeDescriptor, nameDescriptor, nil];
         }
         else
             descriptors = [[NSArray alloc] initWithObjects: nameDescriptor, nil];
@@ -2473,8 +2491,11 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
 
 - (id) outlineView: (NSOutlineView *) outlineView objectValueForTableColumn: (NSTableColumn *) tableColumn byItem: (id) item
 {
-    if ([item isKindOfClass: [Torrent class]])
+    if ([item isKindOfClass: [Torrent class]]) {
+        if (tableColumn)
+            return nil;
         return [item hashString];
+    }
     else
     {
         NSString * ident = [tableColumn identifier];
@@ -2759,20 +2780,22 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     BOOL makeSmall = ![fDefaults boolForKey: @"SmallView"];
     [fDefaults setBool: makeSmall forKey: @"SmallView"];
     
+    [fTableView setUsesAlternatingRowBackgroundColors: !makeSmall];
+    
     [fTableView setRowHeight: makeSmall ? ROW_HEIGHT_SMALL : ROW_HEIGHT_REGULAR];
     
     [fTableView noteHeightOfRowsWithIndexesChanged: [NSIndexSet indexSetWithIndexesInRange: NSMakeRange(0, [fTableView numberOfRows])]];
     
-    //window min height
-    NSSize contentMinSize = [fWindow contentMinSize],
-            contentSize = [[fWindow contentView] frame].size;
-    contentMinSize.height = contentSize.height - [[fTableView enclosingScrollView] frame].size.height
-                            + [fTableView rowHeight] + [fTableView intercellSpacing].height;
-    [fWindow setContentMinSize: contentMinSize];
-    
     //resize for larger min height if not set to auto size
     if (![fDefaults boolForKey: @"AutoSize"])
     {
+        const NSSize contentSize = [[fWindow contentView] frame].size;
+        
+        NSSize contentMinSize = [fWindow contentMinSize];
+        contentMinSize.height = [self minWindowContentSizeAllowed];
+        [fWindow setContentMinSize: contentMinSize];
+        
+        //make sure the window already isn't too small
         if (!makeSmall && contentSize.height < contentMinSize.height)
         {
             NSRect frame = [fWindow frame];
@@ -2820,10 +2843,12 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     
     if (check)
     {
-        NSSize minSize = [scrollView convertSize: [fWindow minSize] fromView: nil];
+        //we can't call minSize, since it might be set to the current size (auto size)
+        const CGFloat minHeight = [self minWindowContentSizeAllowed]
+                                    + (NSHeight([fWindow frame]) - NSHeight([[fWindow contentView] frame])); //contentView to window
         
-        if (windowSize.height < minSize.height)
-            windowSize.height = minSize.height;
+        if (windowSize.height < minHeight)
+            windowSize.height =minHeight;
         else
         {
             NSSize maxSize = [scrollView convertSize: [[fWindow screen] visibleFrame].size fromView: nil];
@@ -2891,7 +2916,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
             [fWindow setFrame: frame display: NO animate: NO];
         }
     }
-
+    
     [self updateUI];
     
     NSScrollView * scrollView = [fTableView enclosingScrollView];
@@ -2917,16 +2942,21 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         [[fFilterBar view] setAutoresizingMask: filterMask];
     [scrollView setAutoresizingMask: scrollMask];
     
-    //change min size
-    NSSize minSize = [fWindow contentMinSize];
-    minSize.height += heightChange;
-    [fWindow setContentMinSize: minSize];
-    
     if (!show)
     {
-        [[fStatusBar view] removeFromSuperview];
+        [[fStatusBar view] removeFromSuperviewWithoutNeedingDisplay];
         [fStatusBar release];
         fStatusBar = nil;
+    }
+    
+    if ([fDefaults boolForKey: @"AutoSize"])
+        [self setWindowMinMaxToCurrent];
+    else
+    {
+        //change min size
+        NSSize minSize = [fWindow contentMinSize];
+        minSize.height += heightChange;
+        [fWindow setContentMinSize: minSize];
     }
 }
 
@@ -2974,6 +3004,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
         const CGFloat originY = fStatusBar ? NSMinY([[fStatusBar view] frame]) : NSMaxY([contentView frame]);
         [[fFilterBar view] setFrameOrigin: NSMakePoint(0.0, originY)];
     }
+    else
+        [fWindow makeFirstResponder: fTableView];
     
     CGFloat heightChange = NSHeight([[fFilterBar view] frame]);
     if (!show)
@@ -3008,17 +3040,21 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     [[fFilterBar view] setAutoresizingMask: filterMask];
     [scrollView setAutoresizingMask: scrollMask];
     
-    //change min size
-    NSSize minSize = [fWindow contentMinSize];
-    minSize.height += heightChange;
-    [fWindow setContentMinSize: minSize];
-    
     if (!show)
     {
-        [[fFilterBar view] removeFromSuperview];
+        [[fFilterBar view] removeFromSuperviewWithoutNeedingDisplay];
         [fFilterBar release];
         fFilterBar = nil;
-        [fWindow makeFirstResponder: fTableView];
+    }
+    
+    if ([fDefaults boolForKey: @"AutoSize"])
+        [self setWindowMinMaxToCurrent];
+    else
+    {
+        //change min size
+        NSSize minSize = [fWindow contentMinSize];
+        minSize.height += heightChange;
+        [fWindow setContentMinSize: minSize];
     }
 }
 
@@ -3116,7 +3152,7 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
 {
     ButtonToolbarItem * item = [[ButtonToolbarItem alloc] initWithItemIdentifier: ident];
     
-    NSButton * button = [[NSButton alloc] initWithFrame: NSZeroRect];
+    NSButton * button = [[NSButton alloc] init];
     [button setBezelStyle: NSTexturedRoundedBezelStyle];
     [button setStringValue: @""];
     
@@ -3481,6 +3517,9 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
                 break;
             case SORT_ACTIVITY_TAG:
                 sortType = SORT_ACTIVITY;
+                break;
+            case SORT_SIZE_TAG:
+                sortType = SORT_SIZE;
                 break;
             default:
                 NSAssert1(NO, @"Unknown sort tag received: %d", [menuItem tag]);
@@ -3935,6 +3974,8 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
             [scrollView setAutohidesScrollers: NO];
             [scrollView setAutohidesScrollers: YES];
         }
+        
+        [self setWindowMinMaxToCurrent];
     }
 }
 
@@ -3945,9 +3986,46 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
     
     CGFloat heightChange = (GROUP_SEPARATOR_HEIGHT + [fTableView intercellSpacing].height) * groups
                         + ([fTableView rowHeight] + [fTableView intercellSpacing].height) * ([fTableView numberOfRows] - groups)
-                        - [[fTableView enclosingScrollView] frame].size.height;
+                        - NSHeight([[fTableView enclosingScrollView] frame]);
     
     return [self windowFrameByAddingHeight: heightChange checkLimits: YES];
+}
+
+- (void) updateForAutoSize
+{
+    if ([fDefaults boolForKey: @"AutoSize"])
+        [self setWindowSizeToFit];
+    else
+    {
+        NSSize contentMinSize = [fWindow contentMinSize];
+        contentMinSize.height = [self minWindowContentSizeAllowed];
+        
+        [fWindow setContentMinSize: contentMinSize];
+        
+        NSSize contentMaxSize = [fWindow contentMaxSize];
+        contentMaxSize.height = FLT_MAX;
+        [fWindow setContentMaxSize: contentMaxSize];
+    }
+}
+
+- (void) setWindowMinMaxToCurrent
+{
+    const CGFloat height = NSHeight([[fWindow contentView] frame]);
+    
+    NSSize minSize = [fWindow contentMinSize],
+            maxSize = [fWindow contentMaxSize];
+    minSize.height = height;
+    maxSize.height = height;
+    
+    [fWindow setContentMinSize: minSize];
+    [fWindow setContentMaxSize: maxSize];
+}
+
+- (CGFloat) minWindowContentSizeAllowed
+{
+    CGFloat contentMinHeight = NSHeight([[fWindow contentView] frame]) - NSHeight([[fTableView enclosingScrollView] frame])
+                                + [fTableView rowHeight] + [fTableView intercellSpacing].height;
+    return contentMinHeight;
 }
 
 - (void) updateForExpandCollape
@@ -3965,14 +4043,6 @@ static void sleepCallback(void * controller, io_service_t y, natural_t messageTy
 {
     [fBadger clearCompleted];
     [self updateUI];
-}
-
-- (NSSize) windowWillResize: (NSWindow *) sender toSize: (NSSize) proposedFrameSize
-{
-    //only resize horizontally if autosize is enabled
-    if ([fDefaults boolForKey: @"AutoSize"])
-        proposedFrameSize.height = [fWindow frame].size.height;
-    return proposedFrameSize;
 }
 
 - (void) applicationWillUnhide: (NSNotification *) notification

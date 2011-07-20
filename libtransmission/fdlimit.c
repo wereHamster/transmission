@@ -10,10 +10,6 @@
  * $Id$
  */
 
-#ifndef WIN32
- #define HAVE_GETRLIMIT
-#endif
-
 #ifdef HAVE_POSIX_FADVISE
  #ifdef _XOPEN_SOURCE
   #undef _XOPEN_SOURCE
@@ -40,10 +36,8 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
-#ifdef HAVE_GETRLIMIT
- #include <sys/time.h> /* getrlimit */
- #include <sys/resource.h> /* getrlimit */
-#endif
+#include <sys/time.h> /* getrlimit */
+#include <sys/resource.h> /* getrlimit */
 #include <fcntl.h> /* O_LARGEFILE posix_fadvise */
 #include <unistd.h> /* lseek(), write(), ftruncate(), pread(), pwrite(), etc */
 
@@ -509,28 +503,74 @@ fileset_get_empty_slot( struct tr_fileset * set )
     return cull;
 }
 
-static int
-fileset_get_size( const struct tr_fileset * set )
+/***
+****
+****  Startup / Shutdown
+****
+***/
+
+struct tr_fdInfo
 {
-    return set ? set->end - set->begin : 0;
+    int peerCount;
+    struct tr_fileset fileset;
+};
+
+static void
+ensureSessionFdInfoExists( tr_session * session )
+{
+    assert( tr_isSession( session ) );
+
+    if( session->fdInfo == NULL )
+    {
+        struct rlimit limit;
+        struct tr_fdInfo * i;
+        const int FILE_CACHE_SIZE = 32;
+
+        /* Create the local file cache */
+        i = tr_new0( struct tr_fdInfo, 1 );
+        fileset_construct( &i->fileset, FILE_CACHE_SIZE );
+        session->fdInfo = i;
+
+        /* set the open-file limit to the largest safe size wrt FD_SETSIZE */
+        if( !getrlimit( RLIMIT_NOFILE, &limit ) )
+        {
+            const int old_limit = (int) limit.rlim_cur;
+            const int new_limit = MIN( limit.rlim_max, FD_SETSIZE );
+            if( new_limit != old_limit )
+            {
+                limit.rlim_cur = new_limit;
+                setrlimit( RLIMIT_NOFILE, &limit );
+                getrlimit( RLIMIT_NOFILE, &limit );
+                tr_inf( "Changed open file limit from %d to %d", old_limit, (int)limit.rlim_cur );
+            }
+        }
+    }
+}
+
+void
+tr_fdClose( tr_session * session )
+{
+    if( session && session->fdInfo )
+    {
+        struct tr_fdInfo * i = session->fdInfo;
+        fileset_destruct( &i->fileset );
+        tr_free( i );
+        session->fdInfo = NULL;
+    }
 }
 
 /***
 ****
 ***/
 
-struct tr_fdInfo
-{
-    int socket_count;
-    int socket_limit;
-    int public_socket_limit;
-    struct tr_fileset fileset;
-};
-
 static struct tr_fileset*
 get_fileset( tr_session * session )
 {
-    return session && session->fdInfo ? &session->fdInfo->fileset : NULL;
+    if( !session )
+        return NULL;
+
+    ensureSessionFdInfoExists( session );
+    return &session->fdInfo->fileset;
 }
 
 void
@@ -635,21 +675,20 @@ tr_fdSocketCreate( tr_session * session, int domain, int type )
 {
     int s = -1;
     struct tr_fdInfo * gFd;
-
     assert( tr_isSession( session ) );
-    assert( session->fdInfo != NULL );
 
+    ensureSessionFdInfoExists( session );
     gFd = session->fdInfo;
 
-    if( gFd->socket_count < gFd->socket_limit )
+    if( gFd->peerCount < session->peerLimit )
         if(( s = socket( domain, type, 0 )) < 0 )
             if( sockerrno != EAFNOSUPPORT )
                 tr_err( _( "Couldn't create socket: %s" ), tr_strerror( sockerrno ) );
 
     if( s > -1 )
-        ++gFd->socket_count;
+        ++gFd->peerCount;
 
-    assert( gFd->socket_count >= 0 );
+    assert( gFd->peerCount >= 0 );
 
     if( s >= 0 )
     {
@@ -678,10 +717,10 @@ tr_fdSocketAccept( tr_session * s, int sockfd, tr_address * addr, tr_port * port
     struct sockaddr_storage sock;
 
     assert( tr_isSession( s ) );
-    assert( s->fdInfo != NULL );
     assert( addr );
     assert( port );
 
+    ensureSessionFdInfoExists( s );
     gFd = s->fdInfo;
 
     len = sizeof( struct sockaddr_storage );
@@ -689,10 +728,10 @@ tr_fdSocketAccept( tr_session * s, int sockfd, tr_address * addr, tr_port * port
 
     if( fd >= 0 )
     {
-        if( ( gFd->socket_count < gFd->socket_limit )
+        if( ( gFd->peerCount < s->peerLimit )
             && tr_address_from_sockaddr_storage( addr, port, &sock ) )
         {
-            ++gFd->socket_count;
+            ++gFd->peerCount;
         }
         else
         {
@@ -716,108 +755,9 @@ tr_fdSocketClose( tr_session * session, int fd )
         if( fd >= 0 )
         {
             tr_netCloseSocket( fd );
-            --gFd->socket_count;
+            --gFd->peerCount;
         }
 
-        assert( gFd->socket_count >= 0 );
+        assert( gFd->peerCount >= 0 );
     }
-}
-
-/***
-****
-****  Startup / Shutdown
-****
-***/
-
-static void
-ensureSessionFdInfoExists( tr_session * session )
-{
-    assert( tr_isSession( session ) );
-
-    if( session->fdInfo == NULL )
-        session->fdInfo = tr_new0( struct tr_fdInfo, 1 );
-}
-
-void
-tr_fdClose( tr_session * session )
-{
-    struct tr_fdInfo * gFd = session->fdInfo;
-
-    if( gFd != NULL )
-    {
-        fileset_destruct( &gFd->fileset );
-        tr_free( gFd );
-    }
-
-    session->fdInfo = NULL;
-}
-
-/***
-****
-***/
-
-int
-tr_fdGetFileLimit( tr_session * session )
-{
-    return fileset_get_size( get_fileset( session ) );
-}
-
-void
-tr_fdSetFileLimit( tr_session * session, int limit )
-{
-    int max;
-
-    /* This is a vaguely arbitrary number.
-       It takes announcer.c's MAX_CONCURRENT_TASKS into account,
-       plus extra positions for the listening sockets,
-       plus a few more just to be safe */
-    const int buffer_slots = 128;
-
-    ensureSessionFdInfoExists( session );
-
-    max = FD_SETSIZE - session->fdInfo->socket_limit - buffer_slots;
-    if( limit > max )
-        limit = max;
-
-    if( limit != tr_fdGetFileLimit( session ) )
-    {
-        struct tr_fileset * set = get_fileset( session );
-        fileset_destruct( set );
-        fileset_construct( set, limit );
-    }
-}
-
-void
-tr_fdSetPeerLimit( tr_session * session, int socket_limit )
-{
-    struct tr_fdInfo * gFd;
-
-    ensureSessionFdInfoExists( session );
-
-    gFd = session->fdInfo;
-
-#ifdef HAVE_GETRLIMIT
-    {
-        struct rlimit rlim;
-        const int NOFILE_BUFFER = 512;
-        const int open_max = MIN( FD_SETSIZE, sysconf( _SC_OPEN_MAX ) );
-        getrlimit( RLIMIT_NOFILE, &rlim );
-        rlim.rlim_cur = MAX( 1024, open_max );
-        rlim.rlim_cur = MIN( rlim.rlim_cur, rlim.rlim_max );
-        setrlimit( RLIMIT_NOFILE, &rlim );
-        tr_dbg( "setrlimit( RLIMIT_NOFILE, %d ); FD_SETSIZE = %d", (int)rlim.rlim_cur, FD_SETSIZE );
-        gFd->socket_limit = MIN( socket_limit, (int)rlim.rlim_cur - NOFILE_BUFFER );
-    }
-#else
-    gFd->socket_limit = socket_limit;
-#endif
-    gFd->public_socket_limit = socket_limit;
-
-    tr_dbg( "socket limit is %d", gFd->socket_limit );
-}
-
-int
-tr_fdGetPeerLimit( const tr_session * session )
-{
-    return session && session->fdInfo ? session->fdInfo->public_socket_limit : -1;
 }

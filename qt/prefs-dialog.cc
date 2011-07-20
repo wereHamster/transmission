@@ -322,7 +322,7 @@ PrefsDialog :: onPortTested( bool isOpen )
 void
 PrefsDialog :: onPortTest( )
 {
-    myPortLabel->setText( tr( "Testing..." ) );
+    myPortLabel->setText( tr( "Testing TCP Port..." ) );
     myPortButton->setEnabled( false );
     myWidgets[Prefs::PEER_PORT]->setEnabled( false );
     mySession.portTest( );
@@ -352,8 +352,8 @@ PrefsDialog :: createNetworkTab( )
 
     hig->addSectionDivider( );
     hig->addSectionTitle( tr( "Limits" ) );
-    hig->addRow( tr( "Maximum peers per &torrent:" ), spinBoxNew( Prefs::PEER_LIMIT_TORRENT, 1, 300, 5 ) );
-    hig->addRow( tr( "Maximum peers &overall:" ), spinBoxNew( Prefs::PEER_LIMIT_GLOBAL, 1, 3000, 5 ) );
+    hig->addRow( tr( "Maximum peers per &torrent:" ), spinBoxNew( Prefs::PEER_LIMIT_TORRENT, 1, FD_SETSIZE, 5 ) );
+    hig->addRow( tr( "Maximum peers &overall:" ), spinBoxNew( Prefs::PEER_LIMIT_GLOBAL, 1, FD_SETSIZE, 5 ) );
 
     hig->addSectionDivider( );
     hig->addSectionTitle( tr( "Options" ) );
