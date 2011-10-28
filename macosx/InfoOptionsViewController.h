@@ -28,16 +28,16 @@
 @interface InfoOptionsViewController : NSViewController <InfoViewController>
 {
     NSArray * fTorrents;
-    
+
     BOOL fSet;
-    
+
     IBOutlet NSPopUpButton * fPriorityPopUp, * fRatioPopUp, * fIdlePopUp;
     IBOutlet NSButton * fUploadLimitCheck, * fDownloadLimitCheck, * fGlobalLimitCheck;
     IBOutlet NSTextField * fUploadLimitField, * fDownloadLimitField, * fRatioLimitField, * fIdleLimitField,
                         * fUploadLimitLabel, * fDownloadLimitLabel, * fIdleLimitLabel,
                         * fRatioLimitGlobalLabel, * fIdleLimitGlobalLabel,
                         * fPeersConnectLabel, * fPeersConnectField;
-    
+
     NSString * fInitialString;
 }
 

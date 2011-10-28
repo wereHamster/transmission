@@ -27,7 +27,7 @@
 @interface DragOverlayView : NSView
 {
     NSImage * fBadge;
-    
+
     NSDictionary * fMainLineAttributes, * fSubLineAttributes;
 }
 

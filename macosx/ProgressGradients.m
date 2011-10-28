@@ -1,6 +1,6 @@
 /******************************************************************************
  * $Id$
- * 
+ *
  * Copyright (c) 2007-2011 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -29,15 +29,15 @@
 + (NSGradient *) progressGradientForRed: (CGFloat) redComponent green: (CGFloat) greenComponent blue: (CGFloat) blueComponent
 {
     const CGFloat alpha = [[NSUserDefaults standardUserDefaults] boolForKey: @"SmallView"] ? 0.27 : 1.0;
-    
+
     NSColor * baseColor = [NSColor colorWithCalibratedRed: redComponent green: greenComponent blue: blueComponent alpha: alpha];
-    
+
     NSColor * color2 = [NSColor colorWithCalibratedRed: redComponent * 0.95 green: greenComponent * 0.95 blue: blueComponent * 0.95
                         alpha: alpha];
-    
+
     NSColor * color3 = [NSColor colorWithCalibratedRed: redComponent * 0.85 green: greenComponent * 0.85 blue: blueComponent * 0.85
                         alpha: alpha];
-    
+
     NSGradient * progressGradient = [[NSGradient alloc] initWithColorsAndLocations: baseColor, 0.0, color2, 0.5, color3, 0.5,
                                         baseColor, 1.0, nil];
     return [progressGradient autorelease];

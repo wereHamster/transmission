@@ -30,7 +30,7 @@
 {
     //we only make NSComparisonPredicates
     NSComparisonPredicate * predicate = (NSComparisonPredicate *)[super predicateWithSubpredicates: subpredicates];
-    
+
     //construct a near-identical predicate
     return [NSComparisonPredicate predicateWithLeftExpression: [predicate leftExpression]
 											  rightExpression: [predicate rightExpression]

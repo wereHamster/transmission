@@ -31,12 +31,12 @@
     NSString * fName, * fPath;
     BOOL fIsFolder;
     NSMutableIndexSet * fIndexes;
-    
+
     uint64_t fSize;
     NSImage * fIcon;
-    
+
     NSMutableArray * fChildren;
-    
+
     Torrent * fTorrent;
 }
 

@@ -5,21 +5,21 @@
  * This package is an SSL implementation written
  * by Eric Young (eay@cryptsoft.com).
  * The implementation was written so as to conform with Netscapes SSL.
- * 
+ *
  * This library is free for commercial and non-commercial use as long as
  * the following conditions are aheared to.  The following conditions
  * apply to all code found in this distribution, be it the RC4, RSA,
  * lhash, DES, etc., code; not just the SSL code.  The SSL documentation
  * included with this distribution is covered by the same copyright terms
  * except that the holder is Tim Hudson (tjh@cryptsoft.com).
- * 
+ *
  * Copyright remains Eric Young's, and as such any Copyright notices in
  * the code are not to be removed.
  * If this package is used in a product, Eric Young should be given attribution
  * as the author of the parts of the library used.
  * This can be in the form of a textual message at program startup or
  * in documentation (online or textual) provided with the package.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -34,10 +34,10 @@
  *     Eric Young (eay@cryptsoft.com)"
  *    The word 'cryptographic' can be left out if the rouines from the library
  *    being used are not cryptographic related :-).
- * 4. If you include any Windows specific code (or a derivative thereof) from 
+ * 4. If you include any Windows specific code (or a derivative thereof) from
  *    the apps directory (application code) you must include an acknowledgement:
  *    "This product includes software written by Tim Hudson (tjh@cryptsoft.com)"
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY ERIC YOUNG ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -49,7 +49,7 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- * 
+ *
  * The licence and distribution terms for any publically available version or
  * derivative of this code cannot be changed.  i.e. this code cannot simply be
  * copied and put under another distribution licence
@@ -303,7 +303,7 @@ typedef struct ASN1_VALUE_st ASN1_VALUE;
  *      ...
  *      ASN1_ITEM_EXP *iptr;
  *      ...
- * } SOMETHING; 
+ * } SOMETHING;
  *
  * It would be initialised as e.g.:
  *
@@ -391,7 +391,7 @@ typedef const ASN1_ITEM * ASN1_ITEM_EXP(void);
  */
 
 /* If this is set we convert all character strings
- * to UTF8 first 
+ * to UTF8 first
  */
 
 #define ASN1_STRFLGS_UTF8_CONVERT	0x10
@@ -756,7 +756,7 @@ DECLARE_ASN1_FUNCTIONS(ASN1_ENUMERATED)
 
 int ASN1_UTCTIME_check(ASN1_UTCTIME *a);
 ASN1_UTCTIME *ASN1_UTCTIME_set(ASN1_UTCTIME *s,time_t t);
-int ASN1_UTCTIME_set_string(ASN1_UTCTIME *s, char *str); 
+int ASN1_UTCTIME_set_string(ASN1_UTCTIME *s, char *str);
 int ASN1_UTCTIME_cmp_time_t(const ASN1_UTCTIME *s, time_t t);
 #if 0
 time_t ASN1_UTCTIME_get(const ASN1_UTCTIME *s);
@@ -764,7 +764,7 @@ time_t ASN1_UTCTIME_get(const ASN1_UTCTIME *s);
 
 int ASN1_GENERALIZEDTIME_check(ASN1_GENERALIZEDTIME *a);
 ASN1_GENERALIZEDTIME *ASN1_GENERALIZEDTIME_set(ASN1_GENERALIZEDTIME *s,time_t t);
-int ASN1_GENERALIZEDTIME_set_string(ASN1_GENERALIZEDTIME *s, char *str); 
+int ASN1_GENERALIZEDTIME_set_string(ASN1_GENERALIZEDTIME *s, char *str);
 
 DECLARE_ASN1_FUNCTIONS(ASN1_OCTET_STRING)
 ASN1_OCTET_STRING *	ASN1_OCTET_STRING_dup(ASN1_OCTET_STRING *a);
@@ -904,7 +904,7 @@ int ASN1_TYPE_get_int_octetstring(ASN1_TYPE *a,long *num,
 	unsigned char *data, int max_len);
 
 STACK *ASN1_seq_unpack(unsigned char *buf, int len, char *(*d2i)(),
-						 void (*free_func)(void *) ); 
+						 void (*free_func)(void *) );
 unsigned char *ASN1_seq_pack(STACK *safes, int (*i2d)(), unsigned char **buf,
 			     int *len );
 void *ASN1_unpack_string(ASN1_STRING *oct, char *(*d2i)());
@@ -918,10 +918,10 @@ unsigned long ASN1_STRING_get_default_mask(void);
 int ASN1_mbstring_copy(ASN1_STRING **out, const unsigned char *in, int len,
 					int inform, unsigned long mask);
 int ASN1_mbstring_ncopy(ASN1_STRING **out, const unsigned char *in, int len,
-					int inform, unsigned long mask, 
+					int inform, unsigned long mask,
 					long minsize, long maxsize);
 
-ASN1_STRING *ASN1_STRING_set_by_NID(ASN1_STRING **out, 
+ASN1_STRING *ASN1_STRING_set_by_NID(ASN1_STRING **out,
 		const unsigned char *in, int inlen, int inform, int nid);
 ASN1_STRING_TABLE *ASN1_STRING_TABLE_get(int nid);
 int ASN1_STRING_TABLE_add(int, long, long, unsigned long, unsigned long);

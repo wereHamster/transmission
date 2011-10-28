@@ -580,7 +580,7 @@
   * Synchronize the statusbar's and torrent list's speeds
   * Fix the Properties dialog's "Origin" field for multiple torrents
 ==== Qt ====
-  * New Russian Translation 
+  * New Russian Translation
   * If Transmission was minimized, clicking on it the icon tray didn't raise it
 ==== Daemon ====
   * Speed Limit mode support added to transmission-remote
@@ -640,7 +640,7 @@
   * Fix watchdir issue on OSes that don't have inotify
 ==== GTK+ ====
   * Fix 1.70 intltool build problem
-  * Fix crash when the OS's stock mime-type icons are misconfigured 
+  * Fix crash when the OS's stock mime-type icons are misconfigured
   * Handle very long torrent file lists faster
 ==== Web Client ====
   * Fix 1.70 bug where some torrents appeared to be duplicates
@@ -733,7 +733,7 @@
   * Watch folder for auto-adding torrents
   * Many new features in the RPC/JSON interface
   * Allow users to specify a specific address when listening for peers
-==== Web Client ==== 
+==== Web Client ====
   * File selection and prioritization
   * Add option to verify local data
   * Fix "Remove Data" bug
@@ -742,7 +742,7 @@
 [http://trac.transmissionbt.com/query?milestone=1.52&group=component&order=severity All tickets closed by this release]
 ==== Mac ====
   * Improve interface responsiveness when downloading
-==== GTK+ and Daemon ==== 
+==== GTK+ and Daemon ====
   * Always honor the XDG setting for the download directory
 ==== GTK+ ====
   * Fix formatting error when showing speeds measured in MB/s
@@ -757,7 +757,7 @@
 === Transmission 1.51 (2009/02/26) ===
 [http://trac.transmissionbt.com/query?milestone=1.51&group=component&order=severity All tickets closed by this release]
 ==== All Platforms ====
-  * Fix configure script issues with non-gcc compilers and user-defined CFLAGS environment variables 
+  * Fix configure script issues with non-gcc compilers and user-defined CFLAGS environment variables
   * Decrease CPU usage in some situations
   * Close a rare race condition on startup
   * More efficient use of libcurl when curl 7.18.0 or newer is present
@@ -776,12 +776,12 @@
   * Fix 1.42 error that made tracker announces slower over time
   * Fix a Mac-centric peer connection bug from 1.41
   * Use less CPU cycles when managing very fast peers
-  * Better handling of non-UTF-8 torrent files 
+  * Better handling of non-UTF-8 torrent files
   * When removing local data, only remove data from the torrent
   * Close potential DoS vulnerability in 1.41
   * Many other bug fixes
 ==== GTK+ ====
-  * Various usability improvements 
+  * Various usability improvements
   * Better Gnome HIG compliance in the statusbar, properties dialog, and more
 ==== Daemon ====
   * Lots of new options added to transmission-remote
@@ -789,7 +789,7 @@
   * Make i18n support optional for cli and daemon clients
 ==== CLI ====
   * Support session.json settings, just as the Daemon and GTK+ clients do
-==== Web Client ==== 
+==== Web Client ====
   * Torrents can now be added by URL
   * Add the ability to "remove local data" from the web client
 
@@ -932,7 +932,7 @@
   * Turkish localization
 ==== GTK+ ====
   * Add options to inhibit hibernation and to toggle the tray icon
-  * Lots of small bug fixes and usability improvements 
+  * Lots of small bug fixes and usability improvements
   * Dozens of updated translations
 
 === Transmission 1.22 (2008/06/13) ===

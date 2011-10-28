@@ -43,4 +43,4 @@ dist-hook:
 DISTCLEANFILES = \
   intltool-extract \
   intltool-merge \
-  intltool-update 
+  intltool-update

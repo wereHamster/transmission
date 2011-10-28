@@ -44,7 +44,7 @@ if test -z "$AUTOGEN_SUBDIR_MODE"; then
 	echo Running $srcdir/configure "$@"
         $srcdir/configure "$@"
 
-        echo 
+        echo
         echo "Now type 'make' to compile $PROJECT."
 fi
 

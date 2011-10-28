@@ -15,10 +15,10 @@
 @interface SUUpdater : NSObject {
 	NSTimer *checkTimer;
 	SUUpdateDriver *driver;
-	
+
 	SUHost *host;
 	IBOutlet id delegate;
-    
+
     NSSet *tags;
 }
 

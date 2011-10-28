@@ -44,7 +44,7 @@
     {
         [self setTitle: NSLocalizedString(@"Files", "Inspector view -> title")];
     }
-    
+
     return self;
 }
 
@@ -57,14 +57,14 @@
         viewRect.size.height = height;
         [[self view] setFrame: viewRect];
     }
-    
+
     [[fFileFilterField cell] setPlaceholderString: NSLocalizedString(@"Filter", "inspector -> file filter")];
 }
 
 - (void) dealloc
 {
     [fTorrents release];
-    
+
     [super dealloc];
 }
 
@@ -73,7 +73,7 @@
     //don't check if it's the same in case the metadata changed
     [fTorrents release];
     fTorrents = [torrents retain];
-    
+
     fSet = NO;
 }
 
@@ -81,7 +81,7 @@
 {
     if (!fSet)
         [self setupInfo];
-    
+
     if ([fTorrents count] == 1)
         [fFileController reloadData];
 }
@@ -102,14 +102,14 @@
     Torrent * torrent = [fTorrents objectAtIndex: 0];
     NSIndexSet * indexes = [fileOutlineView selectedRowIndexes];
     NSMutableArray * urlArray = [NSMutableArray arrayWithCapacity: [indexes count]];
-    
+
     for (NSUInteger i = [indexes firstIndex]; i != NSNotFound; i = [indexes indexGreaterThanIndex: i])
     {
         FileListNode * item = [fileOutlineView itemAtRow: i];
         if ([self canQuickLookFile: item])
             [urlArray addObject: [NSURL fileURLWithPath: [torrent fileLocation: item]]];
     }
-    
+
     return urlArray;
 }
 
@@ -117,18 +117,18 @@
 {
     if ([fTorrents count] != 1)
         return NO;
-    
+
     Torrent * torrent = [fTorrents objectAtIndex: 0];
     if (![torrent isFolder])
         return NO;
-    
+
     FileOutlineView * fileOutlineView = [fFileController outlineView];
     NSIndexSet * indexes = [fileOutlineView selectedRowIndexes];
-    
+
     for (NSUInteger i = [indexes firstIndex]; i != NSNotFound; i = [indexes indexGreaterThanIndex: i])
         if ([self canQuickLookFile: [fileOutlineView itemAtRow: i]])
             return YES;
-    
+
     return NO;
 }
 
@@ -136,28 +136,28 @@
 - (NSRect) quickLookSourceFrameForPreviewItem: (id /*<QLPreviewItem>*/) item
 {
     FileOutlineView * fileOutlineView = [fFileController outlineView];
-    
+
     NSString * fullPath = [(NSURL *)item path];
     Torrent * torrent = [fTorrents objectAtIndex: 0];
     NSRange visibleRows = [fileOutlineView rowsInRect: [fileOutlineView bounds]];
-    
+
     for (NSUInteger row = visibleRows.location; row < NSMaxRange(visibleRows); row++)
     {
         FileListNode * rowItem = [fileOutlineView itemAtRow: row];
         if ([[torrent fileLocation: rowItem] isEqualToString: fullPath])
         {
             NSRect frame = [fileOutlineView iconRectForRow: row];
-            
+
             if (!NSIntersectsRect([fileOutlineView visibleRect], frame))
                 return NSZeroRect;
-            
+
             frame.origin = [fileOutlineView convertPoint: frame.origin toView: nil];
             frame.origin = [[[self view] window] convertBaseToScreen: frame.origin];
             frame.origin.y -= frame.size.height;
             return frame;
         }
     }
-    
+
     return NSZeroRect;
 }
 
@@ -168,11 +168,11 @@
 - (void) setupInfo
 {
     [fFileFilterField setStringValue: @""];
-    
+
     if ([fTorrents count] == 1)
     {
         Torrent * torrent = [fTorrents objectAtIndex: 0];
-        
+
         [fFileController setTorrent: torrent];
         [fFileFilterField setEnabled: [torrent isFolder]];
     }
@@ -181,7 +181,7 @@
         [fFileController setTorrent: nil];
         [fFileFilterField setEnabled: NO];
     }
-    
+
     fSet = YES;
 }
 

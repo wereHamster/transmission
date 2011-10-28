@@ -1,6 +1,6 @@
 /******************************************************************************
  * $Id$
- * 
+ *
  * Copyright (c) 2008-2011 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -61,9 +61,9 @@
         else
             [addresses addObject: [(TrackerNode *)item fullAnnounceAddress]];
     }
-    
+
     NSString * text = [addresses componentsJoinedByString: @"\n"];
-    
+
     NSPasteboard * pb = [NSPasteboard generalPasteboard];
     if ([NSApp isOnSnowLeopardOrBetter])
     {
@@ -80,15 +80,15 @@
 - (void) paste: (id) sender
 {
     NSAssert(fTorrent != nil, @"no torrent but trying to paste; should not be able to call this method");
-    
+
     BOOL added = NO;
-    
+
     if ([NSApp isOnSnowLeopardOrBetter])
     {
         NSArray * items = [[NSPasteboard generalPasteboard] readObjectsForClasses:
                             [NSArray arrayWithObject: [NSString class]] options: nil];
         NSAssert(items != nil, @"no string items to paste; should not be able to call this method");
-        
+
         for (NSString * pbItem in items)
         {
             for (NSString * item in [pbItem componentsSeparatedByString: @"\n"])
@@ -100,12 +100,12 @@
     {
         NSString * pbItem =[[NSPasteboard generalPasteboard] stringForType: NSStringPboardType];
         NSAssert(pbItem != nil, @"no string items to paste; should not be able to call this method");
-        
+
         for (NSString * item in [pbItem componentsSeparatedByString: @"\n"])
             if ([fTorrent addTrackerToNewTier: item])
                 added = YES;
     }
-    
+
     //none added
     if (!added)
         NSBeep();
@@ -114,15 +114,15 @@
 - (BOOL) validateMenuItem: (NSMenuItem *) menuItem
 {
     const SEL action = [menuItem action];
-    
+
     if (action == @selector(copy:))
         return [self numberOfSelectedRows] > 0;
-    
+
     if (action == @selector(paste:))
         return fTorrent && ([NSApp isOnSnowLeopardOrBetter]
                 ? [[NSPasteboard generalPasteboard] canReadObjectForClasses: [NSArray arrayWithObject: [NSString class]] options: nil]
                 : [[NSPasteboard generalPasteboard] availableTypeFromArray: [NSArray arrayWithObject: NSStringPboardType]] != nil);
-    
+
     return YES;
 }
 

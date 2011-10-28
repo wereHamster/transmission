@@ -4,7 +4,7 @@
  * webpage: http://miniupnp.free.fr/ or http://miniupnp.tuxfamily.org/
  * Author : Thomas Bernard
 
-Copyright (c) 2005-2009, Thomas BERNARD 
+Copyright (c) 2005-2009, Thomas BERNARD
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without

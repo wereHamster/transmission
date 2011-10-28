@@ -1,6 +1,6 @@
 /******************************************************************************
  * $Id$
- * 
+ *
  * Copyright (c) 2008-2011 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a

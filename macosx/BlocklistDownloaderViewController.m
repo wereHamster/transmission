@@ -46,14 +46,14 @@
 - (void) awakeFromNib
 {
     [fButton setTitle: NSLocalizedString(@"Cancel", "Blocklist -> cancel button")];
-    
+
     const CGFloat oldWidth = NSWidth([fButton frame]);
     [fButton sizeToFit];
     NSRect buttonFrame = [fButton frame];
     buttonFrame.size.width += 12.0; //sizeToFit sizes a bit too small
     buttonFrame.origin.x -= NSWidth(buttonFrame) - oldWidth;
     [fButton setFrame: buttonFrame];
-    
+
     [fProgressBar setUsesThreadedAnimation: YES];
     [fProgressBar startAnimation: self];
 }
@@ -75,14 +75,14 @@
     if (expectedSize != NSURLResponseUnknownLength)
     {
         [fProgressBar setIndeterminate: NO];
-        
+
         NSString * substring = [NSString stringForFilePartialSize: currentSize fullSize: expectedSize];
         string = [string stringByAppendingFormat: @" (%@)",  substring];
         [fProgressBar setDoubleValue: (double)currentSize / expectedSize];
     }
     else
         string = [string stringByAppendingFormat: @" (%@)",  [NSString stringForFileSize: currentSize]];
-    
+
     [fTextField setStringValue: string];
 }
 
@@ -91,7 +91,7 @@
     //change to indeterminate while processing
     [fProgressBar setIndeterminate: YES];
     [fProgressBar startAnimation: self];
-    
+
     [fTextField setStringValue: [NSLocalizedString(@"Processing blocklist", "Blocklist -> message") stringByAppendingEllipsis]];
     [fButton setEnabled: NO];
 }
@@ -100,7 +100,7 @@
 {
     [NSApp endSheet: fStatusWindow];
     [fStatusWindow orderOut: self];
-    
+
     [self release];
 }
 
@@ -108,14 +108,14 @@
 {
     [NSApp endSheet: fStatusWindow];
     [fStatusWindow orderOut: self];
-    
+
     NSAlert * alert = [[[NSAlert alloc] init] autorelease];
     [alert addButtonWithTitle: NSLocalizedString(@"OK", "Blocklist -> button")];
     [alert setMessageText: NSLocalizedString(@"Download of the blocklist failed.", "Blocklist -> message")];
     [alert setAlertStyle: NSWarningAlertStyle];
-    
+
     [alert setInformativeText: error];
-    
+
     [alert beginSheetModalForWindow: [fPrefsController window] modalDelegate: self
         didEndSelector: @selector(failureSheetClosed:returnCode:contextInfo:) contextInfo: nil];
 }
@@ -130,7 +130,7 @@
     {
         fPrefsController = prefsController;
     }
-    
+
     return self;
 }
 
@@ -138,10 +138,10 @@
 {
     //load window and show as sheet
     [NSBundle loadNibNamed: @"BlocklistStatusWindow" owner: self];
-    
+
     BlocklistDownloader * downloader = [BlocklistDownloader downloader];
     [downloader setViewController: self]; //do before showing the sheet to ensure it doesn't slide out with placeholder text
-    
+
     [NSApp beginSheet: fStatusWindow modalForWindow: [fPrefsController window] modalDelegate: nil didEndSelector: nil contextInfo: nil];
 }
 

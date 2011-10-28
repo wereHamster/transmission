@@ -165,7 +165,7 @@ Transmission.prototype =
 		this.remote.checkPort( function(data){
 			var o = data.arguments;
 			tr.updatePortStatus( o );
-		}, async );		
+		}, async );
 	},
 
 	preloadImages: function() {
@@ -706,7 +706,7 @@ Transmission.prototype =
 
 	savePrefsClicked: function(event)
 	{
-		
+
 		// handle the clutch prefs locally
 		var tr = this;
 		var rate = parseInt( $('#prefs_form #refresh_rate')[0].value );
@@ -752,7 +752,7 @@ Transmission.prototype =
 		o[RPC._PeerPortRandom]		 = $('#prefs_form #port_rand')[0].checked;
 		o[RPC._PortForwardingEnabled]= $('#prefs_form #port_forward')[0].checked;
 
-	
+
 
 		tr.remote.savePrefs( o );
 
@@ -760,7 +760,7 @@ Transmission.prototype =
 	},
 	blocklistUpdateClicked: function(event){
 		var tr = this;
-		tr.remote.updateBlocklist();	
+		tr.remote.updateBlocklist();
 	},
 
 	closeStatsClicked: function(event) {

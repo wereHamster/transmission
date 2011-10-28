@@ -1,6 +1,6 @@
 /******************************************************************************
  * $Id$
- * 
+ *
  * Copyright (c) 2011 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -31,7 +31,7 @@
     IBOutlet NSButton * fStatusButton;
     IBOutlet NSTextField * fTotalDLField, * fTotalULField;
     IBOutlet NSImageView * fTotalDLImageView;
-    
+
     tr_session * fLib;
 }
 

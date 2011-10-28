@@ -49,7 +49,7 @@
     {
         [self setTitle: NSLocalizedString(@"Activity", "Inspector view -> title")];
     }
-    
+
     return self;
 }
 
@@ -61,9 +61,9 @@
 - (void) dealloc
 {
     [[NSNotificationCenter defaultCenter] removeObserver: self];
-    
+
     [fTorrents release];
-    
+
     [super dealloc];
 }
 
@@ -72,7 +72,7 @@
     //don't check if it's the same in case the metadata changed
     [fTorrents release];
     fTorrents = [torrents retain];
-    
+
     fSet = NO;
 }
 
@@ -80,11 +80,11 @@
 {
     if (!fSet)
         [self setupInfo];
-    
+
     const NSInteger numberSelected = [fTorrents count];
     if (numberSelected == 0)
         return;
-    
+
     uint64_t have = 0, haveVerified = 0, downloadedTotal = 0, uploadedTotal = 0, failedHash = 0;
     NSDate * lastActivity = nil;
     for (Torrent * torrent in fTorrents)
@@ -94,12 +94,12 @@
         downloadedTotal += [torrent downloadedTotal];
         uploadedTotal += [torrent uploadedTotal];
         failedHash += [torrent failedHash];
-        
+
         NSDate * nextLastActivity;
         if ((nextLastActivity = [torrent dateActivity]))
             lastActivity = lastActivity ? [lastActivity laterDate: nextLastActivity] : nextLastActivity;
     }
-    
+
     if (have == 0)
         [fHaveField setStringValue: [NSString stringForFileSize: 0]];
     else
@@ -111,19 +111,19 @@
         else
             [fHaveField setStringValue: [NSString stringWithFormat: @"%@ (%@)", [NSString stringForFileSize: have], verifiedString]];
     }
-    
+
     [fDownloadedTotalField setStringValue: [NSString stringForFileSize: downloadedTotal]];
     [fUploadedTotalField setStringValue: [NSString stringForFileSize: uploadedTotal]];
     [fFailedHashField setStringValue: [NSString stringForFileSize: failedHash]];
-    
+
     [fDateActivityField setObjectValue: lastActivity];
-    
+
     if (numberSelected == 1)
     {
         Torrent * torrent = [fTorrents objectAtIndex: 0];
-        
+
         [fStateField setStringValue: [torrent stateString]];
-        
+
         NSString * progressString = [NSString percentString: [torrent progress] longDecimals: YES];
         if ([torrent isFolder])
         {
@@ -133,18 +133,18 @@
             progressString = [progressString stringByAppendingFormat: @" (%@)", progressSelectedString];
         }
         [fProgressField setStringValue: progressString];
-            
+
         [fRatioField setStringValue: [NSString stringForRatio: [torrent ratio]]];
-        
+
         NSString * errorMessage = [torrent errorMessage];
         if (![errorMessage isEqualToString: [fErrorMessageView string]])
             [fErrorMessageView setString: errorMessage];
-        
+
         [fDateCompletedField setObjectValue: [torrent dateCompleted]];
-        
+
         [fDownloadTimeField setStringValue: [NSString timeString: [torrent secondsDownloading] showSeconds: YES]];
         [fSeedTimeField setStringValue: [NSString timeString: [torrent secondsSeeding] showSeconds: YES]];
-        
+
         [fPiecesView updateView];
     }
     else if (numberSelected > 1)
@@ -184,18 +184,18 @@
             [fDateActivityField setStringValue: @""];
             [fRatioField setStringValue: @""];
         }
-    
+
         [fStateField setStringValue: @""];
         [fProgressField setStringValue: @""];
-        
+
         [fErrorMessageView setString: @""];
-        
+
         [fDateAddedField setStringValue: @""];
         [fDateCompletedField setStringValue: @""];
-        
+
         [fDownloadTimeField setStringValue: @""];
         [fSeedTimeField setStringValue: @""];
-        
+
         [fPiecesControl setSelected: NO forSegment: PIECES_CONTROL_AVAILABLE];
         [fPiecesControl setSelected: NO forSegment: PIECES_CONTROL_PROGRESS];
         [fPiecesControl setEnabled: NO];
@@ -204,27 +204,27 @@
     else
     {
         Torrent * torrent = [fTorrents objectAtIndex: 0];
-        
+
         [fDateAddedField setObjectValue: [torrent dateAdded]];
-        
+
         const BOOL piecesAvailableSegment = [[NSUserDefaults standardUserDefaults] boolForKey: @"PiecesViewShowAvailability"];
         [fPiecesControl setSelected: piecesAvailableSegment forSegment: PIECES_CONTROL_AVAILABLE];
         [fPiecesControl setSelected: !piecesAvailableSegment forSegment: PIECES_CONTROL_PROGRESS];
         [fPiecesControl setEnabled: YES];
-        
+
         [fPiecesView setTorrent: torrent];
     }
-    
+
     fSet = YES;
 }
 
 - (void) updatePiecesView
 {
     const BOOL piecesAvailableSegment = [[NSUserDefaults standardUserDefaults] boolForKey: @"PiecesViewShowAvailability"];
-    
+
     [fPiecesControl setSelected: piecesAvailableSegment forSegment: PIECES_CONTROL_AVAILABLE];
     [fPiecesControl setSelected: !piecesAvailableSegment forSegment: PIECES_CONTROL_PROGRESS];
-    
+
     [fPiecesView updateView];
 }
 

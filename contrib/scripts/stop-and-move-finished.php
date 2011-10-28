@@ -12,29 +12,29 @@ define("completelocation", "/data2/Torrents/Complete/");
 function get_transmission_session_id()
 {
   $fp = @fsockopen(transmissionhost, transmissionport, $errno, $errstr, 30);
-  
+
   if (!$fp)
   {
     throw new Exception("Can not connect to transmission: $errstr ($errno)");
   }
-  
+
   $out = "GET /".transmissionlocation." HTTP/1.1\r\n";
   $out .= "Host: ".transmissionhost."\r\n";
   $out .= "Connection: Close\r\n\r\n";
   fwrite($fp, $out);
   $info = stream_get_contents($fp);
   fclose($fp);
-  
+
   $info = explode("\r\n\r\n", $info);
   $info = explode("\r\n", $info[0]);
-  
+
   $headers = array();
   foreach ($info as $i)
   {
     $i = explode(": ", $i);
     $headers[$i[0]] = $i[1];
   }
-  
+
   return $headers["X-Transmission-Session-Id"];
 }
 
@@ -54,7 +54,7 @@ function do_post_request($url, $data)
   $params["http"]["method"] = "POST";
   $params["http"]["content"] = $data;
   $params["http"]["header"] = "X-Transmission-Session-Id: ".transmissionsessionid."\r\n";
-    
+
   $ctx = stream_context_create($params);
   $fp = @fopen($url, "rb", false, $ctx);
   if (!$fp)

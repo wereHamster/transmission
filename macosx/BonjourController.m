@@ -43,12 +43,12 @@ BonjourController * fDefaultController = nil;
 - (void) startWithPort: (NSInteger) port
 {
     [self stop];
-    
+
     NSString * serviceName = [NSString stringWithFormat: @"Transmission Web Interface (%@)", NSUserName()];
-    
+
     fService = [[NSNetService alloc] initWithDomain: @"" type: @"_http._tcp." name: serviceName port: port];
     [fService setDelegate: self];
-    
+
     [fService publish];
 }
 

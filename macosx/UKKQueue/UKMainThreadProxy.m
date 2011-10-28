@@ -1,15 +1,15 @@
 /* =============================================================================
 	FILE:		UKMainThreadProxy.h
 	PROJECT:	UKMainThreadProxy
-    
+
     PURPOSE:    Send a message to object theObject to [theObject mainThreadProxy]
                 instead and the message will be received on the main thread by
                 theObject.
 
     COPYRIGHT:  (c) 2004 M. Uli Kusterer, all rights reserved.
-    
+
 	AUTHORS:	M. Uli Kusterer - UK
-    
+
     LICENSES:   MIT Licenseâ
 
 	REVISIONS:
@@ -31,7 +31,7 @@
 	self = [super init];
 	if( self )
 		target = targ;
-	
+
 	return self;
 }
 
@@ -43,7 +43,7 @@
 -(BOOL)	respondsToSelector: (SEL)itemAction
 {
 	BOOL	does = [super respondsToSelector: itemAction];
-	
+
 	return( does || [target respondsToSelector: itemAction] );
 }
 
@@ -53,14 +53,14 @@
 	BOOL	does = [super respondsToSelector: itemAction];
 	if( does )
 		return [super performSelector: itemAction];
-	
+
 	if( ![target respondsToSelector: itemAction] )
 		[self doesNotRecognizeSelector: itemAction];
-	
+
 	[target retain];
 	[target performSelectorOnMainThread: itemAction withObject: nil waitUntilDone: YES];
 	[target release];
-	
+
 	return nil;
 }
 
@@ -70,16 +70,16 @@
 	BOOL	does = [super respondsToSelector: itemAction];
 	if( does )
 		return [super performSelector: itemAction withObject: obj];
-	
+
 	if( ![target respondsToSelector: itemAction] )
 		[self doesNotRecognizeSelector: itemAction];
-	
+
 	[target retain];
 	[obj retain];
 	[target performSelectorOnMainThread: itemAction withObject: obj waitUntilDone: YES];
 	[obj release];
 	[target release];
-	
+
 	return nil;
 }
 
@@ -94,7 +94,7 @@
 
 	if( sig )
 		return sig;
-	
+
 	return [target methodSignatureForSelector: itemAction];
 }
 

@@ -4,9 +4,9 @@
 #pragma align 4 (blue_turtle)
 #endif
 #ifdef __GNUC__
-static const guint8 blue_turtle[] __attribute__ ((__aligned__ (4))) = 
+static const guint8 blue_turtle[] __attribute__ ((__aligned__ (4))) =
 #else
-static const guint8 blue_turtle[] = 
+static const guint8 blue_turtle[] =
 #endif
 { ""
   /* Pixbuf magic (0x47646b50) */
@@ -43,9 +43,9 @@ static const guint8 blue_turtle[] =
 #pragma align 4 (grey_turtle)
 #endif
 #ifdef __GNUC__
-static const guint8 grey_turtle[] __attribute__ ((__aligned__ (4))) = 
+static const guint8 grey_turtle[] __attribute__ ((__aligned__ (4))) =
 #else
-static const guint8 grey_turtle[] = 
+static const guint8 grey_turtle[] =
 #endif
 { ""
   /* Pixbuf magic (0x47646b50) */

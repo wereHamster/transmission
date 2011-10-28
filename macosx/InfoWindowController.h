@@ -35,11 +35,11 @@
 @interface InfoWindowController : NSWindowController
 {
     NSArray * fTorrents;
-    
+
     NSViewController <InfoViewController> * fViewController;
     NSInteger fCurrentTabTag;
     IBOutlet NSMatrix * fTabMatrix;
-    
+
     InfoGeneralViewController * fGeneralViewController;
     InfoActivityViewController * fActivityViewController;
     InfoTrackersViewController * fTrackersViewController;

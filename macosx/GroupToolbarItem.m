@@ -1,6 +1,6 @@
 /******************************************************************************
  * $Id$
- * 
+ *
  * Copyright (c) 2007-2011 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -41,7 +41,7 @@
 - (void) validate
 {
     NSSegmentedControl * control = (NSSegmentedControl *)[self view];
-    
+
     for (NSInteger i = 0; i < [control segmentCount]; i++)
         [control setEnabled: [[self target] validateToolbarItem:
             [[[NSToolbarItem alloc] initWithItemIdentifier: [fIdentifiers objectAtIndex: i]] autorelease]] forSegment: i];
@@ -52,20 +52,20 @@
     NSMenuItem * menuItem = [[NSMenuItem alloc] initWithTitle: [self label] action: NULL keyEquivalent: @""];
     NSMenu * menu = [[NSMenu alloc] initWithTitle: [self label]];
     [menuItem setSubmenu: menu];
-    
+
     [menu setAutoenablesItems: NO];
-    
+
     const NSInteger count = [(NSSegmentedControl *)[self view] segmentCount];
     for (NSInteger i = 0; i < count; i++)
     {
         NSMenuItem * addItem = [[NSMenuItem alloc] initWithTitle: [labels objectAtIndex: i] action: [self action] keyEquivalent: @""];
         [addItem setTarget: [self target]];
         [addItem setTag: i];
-        
+
         [menu addItem: addItem];
         [addItem release];
     }
-    
+
     [menu release];
     [self setMenuFormRepresentation: menuItem];
     [menuItem release];
@@ -74,12 +74,12 @@
 - (NSMenuItem *) menuFormRepresentation
 {
     NSMenuItem * menuItem = [super menuFormRepresentation];
-    
+
     const NSInteger count = [(NSSegmentedControl *)[self view] segmentCount];
     for (NSInteger i = 0; i < count; i++)
         [[[menuItem submenu] itemAtIndex: i] setEnabled: [[self target] validateToolbarItem:
             [[[NSToolbarItem alloc] initWithItemIdentifier: [fIdentifiers objectAtIndex: i]] autorelease]]];
-    
+
     return menuItem;
 }
 

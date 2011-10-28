@@ -33,13 +33,13 @@ typedef enum
 } port_status_t;
 
 @interface PortChecker : NSObject
-{    
+{
     id fDelegate;
     port_status_t fStatus;
-    
+
     NSURLConnection * fConnection;
     NSMutableData * fPortProbeData;
-    
+
     NSTimer * fTimer;
 }
 

@@ -1,6 +1,6 @@
 /******************************************************************************
  * $Id$
- * 
+ *
  * Copyright (c) 2007-2011 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -35,7 +35,7 @@
 {
     PeerProgressIndicatorCell * copy = [super copyWithZone: zone];
     copy->fAttributes = [fAttributes retain];
-    
+
     return copy;
 }
 
@@ -58,12 +58,12 @@
         {
             NSMutableParagraphStyle * paragraphStyle = [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
             [paragraphStyle setAlignment: NSRightTextAlignment];
-            
+
             fAttributes = [[NSDictionary alloc] initWithObjectsAndKeys: [NSFont systemFontOfSize: 11.0], NSFontAttributeName,
                                                                             paragraphStyle, NSParagraphStyleAttributeName, nil];
             [paragraphStyle release];
         }
-        
+
         [[NSString percentString: [self floatValue] longDecimals: NO] drawInRect: cellFrame withAttributes: fAttributes];
     }
     else
@@ -74,17 +74,17 @@
             [fAttributes release];
             fAttributes = nil;
         }
-        
+
         [super drawWithFrame: cellFrame inView: controlView];
         if (fSeed)
         {
             NSImage * checkImage = [NSImage imageNamed: @"CompleteCheck.png"];
-            
+
             const NSSize imageSize = [checkImage size];
             const NSRect rect = NSMakeRect(floor(NSMidX(cellFrame) - imageSize.width * 0.5),
                                             floor(NSMidY(cellFrame) - imageSize.height * 0.5),
                                             imageSize.width, imageSize.height);
-            
+
             if ([NSApp isOnSnowLeopardOrBetter])
                 [checkImage drawInRect: rect fromRect: NSZeroRect operation: NSCompositeSourceOver fraction: 1.0 respectFlipped: YES
                         hints: nil];

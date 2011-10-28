@@ -119,13 +119,13 @@ TransmissionRemote.prototype =
 		var o = { method: 'session-get' };
 		this.sendRequest( o, callback, async );
 	},
-	
+
 	checkPort: function( callback, async ) {
 		var tr = this._controller;
 		var o = { method: 'port-test' };
 		this.sendRequest( o, callback, async );
 	},
-	
+
 	loadDaemonStats: function( callback, async ) {
 		var tr = this._controller;
 		var o = { method: 'session-stats' };

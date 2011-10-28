@@ -28,15 +28,15 @@
 @interface InfoGeneralViewController : NSViewController <InfoViewController>
 {
     NSArray * fTorrents;
-    
+
     BOOL fSet;
-    
+
     IBOutlet NSTextField * fPiecesField, * fHashField, * fSecureField,
                         * fDataLocationField,
                         * fCreatorField, * fDateCreatedField;
-    
+
     IBOutlet NSTextView * fCommentView;
-    
+
     IBOutlet NSButton * fRevealDataButton;
 }
 

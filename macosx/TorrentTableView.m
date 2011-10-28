@@ -58,40 +58,40 @@
     if ((self = [super initWithCoder: decoder]))
     {
         fDefaults = [NSUserDefaults standardUserDefaults];
-        
+
         fTorrentCell = [[TorrentCell alloc] init];
-        
+
         NSData * groupData = [fDefaults dataForKey: @"CollapsedGroups"];
         if (groupData)
             fCollapsedGroups = [[NSUnarchiver unarchiveObjectWithData: groupData] mutableCopy];
         else
             fCollapsedGroups = [[NSMutableIndexSet alloc] init];
-        
+
         fMouseRow = -1;
         fMouseControlRow = -1;
         fMouseRevealRow = -1;
         fMouseActionRow = -1;
         fActionPushedRow = -1;
-        
+
         [self setDelegate: self];
-        
+
         fPiecesBarPercent = [fDefaults boolForKey: @"PiecesBar"] ? 1.0 : 0.0;
     }
-    
+
     return self;
 }
 
 - (void) dealloc
 {
     [fCollapsedGroups release];
-    
+
     [fPiecesBarAnimation release];
     [fMenuTorrent release];
-    
+
     [fSelectedValues release];
-    
+
     [fTorrentCell release];
-    
+
     [super dealloc];
 }
 
@@ -105,7 +105,7 @@
 {
     if (value == -1)
         value = MAX_GROUP;
-    
+
     return [fCollapsedGroups containsIndex: value];
 }
 
@@ -113,7 +113,7 @@
 {
     if (value == -1)
         value = MAX_GROUP;
-    
+
     [fCollapsedGroups removeIndex: value];
 }
 
@@ -152,7 +152,7 @@
     if ([item isKindOfClass: [Torrent class]])
     {
         [cell setRepresentedObject: item];
-        
+
         const NSInteger row = [self rowForItem: item];
         [cell setHover: row == fMouseRow];
         [cell setControlHover: row == fMouseControlRow];
@@ -190,11 +190,11 @@
     else
     {
         NSRect rect = [super frameOfCellAtColumn: column row: row];
-        
+
         //adjust placement for proper vertical alignment
         if (column == [self columnWithIdentifier: @"Group"])
             rect.size.height -= 1.0f;
-        
+
         return rect;
     }
 }
@@ -231,17 +231,17 @@
 {
     [super updateTrackingAreas];
     [self removeTrackingAreas];
-    
+
     const NSRange rows = [self rowsInRect: [self visibleRect]];
     if (rows.length == 0)
         return;
-    
+
     NSPoint mouseLocation = [self convertPoint: [[self window] convertScreenToBase: [NSEvent mouseLocation]] fromView: nil];
     for (NSUInteger row = rows.location; row < NSMaxRange(rows); row++)
     {
         if (![[self itemAtRow: row] isKindOfClass: [Torrent class]])
             continue;
-        
+
         NSDictionary * userInfo = [NSDictionary dictionaryWithObject: [NSNumber numberWithInteger: row] forKey: @"Row"];
         TorrentCell * cell = (TorrentCell *)[self preparedCellAtColumn: -1 row: row];
         [cell addTrackingAreasForView: self inRect: [self rectOfRow: row] withUserInfo: userInfo mouseLocation: mouseLocation];
@@ -254,7 +254,7 @@
     fMouseControlRow = -1;
     fMouseRevealRow = -1;
     fMouseActionRow = -1;
-    
+
     for (NSTrackingArea * area in [self trackingAreas])
     {
         if ([area owner] == self && [[area userInfo] objectForKey: @"Row"])
@@ -265,7 +265,7 @@
 - (void) setRowHover: (NSInteger) row
 {
     NSAssert([fDefaults boolForKey: @"SmallView"], @"cannot set a hover row when not in compact view");
-    
+
     fMouseRow = row;
     if (row >= 0)
         [self setNeedsDisplayInRect: [self rectOfRow: row]];
@@ -295,7 +295,7 @@
 - (void) mouseEntered: (NSEvent *) event
 {
     NSDictionary * dict = (NSDictionary *)[event userData];
-    
+
     NSNumber * row;
     if ((row = [dict objectForKey: @"Row"]))
     {
@@ -313,7 +313,7 @@
             if (![fDefaults boolForKey: @"SmallView"])
                 return;
         }
-        
+
         [self setNeedsDisplayInRect: [self rectOfRow: rowVal]];
     }
 }
@@ -321,7 +321,7 @@
 - (void) mouseExited: (NSEvent *) event
 {
     NSDictionary * dict = (NSDictionary *)[event userData];
-    
+
     NSNumber * row;
     if ((row = [dict objectForKey: @"Row"]))
     {
@@ -338,7 +338,7 @@
             if (![fDefaults boolForKey: @"SmallView"])
                 return;
         }
-        
+
         [self setNeedsDisplayInRect: [self rectOfRow: [row integerValue]]];
     }
 }
@@ -354,7 +354,7 @@
     NSInteger value = [[[notification userInfo] objectForKey: @"NSObject"] groupIndex];
     if (value < 0)
         value = MAX_GROUP;
-    
+
     if ([fCollapsedGroups containsIndex: value])
     {
         [fCollapsedGroups removeIndex: value];
@@ -367,7 +367,7 @@
     NSInteger value = [[[notification userInfo] objectForKey: @"NSObject"] groupIndex];
     if (value < 0)
         value = MAX_GROUP;
-    
+
     [fCollapsedGroups addIndex: value];
     [[NSNotificationCenter defaultCenter] postNotificationName: @"OutlineExpandCollapse" object: self];
 }
@@ -376,35 +376,35 @@
 {
     NSPoint point = [self convertPoint: [event locationInWindow] fromView: nil];
     const NSInteger row = [self rowAtPoint: point];
-    
+
     //check to toggle group status before anything else
     if ([self pointInGroupStatusRect: point])
     {
         [fDefaults setBool: ![fDefaults boolForKey: @"DisplayGroupRowRatio"] forKey: @"DisplayGroupRowRatio"];
         [self setGroupStatusColumns];
-        
+
         return;
     }
-    
+
     const BOOL pushed = row != -1 && (fMouseActionRow == row || fMouseRevealRow == row || fMouseControlRow == row);
-    
+
     //if pushing a button, don't change the selected rows
     if (pushed)
         fSelectedValues = [[self selectedValues] retain];
-    
+
     [super mouseDown: event];
-    
+
     [fSelectedValues release];
     fSelectedValues = nil;
-    
+
     //avoid weird behavior when showing menu by doing this after mouse down
     if (row != -1 && fMouseActionRow == row)
     {
         fActionPushedRow = row;
         [self setNeedsDisplayInRect: [self rectOfRow: row]]; //ensure button is pushed down
-        
+
         [self displayTorrentMenuForEvent: event];
-        
+
         fActionPushedRow = -1;
         [self setNeedsDisplayInRect: [self rectOfRow: row]];
     }
@@ -413,7 +413,7 @@
         id item = nil;
         if (row != -1)
             item = [self itemAtRow: row];
-        
+
         if (!item || [item isKindOfClass: [Torrent class]])
             [fController showInfo: nil];
         else
@@ -430,7 +430,7 @@
 - (void) selectValues: (NSArray *) values
 {
     NSMutableIndexSet * indexSet = [NSMutableIndexSet indexSet];
-    
+
     for (id item in values)
     {
         if ([item isKindOfClass: [Torrent class]])
@@ -453,7 +453,7 @@
             }
         }
     }
-    
+
     [self selectRowIndexes: indexSet byExtendingSelection: NO];
 }
 
@@ -461,10 +461,10 @@
 {
     NSIndexSet * selectedIndexes = [self selectedRowIndexes];
     NSMutableArray * values = [NSMutableArray arrayWithCapacity: [selectedIndexes count]];
-    
+
     for (NSUInteger i = [selectedIndexes firstIndex]; i != NSNotFound; i = [selectedIndexes indexGreaterThanIndex: i])
         [values addObject: [self itemAtRow: i]];
-    
+
     return values;
 }
 
@@ -472,7 +472,7 @@
 {
     NSIndexSet * selectedIndexes = [self selectedRowIndexes];
     NSMutableArray * torrents = [NSMutableArray arrayWithCapacity: [selectedIndexes count]]; //take a shot at guessing capacity
-    
+
     for (NSUInteger i = [selectedIndexes firstIndex]; i != NSNotFound; i = [selectedIndexes indexGreaterThanIndex: i])
     {
         id item = [self itemAtRow: i];
@@ -486,7 +486,7 @@
                 i +=[groupTorrents count];
         }
     }
-    
+
     return torrents;
 }
 
@@ -517,7 +517,7 @@
 - (void) keyDown: (NSEvent *) event
 {
     const unichar firstChar = [[event charactersIgnoringModifiers] characterAtIndex: 0];
-    
+
     if (firstChar == 'f' && [event modifierFlags] & NSAlternateKeyMask && [event modifierFlags] & NSCommandKeyMask)
         [fController focusFilterField];
     else if (firstChar == ' ')
@@ -542,10 +542,10 @@
 - (BOOL) validateMenuItem: (NSMenuItem *) menuItem
 {
     SEL action = [menuItem action];
-    
+
     if (action == @selector(paste:))
         return [[[NSPasteboard generalPasteboard] types] containsObject: NSURLPboardType];
-    
+
     return YES;
 }
 
@@ -569,18 +569,18 @@
     const NSInteger row = [self rowAtPoint: [self convertPoint: [event locationInWindow] fromView: nil]];
     if (row < 0)
         return;
-    
+
     //update file action menu
     fMenuTorrent = [[self itemAtRow: row] retain];
-    
+
     //update global limit check
     [fGlobalLimitItem setState: [fMenuTorrent usesGlobalSpeedLimit] ? NSOnState : NSOffState];
-    
+
     //place menu below button
     NSRect rect = [fTorrentCell iconRectForBounds: [self rectOfRow: row]];
     NSPoint location = rect.origin;
     location.y += rect.size.height + 5.0;
-    
+
     if ([NSApp isOnSnowLeopardOrBetter])
     {
         location = [self convertPoint: location toView: self];
@@ -592,10 +592,10 @@
         NSEvent * newEvent = [NSEvent mouseEventWithType: [event type] location: location
             modifierFlags: [event modifierFlags] timestamp: [event timestamp] windowNumber: [event windowNumber]
             context: [event context] eventNumber: [event eventNumber] clickCount: [event clickCount] pressure: [event pressure]];
-        
+
         [NSMenu popUpContextMenu: fActionMenu withEvent: newEvent forView: self];
     }
-    
+
     [fMenuTorrent release];
     fMenuTorrent = nil;
 }
@@ -605,7 +605,7 @@
     //this method seems to be called when it shouldn't be
     if (!fMenuTorrent || ![menu supermenu])
         return;
-    
+
     if (menu == fUploadMenu || menu == fDownloadMenu)
     {
         NSMenuItem * item;
@@ -613,7 +613,7 @@
         {
             const NSInteger speedLimitActionValue[] = { 0, 5, 10, 20, 30, 40, 50, 75, 100, 150, 200, 250, 500,
                                                         750, 1000, 1500, 2000, -1 };
-            
+
             for (NSInteger i = 0; speedLimitActionValue[i] != -1; i++)
             {
                 item = [[NSMenuItem alloc] initWithTitle: [NSString stringWithFormat: NSLocalizedString(@"%d KB/s",
@@ -625,15 +625,15 @@
                 [item release];
             }
         }
-        
+
         const BOOL upload = menu == fUploadMenu;
         const BOOL limit = [fMenuTorrent usesSpeedLimit: upload];
-        
+
         item = [menu itemWithTag: ACTION_MENU_LIMIT_TAG];
         [item setState: limit ? NSOnState : NSOffState];
         [item setTitle: [NSString stringWithFormat: NSLocalizedString(@"Limit (%d KB/s)",
                             "torrent action menu -> upload/download limit"), [fMenuTorrent speedLimit: upload]]];
-        
+
         item = [menu itemWithTag: ACTION_MENU_UNLIMITED_TAG];
         [item setState: !limit ? NSOnState : NSOffState];
     }
@@ -643,7 +643,7 @@
         if ([menu numberOfItems] == 4)
         {
             const float ratioLimitActionValue[] = { 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, -1.0 };
-            
+
             for (NSInteger i = 0; ratioLimitActionValue[i] != -1.0; i++)
             {
                 item = [[NSMenuItem alloc] initWithTitle: [NSString localizedStringWithFormat: @"%.2f", ratioLimitActionValue[i]]
@@ -654,30 +654,30 @@
                 [item release];
             }
         }
-        
+
         const tr_ratiolimit mode = [fMenuTorrent ratioSetting];
-        
+
         item = [menu itemWithTag: ACTION_MENU_LIMIT_TAG];
         [item setState: mode == TR_RATIOLIMIT_SINGLE ? NSOnState : NSOffState];
         [item setTitle: [NSString localizedStringWithFormat: NSLocalizedString(@"Stop at Ratio (%.2f)",
             "torrent action menu -> ratio stop"), [fMenuTorrent ratioLimit]]];
-        
+
         item = [menu itemWithTag: ACTION_MENU_UNLIMITED_TAG];
         [item setState: mode == TR_RATIOLIMIT_UNLIMITED ? NSOnState : NSOffState];
-        
+
         item = [menu itemWithTag: ACTION_MENU_GLOBAL_TAG];
         [item setState: mode == TR_RATIOLIMIT_GLOBAL ? NSOnState : NSOffState];
     }
     else if (menu == fPriorityMenu)
     {
         const tr_priority_t priority = [fMenuTorrent priority];
-        
+
         NSMenuItem * item = [menu itemWithTag: ACTION_MENU_PRIORITY_HIGH_TAG];
         [item setState: priority == TR_PRI_HIGH ? NSOnState : NSOffState];
-        
+
         item = [menu itemWithTag: ACTION_MENU_PRIORITY_NORMAL_TAG];
         [item setState: priority == TR_PRI_NORMAL ? NSOnState : NSOffState];
-        
+
         item = [menu itemWithTag: ACTION_MENU_PRIORITY_LOW_TAG];
         [item setState: priority == TR_PRI_LOW ? NSOnState : NSOffState];
     }
@@ -687,7 +687,7 @@
 {
     const BOOL limit = [sender tag] == ACTION_MENU_LIMIT_TAG;
     [fMenuTorrent setUseSpeedLimit: limit upload: [sender menu] == fUploadMenu];
-    
+
     [[NSNotificationCenter defaultCenter] postNotificationName: @"UpdateOptions" object: nil];
 }
 
@@ -696,14 +696,14 @@
     const BOOL upload = [sender menu] == fUploadMenu;
     [fMenuTorrent setUseSpeedLimit: YES upload: upload];
     [fMenuTorrent setSpeedLimit: [[sender representedObject] intValue] upload: upload];
-    
+
     [[NSNotificationCenter defaultCenter] postNotificationName: @"UpdateOptions" object: nil];
 }
 
 - (void) setGlobalLimit: (id) sender
 {
     [fMenuTorrent setUseGlobalSpeedLimit: [sender state] != NSOnState];
-    
+
     [[NSNotificationCenter defaultCenter] postNotificationName: @"UpdateOptions" object: nil];
 }
 
@@ -724,9 +724,9 @@
         default:
             return;
     }
-    
+
     [fMenuTorrent setRatioSetting: mode];
-    
+
     [[NSNotificationCenter defaultCenter] postNotificationName: @"UpdateOptions" object: nil];
 }
 
@@ -734,7 +734,7 @@
 {
     [fMenuTorrent setRatioSetting: TR_RATIOLIMIT_SINGLE];
     [fMenuTorrent setRatioLimit: [[sender representedObject] floatValue]];
-    
+
     [[NSNotificationCenter defaultCenter] postNotificationName: @"UpdateOptions" object: nil];
 }
 
@@ -755,9 +755,9 @@
         default:
             NSAssert1(NO, @"Unknown priority: %d", [sender tag]);
     }
-    
+
     [fMenuTorrent setPriority: priority];
-    
+
     [[NSNotificationCenter defaultCenter] postNotificationName: @"UpdateUI" object: nil];
 }
 
@@ -766,16 +766,16 @@
     //stop previous animation
     if (fPiecesBarAnimation)
         [fPiecesBarAnimation release];
-    
+
     NSMutableArray * progressMarks = [NSMutableArray arrayWithCapacity: 16];
     for (NSAnimationProgress i = 0.0625; i <= 1.0; i += 0.0625)
         [progressMarks addObject: [NSNumber numberWithDouble: i]];
-    
+
     fPiecesBarAnimation = [[NSAnimation alloc] initWithDuration: TOGGLE_PROGRESS_SECONDS animationCurve: NSAnimationEaseIn];
     [fPiecesBarAnimation setAnimationBlockingMode: NSAnimationNonblocking];
     [fPiecesBarAnimation setProgressMarks: progressMarks];
     [fPiecesBarAnimation setDelegate: self];
-    
+
     [fPiecesBarAnimation startAnimation];
 }
 
@@ -796,7 +796,7 @@
             fPiecesBarPercent = progress;
         else
             fPiecesBarPercent = 1.0 - progress;
-        
+
         [self reloadData];
     }
 }
@@ -815,7 +815,7 @@
     NSInteger row = [self rowAtPoint: point];
     if (row < 0 || [[self itemAtRow: row] isKindOfClass: [Torrent class]])
         return NO;
-    
+
     NSString * ident = [[[self tableColumns] objectAtIndex: [self columnAtPoint: point]] identifier];
     return [ident isEqualToString: @"UL"] || [ident isEqualToString: @"UL Image"]
             || [ident isEqualToString: @"DL"] || [ident isEqualToString: @"DL Image"];
@@ -824,7 +824,7 @@
 - (void) setGroupStatusColumns
 {
     const BOOL ratio = [fDefaults boolForKey: @"DisplayGroupRowRatio"];
-    
+
     [[self tableColumnWithIdentifier: @"DL"] setHidden: ratio];
     [[self tableColumnWithIdentifier: @"DL Image"] setHidden: ratio];
 }

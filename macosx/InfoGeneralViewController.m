@@ -41,7 +41,7 @@
     {
         [self setTitle: NSLocalizedString(@"General Info", "Inspector view -> title")];
     }
-    
+
     return self;
 }
 
@@ -51,13 +51,13 @@
     {
         NSImage * revealOn = [[NSImage imageNamed: @"RevealOn.png"] copy],
                 * revealOff = [[NSImage imageNamed: @"RevealOff.png"] copy];
-        
+
         [revealOn setFlipped: NO];
         [revealOff setFlipped: NO];
-        
+
         [fRevealDataButton setImage: revealOff];
         [fRevealDataButton setAlternateImage: revealOn];
-        
+
         [revealOn release];
         [revealOff release];
     }
@@ -66,7 +66,7 @@
 - (void) dealloc
 {
     [fTorrents release];
-    
+
     [super dealloc];
 }
 
@@ -75,7 +75,7 @@
     //don't check if it's the same in case the metadata changed
     [fTorrents release];
     fTorrents = [torrents retain];
-    
+
     fSet = NO;
 }
 
@@ -83,16 +83,16 @@
 {
     if (!fSet)
         [self setupInfo];
-    
+
     if ([fTorrents count] != 1)
         return;
-    
+
     Torrent * torrent = [fTorrents objectAtIndex: 0];
-    
+
     NSString * location = [torrent dataLocation];
     [fDataLocationField setStringValue: location ? [location stringByAbbreviatingWithTildeInPath] : @""];
     [fDataLocationField setToolTip: location ? location : @""];
-    
+
     [fRevealDataButton setHidden: !location];
 }
 
@@ -102,7 +102,7 @@
     NSString * location = [torrent dataLocation];
     if (!location)
         return;
-    
+
     if ([NSApp isOnSnowLeopardOrBetter])
     {
         NSURL * file = [NSURL fileURLWithPath: location];
@@ -121,21 +121,21 @@
     if ([fTorrents count] == 1)
     {
         Torrent * torrent = [fTorrents objectAtIndex: 0];
-        
+
         NSString * piecesString = ![torrent isMagnet] ? [NSString stringWithFormat: @"%d, %@", [torrent pieceCount],
                                         [NSString stringForFileSize: [torrent pieceSize]]] : @"";
         [fPiecesField setStringValue: piecesString];
-                                        
+
         NSString * hashString = [torrent hashString];
         [fHashField setStringValue: hashString];
         [fHashField setToolTip: hashString];
         [fSecureField setStringValue: [torrent privateTorrent]
                         ? NSLocalizedString(@"Private Torrent, non-tracker peer discovery disabled", "Inspector -> private torrent")
                         : NSLocalizedString(@"Public Torrent", "Inspector -> private torrent")];
-        
+
         NSString * commentString = [torrent comment];
         [fCommentView setString: commentString];
-        
+
         NSString * creatorString = [torrent creator];
         [fCreatorField setStringValue: creatorString];
         [fDateCreatedField setObjectValue: [torrent dateCreated]];
@@ -147,16 +147,16 @@
         [fHashField setToolTip: nil];
         [fSecureField setStringValue: @""];
         [fCommentView setString: @""];
-        
+
         [fCreatorField setStringValue: @""];
         [fDateCreatedField setStringValue: @""];
-        
+
         [fDataLocationField setStringValue: @""];
         [fDataLocationField setToolTip: nil];
-        
+
         [fRevealDataButton setHidden: YES];
     }
-    
+
     fSet = YES;
 }
 

@@ -1,6 +1,6 @@
 /******************************************************************************
  * $Id$
- * 
+ *
  * Copyright (c) 2007-2011 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -36,7 +36,7 @@
     NSMenuItem * menuItem = [[NSMenuItem alloc] initWithTitle: [self label] action: [self action] keyEquivalent: @""];
     [menuItem setTarget: [self target]];
     [menuItem setEnabled: [[self target] validateToolbarItem: self]];
-    
+
     return [menuItem autorelease];
 }
 

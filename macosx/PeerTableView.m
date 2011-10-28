@@ -1,6 +1,6 @@
 /******************************************************************************
  * $Id$
- * 
+ *
  * Copyright (c) 2007-2011 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -34,7 +34,7 @@
     {
         [[NSUserDefaults standardUserDefaults] setBool: ![[NSUserDefaults standardUserDefaults]
             boolForKey: @"DisplayPeerProgressBarNumber"] forKey: @"DisplayPeerProgressBarNumber"];
-        
+
         if ([NSApp isOnSnowLeopardOrBetter])
         {
             NSIndexSet * rowIndexes = [NSIndexSet indexSetWithIndexesInRange: NSMakeRange(0, [self numberOfRows])],

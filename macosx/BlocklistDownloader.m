@@ -45,7 +45,7 @@ BlocklistDownloader * fDownloader = nil;
         fDownloader = [[BlocklistDownloader alloc] init];
         [fDownloader startDownload];
     }
-    
+
     return fDownloader;
 }
 
@@ -84,11 +84,11 @@ BlocklistDownloader * fDownloader = nil;
 - (void) cancelDownload
 {
     [fViewController setFinished];
-    
+
     [fDownload cancel];
-    
+
     [[BlocklistScheduler scheduler] updateSchedule];
-    
+
     fDownloader = nil;
     [self release];
 }
@@ -108,10 +108,10 @@ BlocklistDownloader * fDownloader = nil;
 - (void) download: (NSURLDownload *) download didReceiveResponse: (NSURLResponse *) response
 {
     fState = BLOCKLIST_DL_DOWNLOADING;
-    
+
     fCurrentSize = 0;
     fExpectedSize = [response expectedContentLength];
-    
+
     [fViewController setStatusProgressForCurrentSize: fCurrentSize expectedSize: fExpectedSize];
 }
 
@@ -124,10 +124,10 @@ BlocklistDownloader * fDownloader = nil;
 - (void) download: (NSURLDownload *) download didFailWithError: (NSError *) error
 {
     [fViewController setFailed: [error localizedDescription]];
-    
+
     [[NSUserDefaults standardUserDefaults] setObject: [NSDate date] forKey: @"BlocklistNewLastUpdate"];
     [[BlocklistScheduler scheduler] updateSchedule];
-    
+
     fDownloader = nil;
     [self release];
 }
@@ -150,17 +150,17 @@ BlocklistDownloader * fDownloader = nil;
 - (void) startDownload
 {
     fState = BLOCKLIST_DL_START;
-    
+
     [[BlocklistScheduler scheduler] cancelSchedule];
-    
+
     NSString * urlString = [[NSUserDefaults standardUserDefaults] stringForKey: @"BlocklistURL"];
     if (!urlString)
         urlString = @"";
     else if (![urlString isEqualToString: @""] && [urlString rangeOfString: @"://"].location == NSNotFound)
         urlString = [@"http://" stringByAppendingString: urlString];
-    
+
     NSURLRequest * request = [NSURLRequest requestWithURL: [NSURL URLWithString: urlString]];
-    
+
     fDownload = [[NSURLDownload alloc] initWithRequest: request delegate: self];
 }
 
@@ -169,9 +169,9 @@ BlocklistDownloader * fDownloader = nil;
 {
 	if ([[[fDestination pathExtension] lowercaseString] isEqualToString: @"zip"]) {
 		BOOL success = NO;
-        
+
         NSString * workingDirectory = [fDestination stringByDeletingLastPathComponent];
-		
+
 		//First, perform the actual unzipping
 		NSTask	* unzip = [[NSTask alloc] init];
 		[unzip setLaunchPath: @"/usr/bin/unzip"];
@@ -182,12 +182,12 @@ BlocklistDownloader * fDownloader = nil;
                                 fDestination, /* source zip file */
                                 @"-d", workingDirectory, /*destination*/
                                 nil]];
-		
+
 		@try
 		{
 			[unzip launch];
 			[unzip waitUntilExit];
-			
+
 			if ([unzip terminationStatus] == 0)
 				success = YES;
 		}
@@ -196,11 +196,11 @@ BlocklistDownloader * fDownloader = nil;
 			success = NO;
 		}
 		[unzip release];
-		
+
 		if (success) {
 			//Now find out what file we actually extracted; don't just assume it matches the zipfile's name
 			NSTask *zipinfo;
-			
+
 			zipinfo = [[NSTask alloc] init];
 			[zipinfo setLaunchPath: @"/usr/bin/zipinfo"];
 			[zipinfo setArguments: [NSArray arrayWithObjects:
@@ -208,28 +208,28 @@ BlocklistDownloader * fDownloader = nil;
                                     fDestination, /* source zip file */
                                     nil]];
 			[zipinfo setStandardOutput: [NSPipe pipe]];
-						
+
 			@try
 			{
 				NSFileHandle * zipinfoOutput = [[zipinfo standardOutput] fileHandleForReading];
 
 				[zipinfo launch];
 				[zipinfo waitUntilExit];
-				
+
 				NSString * actualFilename = [[[NSString alloc] initWithData: [zipinfoOutput readDataToEndOfFile]
                                                 encoding: NSUTF8StringEncoding] autorelease];
 				actualFilename = [actualFilename stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
 				NSString * newBlocklistPath = [workingDirectory stringByAppendingPathComponent: actualFilename];
-				
+
 				//Finally, delete the ZIP file; we're done with it, and we'll return the unzipped blocklist
 				[[NSFileManager defaultManager] removeItemAtPath: fDestination error: NULL];
-                
+
                 [fDestination release];
                 fDestination = [newBlocklistPath retain];
 			}
             @catch(id exc) {}
 			[zipinfo release];
-		}		
+		}
 	}
 }
 
@@ -237,35 +237,35 @@ BlocklistDownloader * fDownloader = nil;
 - (void) finishDownloadSuccess
 {
     NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
-    
+
     [fViewController setStatusProcessing];
-    
+
     //process data
     NSAssert(fDestination != nil, @"the blocklist file destination has not been specified");
-    
+
     [self decompressBlocklist];
-    
+
     const int count = tr_blocklistSetContent([PrefsController handle], [fDestination UTF8String]);
-    
+
     //delete downloaded file
     [[NSFileManager defaultManager] removeItemAtPath: fDestination error: NULL];
-    
+
     if (count > 0)
         [fViewController setFinished];
     else
         [fViewController setFailed: NSLocalizedString(@"The specified blocklist file did not contain any valid rules.",
                                         "blocklist fail message")];
-    
+
     //update last updated date for schedule
     NSDate * date = [NSDate date];
     [[NSUserDefaults standardUserDefaults] setObject: date forKey: @"BlocklistNewLastUpdate"];
     [[NSUserDefaults standardUserDefaults] setObject: date forKey: @"BlocklistNewLastUpdateSuccess"];
     [[BlocklistScheduler scheduler] updateSchedule];
-    
+
     [[NSNotificationCenter defaultCenter] postNotificationName: @"BlocklistUpdated" object: nil];
-    
+
     [pool drain];
-    
+
     fDownloader = nil;
     [self release];
 }

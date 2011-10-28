@@ -56,9 +56,9 @@
     {
         fTorrent = torrent;
         fDestination = [[path stringByExpandingTildeInPath] retain];
-        
+
         fController = controller;
-        
+
         fGroupValue = [torrent groupValue];
     }
     return self;
@@ -68,15 +68,15 @@
 {
     [[NSNotificationCenter defaultCenter] addObserver: self selector: @selector(updateGroupMenu:)
         name: @"UpdateGroups" object: nil];
-    
+
     NSString * name = [fTorrent name];
     [[self window] setTitle: name];
     [fNameField setStringValue: name];
     [fNameField setToolTip: name];
-    
+
     [self setGroupsMenu];
     [fGroupPopUp selectItemWithTag: fGroupValue];
-    
+
     NSInteger priorityIndex;
     switch ([fTorrent priority])
     {
@@ -86,9 +86,9 @@
         default: NSAssert1(NO, @"Unknown priority for adding torrent: %d", [fTorrent priority]);
     }
     [fPriorityPopUp selectItemAtIndex: priorityIndex];
-    
+
     [fStartCheck setState: [[NSUserDefaults standardUserDefaults] boolForKey: @"AutoStartDownload"] ? NSOnState : NSOffState];
-    
+
     if (fDestination)
         [self setDestinationPath: fDestination];
     else
@@ -108,9 +108,9 @@
 - (void) dealloc
 {
     [[NSNotificationCenter defaultCenter] removeObserver: self];
-    
+
     [fDestination release];
-    
+
     [super dealloc];
 }
 
@@ -128,10 +128,10 @@
     [panel setCanChooseFiles: NO];
     [panel setCanChooseDirectories: YES];
     [panel setCanCreateDirectories: YES];
-    
+
     [panel setMessage: [NSString stringWithFormat: NSLocalizedString(@"Select the download folder for \"%@\"",
                         "Add -> select destination folder"), [fTorrent name]]];
-    
+
     [panel beginSheetForDirectory: nil file: nil types: nil modalForWindow: [self window] modalDelegate: self
             didEndSelector: @selector(folderChoiceClosed:returnCode:contextInfo:) contextInfo: nil];
 }
@@ -150,7 +150,7 @@
         [alert addButtonWithTitle: NSLocalizedString(@"Cancel", "Add torrent -> same name -> button")];
         [alert addButtonWithTitle: NSLocalizedString(@"Add", "Add torrent -> same name -> button")];
         [alert setShowsSuppressionButton: YES];
-        
+
         [alert beginSheetModalForWindow: [self window] modalDelegate: self
             didEndSelector: @selector(sameNameAlertDidEnd:returnCode:contextInfo:) contextInfo: nil];
     }
@@ -201,7 +201,7 @@
 {
     [fTorrent setWaitToStart: [fStartCheck state] == NSOnState];
     [fTorrent setGroupValue: fGroupValue];
-    
+
     [self close];
     [fController askOpenMagnetConfirmed: self add: YES]; //ensure last, since it releases this controller
 }
@@ -210,16 +210,16 @@
 {
     destination = [destination stringByExpandingTildeInPath];
     if (!fDestination || ![fDestination isEqualToString: destination])
-    { 
+    {
         [fDestination release];
         fDestination = [destination retain];
-        
+
         [fTorrent changeDownloadFolderBeforeUsing: fDestination];
     }
-    
+
     [fLocationField setStringValue: [fDestination stringByAbbreviatingWithTildeInPath]];
     [fLocationField setToolTip: fDestination];
-    
+
     ExpandedPathToIconTransformer * iconTransformer = [[ExpandedPathToIconTransformer alloc] init];
     [fLocationImageView setImage: [iconTransformer transformedValue: fDestination]];
     [iconTransformer release];
@@ -246,7 +246,7 @@
 {
     NSInteger previousGroup = fGroupValue;
     fGroupValue = [sender tag];
-    
+
     if ([[GroupsController groups] usesCustomDownloadLocationForIndex: fGroupValue])
         [self setDestinationPath: [[GroupsController groups] customDownloadLocationForIndex: fGroupValue]];
     else if ([fDestination isEqualToString: [[GroupsController groups] customDownloadLocationForIndex: previousGroup]])
@@ -258,9 +258,9 @@
 {
     if ([[alert suppressionButton] state] == NSOnState)
         [[NSUserDefaults standardUserDefaults] setBool: NO forKey: @"WarningFolderDataSameName"];
-    
+
     [alert release];
-    
+
     if (returnCode == NSAlertSecondButtonReturn)
         [self performSelectorOnMainThread: @selector(confirmAdd) withObject: nil waitUntilDone: NO];
 }

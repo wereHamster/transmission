@@ -14,13 +14,13 @@
 # Macro to add for using GNU gettext.
 # Ulrich Drepper <drepper@cygnus.com>, 1995, 1996
 #
-# Modified to never use included libintl. 
+# Modified to never use included libintl.
 # Owen Taylor <otaylor@redhat.com>, 12/15/1998
 #
 # Major rework to remove unused code
 # Owen Taylor <otaylor@redhat.com>, 12/11/2002
 #
-# Added better handling of ALL_LINGUAS from GNU gettext version 
+# Added better handling of ALL_LINGUAS from GNU gettext version
 # written by Bruno Haible, Owen Taylor <otaylor.redhat.com> 5/30/3002
 #
 # Modified to require ngettext
@@ -32,7 +32,7 @@
 AC_PREREQ(2.53)
 
 dnl
-dnl We go to great lengths to make sure that aclocal won't 
+dnl We go to great lengths to make sure that aclocal won't
 dnl try to pull in the installed version of these macros
 dnl when running aclocal in the glib directory.
 dnl
@@ -125,7 +125,7 @@ glib_DEFUN([GLIB_WITH_NLS],
 	  gt_cv_func_ngettext_libc=yes,
           gt_cv_func_ngettext_libc=no)
         ])
-  
+
       if test "$gt_cv_func_ngettext_libc" = "yes" ; then
 	      AC_CACHE_CHECK([for dgettext in libc], gt_cv_func_dgettext_libc,
         	[AC_TRY_LINK([
@@ -136,7 +136,7 @@ glib_DEFUN([GLIB_WITH_NLS],
 	          gt_cv_func_dgettext_libc=no)
         	])
       fi
-  
+
       if test "$gt_cv_func_ngettext_libc" = "yes" ; then
         AC_CHECK_FUNCS(bind_textdomain_codeset)
       fi
@@ -147,7 +147,7 @@ glib_DEFUN([GLIB_WITH_NLS],
       if test "$gt_cv_func_dgettext_libc" != "yes" \
 	 || test "$gt_cv_func_ngettext_libc" != "yes" \
          || test "$ac_cv_func_bind_textdomain_codeset" != "yes" ; then
-        
+
         AC_CHECK_LIB(intl, bindtextdomain,
 	    [AC_CHECK_LIB(intl, ngettext,
 		    [AC_CHECK_LIB(intl, dgettext,
@@ -191,11 +191,11 @@ glib_DEFUN([GLIB_WITH_NLS],
 	|| test "$gt_cv_func_dgettext_libintl" = "yes"; then
         gt_cv_have_gettext=yes
       fi
-  
+
       if test "$gt_cv_func_dgettext_libintl" = "yes"; then
         INTLLIBS="-lintl $libintl_extra_libs"
       fi
-  
+
       if test "$gt_cv_have_gettext" = "yes"; then
 	AC_DEFINE(HAVE_GETTEXT,1,
 	  [Define if the GNU gettext() function is already present or preinstalled.])
@@ -210,7 +210,7 @@ glib_DEFUN([GLIB_WITH_NLS],
 	    [test -z "`$ac_dir/$ac_word -h 2>&1 | grep '(HELP)'`"], :)
 	  AC_TRY_LINK(, [extern int _nl_msg_cat_cntr;
 			 return _nl_msg_cat_cntr],
-	    [CATOBJEXT=.gmo 
+	    [CATOBJEXT=.gmo
              DATADIRNAME=share],
 	    [case $host in
 	    *-*-solaris*)
@@ -220,7 +220,7 @@ glib_DEFUN([GLIB_WITH_NLS],
 	    dnl Hence, we'd like to go with DATADIRNAME=share and
 	    dnl and CATOBJEXT=.gmo in this case.
             AC_CHECK_FUNC(bind_textdomain_codeset,
-	      [CATOBJEXT=.gmo 
+	      [CATOBJEXT=.gmo
                DATADIRNAME=share],
 	      [CATOBJEXT=.mo
                DATADIRNAME=lib])
@@ -287,18 +287,18 @@ glib_DEFUN([GLIB_WITH_NLS],
 
 # AM_GLIB_GNU_GETTEXT
 # -------------------
-# Do checks necessary for use of gettext. If a suitable implementation 
+# Do checks necessary for use of gettext. If a suitable implementation
 # of gettext is found in either in libintl or in the C library,
 # it will set INTLLIBS to the libraries needed for use of gettext
 # and AC_DEFINE() HAVE_GETTEXT and ENABLE_NLS. (The shell variable
 # gt_cv_have_gettext will be set to "yes".) It will also call AC_SUBST()
-# on various variables needed by the Makefile.in.in installed by 
+# on various variables needed by the Makefile.in.in installed by
 # glib-gettextize.
 dnl
 glib_DEFUN([GLIB_GNU_GETTEXT],
   [AC_REQUIRE([AC_PROG_CC])dnl
    AC_REQUIRE([AC_HEADER_STDC])dnl
-   
+
    GLIB_LC_MESSAGES
    GLIB_WITH_NLS
 
