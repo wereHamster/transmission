@@ -31,7 +31,7 @@ entropy), or at least take the SHA-1 of something.  However, it is a good
 idea to keep the id stable, so you may want to store it in stable storage
 at client shutdown.
 
- 
+
 * dht_uninit
 
 This may be called at the end of the session.

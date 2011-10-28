@@ -83,14 +83,14 @@
 		var f = isNaN(v) ? s[typeof v] : s['number'];
 		if (f) return f(v);
 	};
-	
+
 	$.parseJSON = function(v, safe) {
 		if (safe === undefined) safe = $.parseJSON.safe;
 		if (safe && !/^("(\\.|[^"\\\n\r])*?"|[,:{}\[\]0-9.\-+Eaeflnr-u \n\r\t])+?$/.test(v))
 			return undefined;
 		return eval('('+v+')');
 	};
-	
+
 	$.parseJSON.safe = false;
 
 })(jQuery);

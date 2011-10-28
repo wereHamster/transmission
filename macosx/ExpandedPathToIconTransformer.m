@@ -1,6 +1,6 @@
 /******************************************************************************
  * $Id$
- * 
+ *
  * Copyright (c) 2007-2011 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -40,7 +40,7 @@
 {
     if (!value)
         return nil;
-    
+
     NSString * path = [value stringByExpandingTildeInPath];
     NSImage * icon;
     //show a folder icon if the folder doesn't exist
@@ -48,9 +48,9 @@
         icon = [[NSWorkspace sharedWorkspace] iconForFileType: NSFileTypeForHFSTypeCode('fldr')];
     else
         icon = [[NSWorkspace sharedWorkspace] iconForFile: path];
-    
+
     [icon setSize: NSMakeSize(16.0, 16.0)];
-    
+
     return icon;
 }
 

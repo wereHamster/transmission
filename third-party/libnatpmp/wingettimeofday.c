@@ -30,7 +30,7 @@ typedef struct _FILETIME {
 } FILETIME;
 
 void __stdcall GetSystemTimeAsFileTime(FILETIME*);
-  
+
 //int gettimeofday(struct timeval* p, void* tz /* IGNORED */);
 
 int gettimeofday(struct timeval* p, void* tz /* IGNORED */) {

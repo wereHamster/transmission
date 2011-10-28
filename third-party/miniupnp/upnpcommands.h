@@ -68,12 +68,12 @@ UPNP_GetConnectionTypeInfo(const char * controlURL,
 
 /* UPNP_GetExternalIPAddress() call the corresponding UPNP method.
  * if the third arg is not null the value is copied to it.
- * at least 16 bytes must be available 
+ * at least 16 bytes must be available
  *
  * Return values :
  * 0 : SUCCESS
  * NON ZERO : ERROR Either an UPnP error code or an unknown error.
- * 
+ *
  * possible UPnP Errors :
  * 402 Invalid Args - See UPnP Device Architecture section on Control.
  * 501 Action Failed - See UPnP Device Architecture section on Control. */
@@ -101,7 +101,7 @@ UPNP_GetLinkLayerMaxBitRates(const char* controlURL,
  * Return values :
  * 0 : SUCCESS
  * NON ZERO : ERROR. Either an UPnP error code or an unknown error.
- * 
+ *
  * List of possible UPnP errors for AddPortMapping :
  * errorCode errorDescription (short) - Description (long)
  * 402 Invalid Args - See UPnP Device Architecture section on Control.
@@ -112,7 +112,7 @@ UPNP_GetLinkLayerMaxBitRates(const char* controlURL,
  * 718 ConflictInMappingEntry - The port mapping entry specified conflicts
  *                     with a mapping assigned previously to another client
  * 724 SamePortValuesRequired - Internal and External port values
- *                              must be the same 
+ *                              must be the same
  * 725 OnlyPermanentLeasesSupported - The NAT implementation only supports
  *                  permanent lease times on port mappings
  * 726 RemoteHostOnlySupportsWildcard - RemoteHost must be a wildcard

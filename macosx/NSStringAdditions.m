@@ -54,7 +54,7 @@
     NSNumberFormatter * numberFormatter = [[[NSNumberFormatter alloc] init] autorelease];
     [numberFormatter setNumberStyle: NSNumberFormatterDecimalStyle];
     [numberFormatter setMaximumFractionDigits: 0];
-    
+
     return [numberFormatter stringFromNumber: [NSNumber numberWithUnsignedInteger: value]];
 }
 
@@ -68,7 +68,7 @@
     NSString * units;
     NSString * fullString = [self stringForFileSize: fullSize showUnitUnless: nil unitsUsed: &units];
     NSString * partialString = [self stringForFileSize: partialSize showUnitUnless: units unitsUsed: nil];
-    
+
     return [NSString stringWithFormat: NSLocalizedString(@"%@ of %@", "file size string"), partialString, fullString];
 }
 
@@ -121,10 +121,10 @@
 + (NSString *) timeString: (uint64_t) seconds showSeconds: (BOOL) showSeconds maxFields: (NSUInteger) max
 {
     NSAssert(max > 0, @"Cannot generate a time string with no fields");
-    
+
     NSMutableArray * timeArray = [NSMutableArray arrayWithCapacity: MIN(max, 5)];
     NSUInteger remaining = seconds; //causes problems for some users when it's a uint64_t
-    
+
     if (seconds >= 31557600) //official amount of seconds in one year
     {
         const NSUInteger years = remaining / 31557600;
@@ -159,7 +159,7 @@
     }
     if (max > 0 && showSeconds)
         [timeArray addObject: [NSString stringWithFormat: NSLocalizedString(@"%u sec", "time string"), remaining]];
-    
+
     return [timeArray componentsJoinedByString: @" "];
 }
 
@@ -191,7 +191,7 @@
 {
     const float baseFloat = [NSApp isOnSnowLeopardOrBetter] ? 1000.0 : 1024.0;
     const NSUInteger baseInt = [NSApp isOnSnowLeopardOrBetter] ? 1000 : 1024;
-    
+
     double convertedSize;
     NSString * unit;
     NSUInteger decimals;
@@ -219,34 +219,34 @@
         unit = NSLocalizedString(@"TB", "File size - terabytes");
         decimals = 3; //guessing on this one
     }
-    
+
     //match Finder's behavior
     NSNumberFormatter * numberFormatter = [[NSNumberFormatter alloc] init];
     [numberFormatter setNumberStyle: NSNumberFormatterDecimalStyle];
     [numberFormatter setMinimumFractionDigits: 0];
     [numberFormatter setMaximumFractionDigits: decimals];
-    
+
     NSString * fileSizeString = [numberFormatter stringFromNumber: [NSNumber numberWithFloat: convertedSize]];
     [numberFormatter release];
-    
+
     if (!notAllowedUnit || ![unit isEqualToString: notAllowedUnit])
         fileSizeString = [fileSizeString stringByAppendingFormat: @" %@", unit];
-    
+
     if (unitUsed)
         *unitUsed = unit;
-    
+
     return fileSizeString;
 }
 
 + (NSString *) stringForSpeed: (CGFloat) speed kb: (NSString *) kb mb: (NSString *) mb gb: (NSString *) gb
 {
     const CGFloat baseFloat = [NSApp isOnSnowLeopardOrBetter] ? 1000.0 : 1024.0;
-    
+
     if (speed <= 999.95) //0.0 KB/s to 999.9 KB/s
         return [NSString localizedStringWithFormat: @"%.1f %@", speed, kb];
-    
+
     speed /= baseFloat;
-    
+
     if (speed <= 99.995) //1.00 MB/s to 99.99 MB/s
         return [NSString localizedStringWithFormat: @"%.2f %@", speed, mb];
     else if (speed <= 999.95) //100.0 MB/s to 999.9 MB/s

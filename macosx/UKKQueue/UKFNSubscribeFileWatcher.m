@@ -1,11 +1,11 @@
 /* =============================================================================
 	FILE:		UKFNSubscribeFileWatcher.m
 	PROJECT:	Filie
-    
+
     COPYRIGHT:  (c) 2005 M. Uli Kusterer, all rights reserved.
-    
+
 	AUTHORS:	M. Uli Kusterer - UK
-    
+
     LICENSES:   MIT License
 
 	REVISIONS:
@@ -38,10 +38,10 @@ void    UKFileSubscriptionProc(FNMessage message, OptionBits flags, void *refcon
 +(id) sharedFileWatcher
 {
 	static UKFNSubscribeFileWatcher* sSharedFileWatcher = nil;
-	
+
 	if( !sSharedFileWatcher )
 		sSharedFileWatcher = [[UKFNSubscribeFileWatcher alloc] init];	// This is a singleton, and thus an intentional "leak".
-    
+
     return sSharedFileWatcher;
 }
 
@@ -53,11 +53,11 @@ void    UKFileSubscriptionProc(FNMessage message, OptionBits flags, void *refcon
 -(id)   init
 {
     self = [super init];
-    if( !self ) 
+    if( !self )
         return nil;
-    
+
     subscriptions = [[NSMutableDictionary alloc] init];
-    
+
     return self;
 }
 
@@ -70,13 +70,13 @@ void    UKFileSubscriptionProc(FNMessage message, OptionBits flags, void *refcon
 {
     NSEnumerator*   enny = [subscriptions objectEnumerator];
     NSValue*        subValue = nil;
-    
+
     while( (subValue = [enny nextObject]) )
     {
         FNSubscriptionRef   subscription = [subValue pointerValue];
         FNUnsubscribe( subscription );
     }
-    
+
     [subscriptions release];
     [super dealloc];
 }
@@ -94,10 +94,10 @@ void    UKFileSubscriptionProc(FNMessage message, OptionBits flags, void *refcon
     OSStatus                    err = noErr;
     static FNSubscriptionUPP    subscriptionUPP = NULL;
     FNSubscriptionRef           subscription = NULL;
-    
+
     if( !subscriptionUPP )
         subscriptionUPP = NewFNSubscriptionUPP( UKFileSubscriptionProc );
-    
+
     err = FNSubscribeByPath( (UInt8*) [path fileSystemRepresentation], subscriptionUPP, (void*)self,
                                 kNilOptions, &subscription );
     if( err != noErr )
@@ -105,7 +105,7 @@ void    UKFileSubscriptionProc(FNMessage message, OptionBits flags, void *refcon
         NSLog( @"UKFNSubscribeFileWatcher addPath: %@ failed due to error ID=%d.", path, err );
         return;
     }
-    
+
     [subscriptions setObject: [NSValue valueWithPointer: subscription] forKey: path];
 }
 
@@ -123,11 +123,11 @@ void    UKFileSubscriptionProc(FNMessage message, OptionBits flags, void *refcon
         subValue = [[[subscriptions objectForKey: path] retain] autorelease];
         [subscriptions removeObjectForKey: path];
     }
-    
+
 	if( subValue )
 	{
 		FNSubscriptionRef   subscription = [subValue pointerValue];
-		
+
 		FNUnsubscribe( subscription );
 	}
 }
@@ -146,11 +146,11 @@ void    UKFileSubscriptionProc(FNMessage message, OptionBits flags, void *refcon
 {
     NSValue*                    subValue = [NSValue valueWithPointer: subscription];
     NSString*                   path = [[subscriptions allKeysForObject: subValue] objectAtIndex: 0];
-    
+
 	[[[NSWorkspace sharedWorkspace] notificationCenter] postNotificationName: UKFileWatcherWriteNotification
 															object: self
 															userInfo: [NSDictionary dictionaryWithObjectsAndKeys: path, @"path", nil]];
-	
+
     [delegate watcher: self receivedNotification: UKFileWatcherWriteNotification forPath: path];
     //NSLog( @"UKFNSubscribeFileWatcher noticed change to %@", path );	// DEBUG ONLY!
 }
@@ -193,7 +193,7 @@ void    UKFileSubscriptionProc(FNMessage message, OptionBits flags, void *refcon
 void    UKFileSubscriptionProc( FNMessage message, OptionBits flags, void *refcon, FNSubscriptionRef subscription )
 {
     UKFNSubscribeFileWatcher*   obj = (UKFNSubscribeFileWatcher*) refcon;
-    
+
     if( message == kFNDirectoryModifiedMessage )    // No others exist as of 10.4
         [obj sendDelegateMessage: message forSubscription: subscription];
     else

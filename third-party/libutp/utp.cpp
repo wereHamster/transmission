@@ -517,7 +517,7 @@ struct DelayHist {
 			// update it
 			delay_base = sample;
 		}
-		
+
 		// this operation may wrap, and is supposed to
 		const uint32 delay = sample - delay_base;
 		// sanity check. If this is triggered, something fishy is going on
@@ -532,7 +532,7 @@ struct DelayHist {
 			delay_base_time = g_current_ms;
 			delay_base_idx = (delay_base_idx + 1) % DELAY_BASE_HISTORY;
 			// clear up the new delay base history spot by initializing
-			// it to the current sample, then update it 
+			// it to the current sample, then update it
 			delay_base_hist[delay_base_idx] = sample;
 			delay_base = delay_base_hist[0];
 			// Assign the lowest delay in the last 2 minutes to delay_base
@@ -1133,7 +1133,7 @@ void UTPSocket::write_outgoing_packet(size_t payload, uint flags)
 		size_t added = 0;
 
 		OutgoingPacket *pkt = NULL;
-		
+
 		if (cur_window_packets > 0) {
 			pkt = (OutgoingPacket*)outbuf.get(seq_nr - 1);
 		}
@@ -1287,7 +1287,7 @@ void UTPSocket::check_timeouts()
 
 			/*
 			OutgoingPacket *pkt = (OutgoingPacket*)outbuf.get(seq_nr - cur_window_packets);
-			
+
 			// If there were a lot of retransmissions, force recomputation of round trip time
 			if (pkt->transmissions >= 4)
 				rtt = 0;
@@ -1530,7 +1530,7 @@ void UTPSocket::selective_ack(uint base, const byte *mask, byte len)
 
 		// sequence number space:
 		//
-		//     rejected <   accepted   > rejected 
+		//     rejected <   accepted   > rejected
 		// <============+--------------+============>
 		//              ^              ^
 		//              |              |
@@ -1630,7 +1630,7 @@ void UTPSocket::apply_ledbat_ccontrol(size_t bytes_acked, uint32 actual_delay, i
 {
 	// the delay can never be greater than the rtt. The min_rtt
 	// variable is the RTT in microseconds
-	
+
 	assert(min_rtt >= 0);
 	int32 our_delay = min<uint32>(our_hist.get_value(), uint32(min_rtt));
 	assert(our_delay != INT_MAX);
@@ -1721,12 +1721,12 @@ static void UTP_RegisterRecvPacket(UTPSocket *conn, size_t len)
 			_global_stats._nraw_recv[PACKET_SIZE_EMPTY_BUCKET]++;
 		} else if (len <= PACKET_SIZE_SMALL) {
 			_global_stats._nraw_recv[PACKET_SIZE_SMALL_BUCKET]++;
-		} else 
+		} else
 			_global_stats._nraw_recv[PACKET_SIZE_MID_BUCKET]++;
 	} else {
 		if (len <= PACKET_SIZE_BIG) {
 			_global_stats._nraw_recv[PACKET_SIZE_BIG_BUCKET]++;
-		} else 
+		} else
 			_global_stats._nraw_recv[PACKET_SIZE_HUGE_BUCKET]++;
 	}
 }
@@ -1905,7 +1905,7 @@ size_t UTP_ProcessIncoming(UTPSocket *conn, const byte *packet, size_t len, bool
 		acked_bytes += pkt->payload;
 		min_rtt = min<int64>(min_rtt, UTP_GetMicroseconds() - pkt->time_sent);
 	}
-	
+
 	// count bytes acked by EACK
 	if (selack_ptr != NULL) {
 		acked_bytes += conn->selective_ack_bytes((pk_ack_nr + 2) & ACK_NR_MASK,
@@ -2303,7 +2303,7 @@ void UTP_Free(UTPSocket *conn)
 	assert(g_utp_sockets[last->idx] == last);
 
 	last->idx = conn->idx;
-	
+
 	g_utp_sockets[conn->idx] = last;
 
 	// Decrease the count

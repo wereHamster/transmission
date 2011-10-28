@@ -7,7 +7,7 @@
  * are met:
  *
  * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer. 
+ *    notice, this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in
@@ -108,7 +108,7 @@ void EC_GROUP_clear_free(EC_GROUP *);
 int EC_GROUP_copy(EC_GROUP *, const EC_GROUP *);
 
 const EC_METHOD *EC_GROUP_method_of(const EC_GROUP *);
-	
+
 
 /* We don't have types for field specifications and field elements in general.
  * Otherwise we could declare
@@ -130,7 +130,7 @@ EC_POINT *EC_POINT_new(const EC_GROUP *);
 void EC_POINT_free(EC_POINT *);
 void EC_POINT_clear_free(EC_POINT *);
 int EC_POINT_copy(EC_POINT *, const EC_POINT *);
- 
+
 const EC_METHOD *EC_POINT_method_of(const EC_POINT *);
 
 int EC_POINT_set_to_infinity(const EC_GROUP *, EC_POINT *);

@@ -44,9 +44,9 @@
 - (void) awakeFromNib
 {
     [fTableView registerForDraggedTypes: [NSArray arrayWithObject: GROUP_TABLE_VIEW_DATA_TYPE]];
-    
+
     [fSelectedColorView addObserver: self forKeyPath: @"color" options: 0 context: NULL];
-    
+
     [self updateSelectedGroup];
 }
 
@@ -59,7 +59,7 @@
 {
     GroupsController * groupsController = [GroupsController groups];
     NSInteger groupsIndex = [groupsController indexForRow: row];
-    
+
     NSString * identifier = [tableColumn identifier];
     if ([identifier isEqualToString: @"Color"])
         return [groupsController imageForIndex: groupsIndex];
@@ -108,7 +108,7 @@
         [fTableView setDropRow: row dropOperation: NSTableViewDropAbove];
         return NSDragOperationGeneric;
     }
-    
+
     return NSDragOperationNone;
 }
 
@@ -120,12 +120,12 @@
     {
         NSIndexSet * indexes = [NSKeyedUnarchiver unarchiveObjectWithData: [pasteboard dataForType: GROUP_TABLE_VIEW_DATA_TYPE]];
         NSInteger oldRow = [indexes firstIndex], selectedRow = [fTableView selectedRow];
-        
+
         [[GroupsController groups] moveGroupAtRow: oldRow toRow: newRow];
-        
+
         if (oldRow < newRow)
             newRow--;
-        
+
         if (selectedRow == oldRow)
             selectedRow = newRow;
         else if (selectedRow > oldRow && selectedRow <= newRow)
@@ -133,11 +133,11 @@
         else if (selectedRow < oldRow && selectedRow >= newRow)
             selectedRow++;
         else;
-        
+
         [fTableView selectRowIndexes: [NSIndexSet indexSetWithIndex: selectedRow] byExtendingSelection: NO];
         [fTableView reloadData];
     }
-    
+
     return YES;
 }
 
@@ -146,28 +146,28 @@
     [[NSColorPanel sharedColorPanel] close];
 
     NSInteger row;
-    
+
     switch ([[sender cell] tagForSegment: [sender selectedSegment]])
     {
         case ADD_TAG:
             [[GroupsController groups] addNewGroup];
-            
+
             [fTableView reloadData];
-            
+
             row = [fTableView numberOfRows]-1;
             [fTableView selectRowIndexes: [NSIndexSet indexSetWithIndex: row] byExtendingSelection: NO];
             [fTableView scrollRowToVisible: row];
-            
+
             [[fSelectedColorNameField window] makeFirstResponder: fSelectedColorNameField];
-            
+
             break;
-        
+
         case REMOVE_TAG:
             row = [fTableView selectedRow];
-            [[GroupsController groups] removeGroupWithRowIndex: row];            
-                        
+            [[GroupsController groups] removeGroupWithRowIndex: row];
+
             [fTableView reloadData];
-            
+
             if ([fTableView numberOfRows] > 0)
             {
                 if (row == [fTableView numberOfRows])
@@ -175,13 +175,13 @@
                     --row;
                     [fTableView selectRowIndexes: [NSIndexSet indexSetWithIndex: row] byExtendingSelection: NO];
                 }
-                
+
                 [fTableView scrollRowToVisible: row];
             }
-            
+
             break;
     }
-    
+
     [self updateSelectedGroup];
 }
 
@@ -230,9 +230,9 @@
         if (![[GroupsController groups] customDownloadLocationForIndex: index])
             [[GroupsController groups] setUsesCustomDownloadLocation: NO forIndex: index];
     }
-    
+
     [self refreshCustomLocationWithSingleGroup];
-    
+
     [fCustomLocationPopUp selectItemAtIndex: 0];
 }
 
@@ -263,10 +263,10 @@
     NSInteger index = [[GroupsController groups] indexForRow: [fTableView selectedRow]];
 	NSPredicate *predicate = [[GroupsController groups] autoAssignRulesForIndex: index];
 	[fRuleEditor setObjectValue: predicate];
-	
+
     if ([fRuleEditor numberOfRows] == 0)
         [fRuleEditor addRow: nil];
-        
+
     [NSApp beginSheet: fGroupRulesSheetWindow modalForWindow: [fTableView window] modalDelegate: nil didEndSelector: NULL
         contextInfo: NULL];
 }
@@ -275,7 +275,7 @@
 {
     [fGroupRulesSheetWindow orderOut: nil];
     [NSApp endSheet: fGroupRulesSheetWindow];
-    
+
     NSInteger index = [[GroupsController groups] indexForRow: [fTableView selectedRow]];
     if (![[GroupsController groups] autoAssignRulesForIndex: index])
     {
@@ -289,13 +289,13 @@
 {
     [fGroupRulesSheetWindow orderOut: nil];
     [NSApp endSheet: fGroupRulesSheetWindow];
-    
+
     NSInteger index = [[GroupsController groups] indexForRow: [fTableView selectedRow]];
     [[GroupsController groups] setUsesAutoAssignRules: YES forIndex: index];
-    
+
     NSPredicate * predicate = [fRuleEditor objectValue];
     [[GroupsController groups] setAutoAssignRules: predicate forIndex: index];
-	
+
     [fAutoAssignRulesEnableCheck setState: [[GroupsController groups] usesAutoAssignRulesForIndex: index]];
     [fAutoAssignRulesEditButton setEnabled: [fAutoAssignRulesEnableCheck state] == NSOnState];
 }
@@ -306,7 +306,7 @@
     NSRect windowFrame = [fRuleEditor window].frame;
     windowFrame.size.height += heightDifference;
     windowFrame.origin.y -= heightDifference;
-    
+
     [fRuleEditor.window setFrame: windowFrame display: YES animate: YES];
 }
 
@@ -324,7 +324,7 @@
         [fSelectedColorView setEnabled: YES];
         [fSelectedColorNameField setStringValue: [[GroupsController groups] nameForIndex: index]];
         [fSelectedColorNameField setEnabled: YES];
-        
+
         [self refreshCustomLocationWithSingleGroup];
 
         [fAutoAssignRulesEnableCheck setState: [[GroupsController groups] usesAutoAssignRulesForIndex: index]];
@@ -347,12 +347,12 @@
 - (void) refreshCustomLocationWithSingleGroup
 {
     const NSInteger index = [[GroupsController groups] indexForRow: [fTableView selectedRow]];
-    
+
     const BOOL hasCustomLocation = [[GroupsController groups] usesCustomDownloadLocationForIndex: index];
     [fCustomLocationEnableCheck setState: hasCustomLocation];
     [fCustomLocationEnableCheck setEnabled: YES];
     [fCustomLocationPopUp setEnabled: hasCustomLocation];
-    
+
     NSString * location = [[GroupsController groups] customDownloadLocationForIndex: index];
     if (location)
     {

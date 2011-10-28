@@ -81,7 +81,7 @@ sub CreateGraph
 		"HRULE:0#666666";
 
 	if ($ERROR = RRDs::error) {
-		print "$0: unable to generate $_[0] $_[1] traffic graph: $ERROR\n"; 
+		print "$0: unable to generate $_[0] $_[1] traffic graph: $ERROR\n";
 	}
 }
 

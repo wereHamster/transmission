@@ -34,17 +34,17 @@
     IBOutlet NSSegmentedControl * fTrackerAddRemoveControl;
     IBOutlet NSTextView * fCommentView;
     IBOutlet NSButton * fPrivateCheck, * fOpenCheck;
-    
+
     IBOutlet NSView * fProgressView;
     IBOutlet NSProgressIndicator * fProgressIndicator;
-    
+
     tr_metainfo_builder * fInfo;
     NSString * fPath, * fLocation;
     NSMutableArray * fTrackers;
-    
+
     NSTimer * fTimer;
     BOOL fStarted;
-    
+
     NSUserDefaults * fDefaults;
 }
 

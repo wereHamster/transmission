@@ -1,7 +1,7 @@
 /* $Id: upnpreplyparse.c,v 1.10 2008/02/21 13:05:27 nanard Exp $ */
 /* MiniUPnP project
  * http://miniupnp.free.fr/ or http://miniupnp.tuxfamily.org/
- * (c) 2006 Thomas Bernard 
+ * (c) 2006 Thomas Bernard
  * This software is subject to the conditions detailed
  * in the LICENCE file provided within the distribution */
 
@@ -65,7 +65,7 @@ ClearNameValueList(struct NameValueParserData * pdata)
     }
 }
 
-char * 
+char *
 GetValueFromNameValueList(struct NameValueParserData * pdata,
                           const char * Name)
 {
@@ -106,7 +106,7 @@ GetValueFromNameValueListIgnoreNS(struct NameValueParserData * pdata,
 }
 #endif
 
-/* debug all-in-one function 
+/* debug all-in-one function
  * do parsing then display to stdout */
 #ifdef DEBUG
 void

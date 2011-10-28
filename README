@@ -31,7 +31,7 @@ BUILDING
     Download a tarball from http://build.transmissionbt.com/job/trunk-linux-inc/
     and follow the steps from the previous section.
 
-    If you're new to building programs from source code, this is typically 
+    If you're new to building programs from source code, this is typically
     easier than building from SVN.
 
   Building Transmission from SVN (First Time):
@@ -47,7 +47,7 @@ BUILDING
     $ cd Transmission
     $ make clean
     $ svn up
-    $ ./update-version-h.sh 
+    $ ./update-version-h.sh
     $ make
     $ sudo make install
 

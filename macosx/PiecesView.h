@@ -29,9 +29,9 @@
 @interface PiecesView : NSImageView
 {
     int8_t  * fPieces;
-    
+
     NSColor * fGreenAvailabilityColor, * fBluePieceColor;
-    
+
     Torrent * fTorrent;
     NSInteger fNumPieces, fAcross, fWidth, fExtraBorder;
 }

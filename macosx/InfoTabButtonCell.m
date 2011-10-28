@@ -29,13 +29,13 @@
 - (void) awakeFromNib
 {
     [(NSMatrix *)[self controlView] setToolTip: [self title] forCell: self];
-    
+
     NSNotificationCenter * nc = [NSNotificationCenter defaultCenter];
     [nc addObserver: self selector: @selector(updateControlTint:)
         name: NSControlTintDidChangeNotification object: NSApp];
-        
+
     fSelected = NO;
-    
+
     //expects the icon to currently be set as the image
     fIcon = [[self image] retain];
     [self setSelectedTab: fSelected];
@@ -44,7 +44,7 @@
 - (void) dealloc
 {
     [[NSNotificationCenter defaultCenter] removeObserver: self];
-    
+
     [fIcon release];
     [super dealloc];
 }
@@ -52,17 +52,17 @@
 - (void) setSelectedTab: (BOOL) selected
 {
     fSelected = selected;
-    
+
     NSInteger row, col;
     [(NSMatrix *)[self controlView] getRow: &row column: &col ofCell: self];
     NSRect tabRect = [(NSMatrix *)[self controlView] cellFrameAtRow: row column: col];
     tabRect.origin.x = 0.0;
     tabRect.origin.y = 0.0;
-    
+
     NSImage * tabImage = [[NSImage alloc] initWithSize: tabRect.size];
-        
+
     [tabImage lockFocus];
-    
+
     NSGradient * gradient;
     if (fSelected)
     {
@@ -76,30 +76,30 @@
         NSColor * darkColor = [NSColor colorWithCalibratedRed: 215.0/255.0 green: 215.0/255.0 blue: 215.0/255.0 alpha: 1.0];
         gradient = [[NSGradient alloc] initWithStartingColor: lightColor endingColor: darkColor];
     }
-    
+
     [[NSColor grayColor] set];
     NSRectFill(NSMakeRect(0.0, 0.0, NSWidth(tabRect), 1.0));
     NSRectFill(NSMakeRect(0.0, NSHeight(tabRect) - 1.0, NSWidth(tabRect), 1.0));
     NSRectFill(NSMakeRect(NSWidth(tabRect) - 1.0, 1.0, NSWidth(tabRect) - 1.0, NSHeight(tabRect) - 2.0));
-    
+
     tabRect = NSMakeRect(0.0, 1.0, NSWidth(tabRect) - 1.0, NSHeight(tabRect) - 2.0);
-    
+
     [gradient drawInRect: tabRect angle: 270.0];
     [gradient release];
-    
+
     if (fIcon)
     {
         const NSSize iconSize = [fIcon size];
-        
+
         const NSRect iconRect = NSMakeRect(NSMinX(tabRect) + floor((NSWidth(tabRect) - iconSize.width) * 0.5),
                                             NSMinY(tabRect) + floor((NSHeight(tabRect) - iconSize.height) * 0.5),
                                             iconSize.width, iconSize.height);
-        
+
         [fIcon drawInRect: iconRect fromRect: NSZeroRect operation: NSCompositeSourceOver fraction: 1.0];
     }
-    
+
     [tabImage unlockFocus];
-    
+
     [self setImage: tabImage];
     [tabImage release];
 }

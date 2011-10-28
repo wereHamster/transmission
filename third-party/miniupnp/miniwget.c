@@ -4,7 +4,7 @@
  * Copyright (c) 2005-2010 Thomas Bernard
  * This software is subject to the conditions detailed in the
  * LICENCE file provided in this distribution. */
- 
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -124,7 +124,7 @@ getHTTPResponse(int s, int * size)
 					linestart = i+2;
 					colon = linestart;
 					valuestart = 0;
-				} 
+				}
 				/* searching for the end of the HTTP headers */
 				if(header_buf[i]=='\r' && header_buf[i+1]=='\n'
 				   && header_buf[i+2]=='\r' && header_buf[i+3]=='\n')
@@ -157,7 +157,7 @@ getHTTPResponse(int s, int * size)
 #ifdef DEBUG
 									printf("end of HTTP content !\n");
 #endif
-									goto end_of_stream;	
+									goto end_of_stream;
 								}
 								bytestocopy = ((int)chunksize < header_buf_used - i)?chunksize:(header_buf_used - i);
 #ifdef DEBUG
@@ -229,7 +229,7 @@ getHTTPResponse(int s, int * size)
 					bytestocopy = ((int)chunksize < n - i)?chunksize:(n - i);
 					if((int)(content_buf_used + bytestocopy) > content_buf_len)
 					{
-						content_buf = (char *)realloc((void *)content_buf, 
+						content_buf = (char *)realloc((void *)content_buf,
 						                              content_buf_used + bytestocopy);
 						content_buf_len = content_buf_used + bytestocopy;
 					}
@@ -243,7 +243,7 @@ getHTTPResponse(int s, int * size)
 			{
 				if(content_buf_used + n > content_buf_len)
 				{
-					content_buf = (char *)realloc((void *)content_buf, 
+					content_buf = (char *)realloc((void *)content_buf,
 					                              content_buf_used + n);
 					content_buf_len = content_buf_used + n;
 				}
@@ -390,7 +390,7 @@ miniwget2(const char * url, const char * host,
  *   url :		source string not modified
  *   hostname :	hostname destination string (size of MAXHOSTNAMELEN+1)
  *   port :		port (destination)
- *   path :		pointer to the path part of the URL 
+ *   path :		pointer to the path part of the URL
  *
  * Return values :
  *    0 - Failure

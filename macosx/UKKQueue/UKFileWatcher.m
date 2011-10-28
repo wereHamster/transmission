@@ -1,11 +1,11 @@
 /* =============================================================================
 	FILE:		UKKQueue.m
 	PROJECT:	Filie
-    
+
     COPYRIGHT:  (c) 2005-06 M. Uli Kusterer, all rights reserved.
-    
+
 	AUTHORS:	M. Uli Kusterer - UK
-    
+
     LICENSES:   MIT License
 
 	REVISIONS:

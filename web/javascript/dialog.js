@@ -16,7 +16,7 @@ Dialog.prototype = {
      * Constructor
      */
     initialize: function() {
-		
+
 		/*
 		 * Private Interface Variables
 		 */
@@ -27,7 +27,7 @@ Dialog.prototype = {
 		this._confirm_button = $('#dialog_confirm_button');
 		this._callback_function = '';
 		this._callback_data = null;
-		
+
 		// Observe the buttons
 		this._cancel_button.bind('click', {dialog: this}, this.onCancelClicked );
 		this._confirm_button.bind('click', {dialog: this}, this.onConfirmClicked );
@@ -142,6 +142,6 @@ Dialog.prototype = {
 			this._container.show();
 		}
 	}
-	
+
 
 }

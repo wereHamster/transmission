@@ -157,7 +157,7 @@ main(int argc, char **argv)
             have_id = 1;
         close(fd);
     }
-    
+
     fd = open("/dev/urandom", O_RDONLY);
     if(fd < 0) {
         perror("open(random)");
@@ -338,7 +338,7 @@ main(int argc, char **argv)
                 sleep(1);
             }
         }
-        
+
         if(exiting)
             break;
 
@@ -402,7 +402,7 @@ main(int argc, char **argv)
 
     dht_uninit();
     return 0;
-    
+
  usage:
     printf("Usage: dht-example [-q] [-4] [-6] [-i filename] [-b address]...\n"
            "                   port [address port]...\n");

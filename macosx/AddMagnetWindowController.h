@@ -33,12 +33,12 @@
     IBOutlet NSTextField * fNameField, * fLocationField;
     IBOutlet NSButton * fStartCheck;
     IBOutlet NSPopUpButton * fGroupPopUp, * fPriorityPopUp;
-    
+
     Controller * fController;
-    
+
     Torrent * fTorrent;
     NSString * fDestination;
-    
+
     NSInteger fGroupValue;
 }
 

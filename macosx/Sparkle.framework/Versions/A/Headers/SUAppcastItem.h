@@ -13,17 +13,17 @@
 	NSString *title;
 	NSDate *date;
 	NSString *itemDescription;
-	
+
 	NSURL *releaseNotesURL;
-	
-	NSString *DSASignature;	
+
+	NSString *DSASignature;
 	NSString *minimumSystemVersion;
     NSString *tag;
-	
+
 	NSURL *fileURL;
 	NSString *versionString;
 	NSString *displayVersionString;
-	
+
 	NSDictionary *propertiesDictionary;
 }
 

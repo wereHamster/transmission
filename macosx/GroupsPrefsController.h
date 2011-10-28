@@ -28,15 +28,15 @@
 {
     IBOutlet NSTableView * fTableView;
     IBOutlet NSSegmentedControl * fAddRemoveControl;
-    
+
     IBOutlet NSColorWell * fSelectedColorView;
     IBOutlet NSTextField * fSelectedColorNameField;
     IBOutlet NSButton * fCustomLocationEnableCheck;
     IBOutlet NSPopUpButton * fCustomLocationPopUp;
-    
+
     IBOutlet NSButton * fAutoAssignRulesEnableCheck;
     IBOutlet NSButton * fAutoAssignRulesEditButton;
-    
+
     IBOutlet NSWindow * fGroupRulesSheetWindow;
     IBOutlet NSPredicateEditor * fRuleEditor;
 }

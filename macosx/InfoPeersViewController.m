@@ -48,7 +48,7 @@
     {
         [self setTitle: NSLocalizedString(@"Peers", "Inspector view -> title")];
     }
-    
+
     return self;
 }
 
@@ -61,7 +61,7 @@
         viewRect.size.height = height;
         [[self view] setFrame: viewRect];
     }
-    
+
     //set table header text
     [[[fPeerTable tableColumnWithIdentifier: @"IP"] headerCell] setStringValue: NSLocalizedString(@"IP Address",
                                                                         "inspector -> peer table -> header")];
@@ -71,12 +71,12 @@
                                                                         "inspector -> peer table -> header")];
     [[[fPeerTable tableColumnWithIdentifier: @"UL To"] headerCell] setStringValue: NSLocalizedString(@"UL",
                                                                         "inspector -> peer table -> header")];
-    
+
     [[[fWebSeedTable tableColumnWithIdentifier: @"Address"] headerCell] setStringValue: NSLocalizedString(@"Web Seeds",
                                                                         "inspector -> web seed table -> header")];
     [[[fWebSeedTable tableColumnWithIdentifier: @"DL From"] headerCell] setStringValue: NSLocalizedString(@"DL",
                                                                         "inspector -> web seed table -> header")];
-    
+
     //set table header tool tips
     [[fPeerTable tableColumnWithIdentifier: @"Encryption"] setHeaderToolTip: NSLocalizedString(@"Encrypted Connection",
                                                                         "inspector -> peer table -> header tool tip")];
@@ -86,27 +86,27 @@
                                                                         "inspector -> peer table -> header tool tip")];
     [[fPeerTable tableColumnWithIdentifier: @"UL To"] setHeaderToolTip: NSLocalizedString(@"Uploading To Peer",
                                                                         "inspector -> peer table -> header tool tip")];
-    
+
     [[fWebSeedTable tableColumnWithIdentifier: @"DL From"] setHeaderToolTip: NSLocalizedString(@"Downloading From Web Seed",
                                                                         "inspector -> web seed table -> header tool tip")];
-    
+
     //prepare for animating peer table and web seed table
     NSRect webSeedTableFrame = [[fWebSeedTable enclosingScrollView] frame];
     fWebSeedTableHeight = webSeedTableFrame.size.height;
     fSpaceBetweenWebSeedAndPeer = webSeedTableFrame.origin.y - NSMaxY([[fPeerTable enclosingScrollView] frame]);
-    
+
     [self setWebSeedTableHidden: YES animate: NO];
 }
 
 - (void) dealloc
 {
     [fTorrents release];
-    
+
     [fPeers release];
     [fWebSeeds release];
-    
+
     [fWebSeedTableAnimation release];
-    
+
     [super dealloc];
 }
 
@@ -116,7 +116,7 @@
     //don't check if it's the same in case the metadata changed
     [fTorrents release];
     fTorrents = [torrents retain];
-    
+
     fSet = NO;
 }
 
@@ -124,20 +124,20 @@
 {
     if (!fSet)
         [self setupInfo];
-    
+
     if ([fTorrents count] == 0)
         return;
-    
+
     if (!fPeers)
         fPeers = [[NSMutableArray alloc] init];
     else
         [fPeers removeAllObjects];
-    
+
     if (!fWebSeeds)
         fWebSeeds = [[NSMutableArray alloc] init];
     else
         [fWebSeeds removeAllObjects];
-    
+
     NSUInteger connected = 0, tracker = 0, incoming = 0, cache = 0, lpd = 0, pex = 0, dht = 0, ltep = 0,
                 toUs = 0, fromUs = 0;
     BOOL anyActive = false;
@@ -145,12 +145,12 @@
     {
         if ([torrent webSeedCount] > 0)
             [fWebSeeds addObjectsFromArray: [torrent webSeeds]];
-        
+
         if ([torrent isActive])
         {
             anyActive = YES;
             [fPeers addObjectsFromArray: [torrent peers]];
-            
+
             const NSUInteger connectedThis = [torrent totalPeersConnected];
             if (connectedThis > 0)
             {
@@ -162,24 +162,24 @@
                 pex += [torrent totalPeersPex];
                 dht += [torrent totalPeersDHT];
                 ltep += [torrent totalPeersLTEP];
-                
+
                 toUs += [torrent peersSendingToUs];
                 fromUs += [torrent peersGettingFromUs];
             }
         }
     }
-    
+
     [fPeers sortUsingDescriptors: [self peerSortDescriptors]];
     [fPeerTable reloadData];
-    
+
     [fWebSeeds sortUsingDescriptors: [fWebSeedTable sortDescriptors]];
     [fWebSeedTable reloadData];
-    
+
     if (anyActive)
     {
         NSString * connectedText = [NSString stringWithFormat: NSLocalizedString(@"%d Connected", "Inspector -> Peers tab -> peers"),
                                     connected];
-        
+
         if (connected > 0)
         {
             NSMutableArray * upDownComponents = [NSMutableArray arrayWithCapacity: 2];
@@ -191,7 +191,7 @@
                                         NSLocalizedString(@"UL to %d", "Inspector -> Peers tab -> peers"), fromUs]];
             if ([upDownComponents count] > 0)
                 connectedText = [connectedText stringByAppendingFormat: @": %@", [upDownComponents componentsJoinedByString: @", "]];
-            
+
             NSMutableArray * fromComponents = [NSMutableArray arrayWithCapacity: 7];
             if (tracker > 0)
                 [fromComponents addObject: [NSString stringWithFormat:
@@ -214,10 +214,10 @@
             if (ltep > 0)
                 [fromComponents addObject: [NSString stringWithFormat:
                                         NSLocalizedString(@"%d LTEP", "Inspector -> Peers tab -> peers"), ltep]];
-            
+
             connectedText = [connectedText stringByAppendingFormat: @"\n%@", [fromComponents componentsJoinedByString: @", "]];
         }
-        
+
         [fConnectedPeersField setStringValue: connectedText];
     }
     else
@@ -227,7 +227,7 @@
             notActiveString = NSLocalizedString(@"Transfer Not Active", "Inspector -> Peers tab -> peers");
         else
             notActiveString = NSLocalizedString(@"Transfers Not Active", "Inspector -> Peers tab -> peers");
-        
+
         [fConnectedPeersField setStringValue: notActiveString];
     }
 }
@@ -242,7 +242,7 @@
     //if in the middle of animating, just stop and resize immediately
     if (fWebSeedTableAnimation)
         [self setWebSeedTableHidden: !fWebSeeds animate: NO];
-    
+
     [fPeers release];
     fPeers = nil;
     [fWebSeeds release];
@@ -263,7 +263,7 @@
     {
         NSString * ident = [column identifier];
         NSDictionary * webSeed = [fWebSeeds objectAtIndex: row];
-        
+
         if ([ident isEqualToString: @"DL From"])
         {
             NSNumber * rate;
@@ -276,7 +276,7 @@
     {
         NSString * ident = [column identifier];
         NSDictionary * peer = [fPeers objectAtIndex: row];
-        
+
         if ([ident isEqualToString: @"Encryption"])
             return [[peer objectForKey: @"Encryption"] boolValue] ? [NSImage imageNamed: @"Lock.png"] : nil;
         else if ([ident isEqualToString: @"Client"])
@@ -304,7 +304,7 @@
     if (tableView == fPeerTable)
     {
         NSString * ident = [tableColumn identifier];
-        
+
         if  ([ident isEqualToString: @"Progress"])
         {
             NSDictionary * peer = [fPeers objectAtIndex: row];
@@ -344,13 +344,13 @@
     if (tableView == fPeerTable)
     {
         const BOOL multiple = [fTorrents count] > 1;
-        
+
         NSDictionary * peer = [fPeers objectAtIndex: row];
         NSMutableArray * components = [NSMutableArray arrayWithCapacity: multiple ? 6 : 5];
-        
+
         if (multiple)
             [components addObject: [peer objectForKey: @"Name"]];
-        
+
         const CGFloat progress = [[peer objectForKey: @"Progress"] floatValue];
         NSString * progressString = [NSString stringWithFormat: NSLocalizedString(@"Progress: %@",
                                         "Inspector -> Peers tab -> table row tooltip"),
@@ -359,7 +359,7 @@
             progressString = [progressString stringByAppendingFormat: @" (%@)", NSLocalizedString(@"Partial Seed",
                                 "Inspector -> Peers tab -> table row tooltip")];
         [components addObject: progressString];
-        
+
         NSString * protocolString = [[peer objectForKey: @"uTP"] boolValue] ? @"\u00b5TP" : @"TCP";
         if ([[peer objectForKey: @"Encryption"] boolValue])
             protocolString = [protocolString stringByAppendingFormat: @" (%@)",
@@ -367,7 +367,7 @@
         [components addObject: [NSString stringWithFormat:
                                 NSLocalizedString(@"Protocol: %@", "Inspector -> Peers tab -> table row tooltip"),
                                 protocolString]];
-        
+
         NSString * portString;
         NSInteger port;
         if ((port = [[peer objectForKey: @"Port"] intValue]) > 0)
@@ -376,7 +376,7 @@
             portString = NSLocalizedString(@"N/A", "Inspector -> Peers tab -> table row tooltip");
         [components addObject: [NSString stringWithFormat: @"%@: %@", NSLocalizedString(@"Port",
             "Inspector -> Peers tab -> table row tooltip"), portString]];
-        
+
         const NSInteger peerFrom = [[peer objectForKey: @"From"] integerValue];
         switch (peerFrom)
         {
@@ -405,11 +405,11 @@
             default:
                 NSAssert1(NO, @"Peer from unknown source: %d", peerFrom);
         }
-        
+
         //determing status strings from flags
         NSMutableArray * statusArray = [NSMutableArray arrayWithCapacity: 6];
         NSString * flags = [peer objectForKey: @"Flags"];
-        
+
         if ([flags rangeOfString: @"D"].location != NSNotFound)
             [statusArray addObject: NSLocalizedString(@"Currently downloading (interested and not choked)",
                 "Inspector -> peer -> status")];
@@ -428,13 +428,13 @@
         if ([flags rangeOfString: @"?"].location != NSNotFound)
             [statusArray addObject: NSLocalizedString(@"You unchoked the peer, but the peer is not interested",
                 "Inspector -> peer -> status")];
-        
+
         if ([statusArray count] > 0)
         {
             NSString * statusStrings = [statusArray componentsJoinedByString: @"\n\n"];
             [components addObject: [@"\n" stringByAppendingString: statusStrings]];
         }
-        
+
         return [components componentsJoinedByString: @"\n"];
     }
     else
@@ -442,7 +442,7 @@
         if ([fTorrents count] > 1)
             return [[fWebSeeds objectAtIndex: row] objectForKey: @"Name"];
     }
-    
+
     return nil;
 }
 
@@ -472,13 +472,13 @@
 - (void) setupInfo
 {
     BOOL hasWebSeeds = NO;
-    
+
     if ([fTorrents count] == 0)
     {
         [fPeers release];
         fPeers = nil;
         [fPeerTable reloadData];
-        
+
         [fConnectedPeersField setStringValue: @""];
     }
     else
@@ -490,7 +490,7 @@
                 break;
             }
     }
-    
+
     if (!hasWebSeeds)
     {
         [fWebSeeds release];
@@ -498,7 +498,7 @@
         [fWebSeedTable reloadData];
     }
     [self setWebSeedTableHidden: !hasWebSeeds animate: YES];
-    
+
     fSet = YES;
 }
 
@@ -506,35 +506,35 @@
 {
     if (animate && (![[self view] window] || ![[[self view] window] isVisible]))
         animate = NO;
-    
+
     if (fWebSeedTableAnimation)
     {
         [fWebSeedTableAnimation stopAnimation];
         [fWebSeedTableAnimation release];
         fWebSeedTableAnimation = nil;
     }
-    
+
     NSRect webSeedFrame = [[fWebSeedTable enclosingScrollView] frame];
     NSRect peerFrame = [[fPeerTable enclosingScrollView] frame];
-    
+
     if (hide)
     {
         CGFloat webSeedFrameMaxY = NSMaxY(webSeedFrame);
         webSeedFrame.size.height = 0;
         webSeedFrame.origin.y = webSeedFrameMaxY;
-        
+
         peerFrame.size.height = webSeedFrameMaxY - peerFrame.origin.y;
     }
     else
     {
         webSeedFrame.origin.y -= fWebSeedTableHeight - webSeedFrame.size.height;
         webSeedFrame.size.height = fWebSeedTableHeight;
-        
+
         peerFrame.size.height = (webSeedFrame.origin.y - fSpaceBetweenWebSeedAndPeer) - peerFrame.origin.y;
     }
-    
+
     [[fWebSeedTable enclosingScrollView] setHidden: NO]; //this is needed for some reason
-    
+
     //actually resize tables
     if (animate)
     {
@@ -546,13 +546,13 @@
                                     [fPeerTable enclosingScrollView], NSViewAnimationTargetKey,
                                     [NSValue valueWithRect: [[fPeerTable enclosingScrollView] frame]], NSViewAnimationStartFrameKey,
                                     [NSValue valueWithRect: peerFrame], NSViewAnimationEndFrameKey, nil];
-        
+
         fWebSeedTableAnimation = [[NSViewAnimation alloc] initWithViewAnimations:
                                         [NSArray arrayWithObjects: webSeedDict, peerDict, nil]];
         [fWebSeedTableAnimation setDuration: 0.125];
         [fWebSeedTableAnimation setAnimationBlockingMode: NSAnimationNonblocking];
         [fWebSeedTableAnimation setDelegate: self];
-        
+
         [fWebSeedTableAnimation startAnimation];
     }
     else
@@ -565,18 +565,18 @@
 - (NSArray *) peerSortDescriptors
 {
     NSMutableArray * descriptors = [NSMutableArray arrayWithCapacity: 2];
-    
+
     NSArray * oldDescriptors = [fPeerTable sortDescriptors];
     BOOL useSecond = YES, asc = YES;
     if ([oldDescriptors count] > 0)
     {
         NSSortDescriptor * descriptor = [oldDescriptors objectAtIndex: 0];
         [descriptors addObject: descriptor];
-        
+
         if ((useSecond = ![[descriptor key] isEqualToString: @"IP"]))
             asc = [descriptor ascending];
     }
-    
+
     //sort by IP after primary sort
     if (useSecond)
     {
@@ -586,7 +586,7 @@
         [descriptors addObject: secondDescriptor];
         [secondDescriptor release];
     }
-    
+
     return descriptors;
 }
 

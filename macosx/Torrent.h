@@ -34,25 +34,25 @@
     tr_torrent * fHandle;
     const tr_info * fInfo;
     const tr_stat * fStat;
-	
+
     NSUserDefaults * fDefaults;
 
     NSImage * fIcon;
-    
+
     NSString * fHashString;
-    
+
     tr_file_stat * fFileStat;
     NSArray * fFileList, * fFlatFileList;
-    
+
     NSIndexSet * fPreviousFinishedIndexes;
     NSDate * fPreviousFinishedIndexesDate;
-    
+
     BOOL fWaitToStart, fStalled;
-    
+
     NSInteger fGroupValue;
-    
+
     BOOL fResumeOnWake;
-    
+
     NSString * fTimeMachineExclude;
 }
 

@@ -46,7 +46,7 @@ LIBSPEC int initnatpmp(natpmp_t * p)
 #ifdef WIN32
 	u_long ioctlArg = 1;
 #else
-	int flags; 
+	int flags;
 #endif
 	struct sockaddr_in addr;
 	if(!p)
@@ -67,7 +67,7 @@ LIBSPEC int initnatpmp(natpmp_t * p)
 
 	if(getdefaultgateway(&(p->gateway)) < 0)
 		return NATPMP_ERR_CANNOTGETGATEWAY;
-	
+
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(NATPMP_PORT);

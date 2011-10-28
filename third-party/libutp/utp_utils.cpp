@@ -97,10 +97,10 @@ static uint64 GetMicroseconds()
 	static uint64_t start_tick = 0;
 	uint64_t tick;
 	// Returns a counter in some fraction of a nanoseconds
-	tick = mach_absolute_time();  
+	tick = mach_absolute_time();
 	if (sTimebaseInfo.denom == 0) {
 		// Get the timer ratio to convert mach_absolute_time to nanoseconds
-		mach_timebase_info(&sTimebaseInfo); 
+		mach_timebase_info(&sTimebaseInfo);
 		start_tick = tick;
 	}
 	// Calculate the elapsed time, convert it to microseconds and return it.

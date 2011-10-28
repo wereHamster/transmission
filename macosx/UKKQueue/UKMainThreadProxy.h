@@ -1,15 +1,15 @@
 /* =============================================================================
 	FILE:		UKMainThreadProxy.h
 	PROJECT:	UKMainThreadProxy
-    
+
     PURPOSE:    Send a message to object theObject to [theObject mainThreadProxy]
                 instead and the message will be received on the main thread by
                 theObject.
 
     COPYRIGHT:  (c) 2004 M. Uli Kusterer, all rights reserved.
-    
+
 	AUTHORS:	M. Uli Kusterer - UK
-    
+
     LICENSES:   MIT License
 
 	REVISIONS:

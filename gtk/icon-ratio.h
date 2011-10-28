@@ -4,9 +4,9 @@
 #pragma align 4 (ratio_icon)
 #endif
 #ifdef __GNUC__
-static const guint8 ratio_icon[] __attribute__ ((__aligned__ (4))) = 
+static const guint8 ratio_icon[] __attribute__ ((__aligned__ (4))) =
 #else
-static const guint8 ratio_icon[] = 
+static const guint8 ratio_icon[] =
 #endif
 { ""
   /* Pixbuf magic (0x47646b50) */

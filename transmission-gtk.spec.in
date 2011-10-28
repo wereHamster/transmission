@@ -44,7 +44,7 @@ A fast and easy BitTorrent client
 %prep
 %setup -q
 %build
-%configure --program-prefix="" 
+%configure --program-prefix=""
 make CFLAGS="$RPM_OPT_FLAGS"
 %install
 rm -rf $RPM_BUILD_ROOT

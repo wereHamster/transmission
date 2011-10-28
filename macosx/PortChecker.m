@@ -42,22 +42,22 @@
     if ((self = [super init]))
     {
         fDelegate = delegate;
-        
+
         fStatus = PORT_STATUS_CHECKING;
-        
+
         fTimer = [NSTimer scheduledTimerWithTimeInterval: CHECK_FIRE target: self selector: @selector(startProbe:)
                     userInfo: [NSNumber numberWithInteger: portNumber] repeats: NO];
         if (!delay)
             [fTimer fire];
     }
-    
+
     return self;
 }
 
 - (void) dealloc
 {
     [fTimer invalidate];
-    
+
     [fConnection release];
     [fPortProbeData release];
     [super dealloc];
@@ -72,7 +72,7 @@
 {
     [fTimer invalidate];
     fTimer = nil;
-    
+
     [fConnection cancel];
 }
 
@@ -97,7 +97,7 @@
     NSString * probeString = [[NSString alloc] initWithData: fPortProbeData encoding: NSUTF8StringEncoding];
     [fPortProbeData release];
     fPortProbeData = nil;
-    
+
     if (probeString)
     {
         if ([probeString isEqualToString: @"1"])
@@ -125,10 +125,10 @@
 - (void) startProbe: (NSTimer *) timer
 {
     fTimer = nil;
-    
+
     NSURLRequest * portProbeRequest = [NSURLRequest requestWithURL: [NSURL URLWithString: CHECKER_URL([[timer userInfo] integerValue])]
                                         cachePolicy: NSURLRequestReloadIgnoringLocalAndRemoteCacheData timeoutInterval: 15.0];
-    
+
     if ((fConnection = [[NSURLConnection alloc] initWithRequest: portProbeRequest delegate: self]))
         fPortProbeData = [[NSMutableData alloc] init];
     else
@@ -141,7 +141,7 @@
 - (void) callBackWithStatus: (port_status_t) status
 {
     fStatus = status;
-    
+
     if (fDelegate && [fDelegate respondsToSelector: @selector(portCheckerDidFinishProbing:)])
         [fDelegate performSelectorOnMainThread: @selector(portCheckerDidFinishProbing:) withObject: self waitUntilDone: NO];
 }

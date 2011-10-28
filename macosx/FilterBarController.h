@@ -1,6 +1,6 @@
 /******************************************************************************
  * $Id$
- * 
+ *
  * Copyright (c) 2011 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -41,9 +41,9 @@
 {
     IBOutlet FilterButton * fNoFilterButton, * fActiveFilterButton, * fDownloadFilterButton,
                             * fSeedFilterButton, * fPauseFilterButton;
-    
+
     IBOutlet NSSearchField * fSearchField;
-    
+
     IBOutlet NSPopUpButton * fGroupsButton;
 }
 

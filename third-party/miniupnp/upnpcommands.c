@@ -110,7 +110,7 @@ UPNP_GetTotalPacketsReceived(const char * controlURL,
 LIBSPEC int
 UPNP_GetStatusInfo(const char * controlURL,
 				const char * servicetype,
-				char * status, 
+				char * status,
 				unsigned int * uptime,
 				char * lastconnerror)
 {
@@ -209,8 +209,8 @@ UPNP_GetConnectionTypeInfo(const char * controlURL,
 
 /* UPNP_GetLinkLayerMaxBitRate() call the corresponding UPNP method.
  * Returns 2 values: Downloadlink bandwidth and Uplink bandwidth.
- * One of the values can be null 
- * Note : GetLinkLayerMaxBitRates belongs to WANPPPConnection:1 only 
+ * One of the values can be null
+ * Note : GetLinkLayerMaxBitRates belongs to WANPPPConnection:1 only
  * We can use the GetCommonLinkProperties from WANCommonInterfaceConfig:1 */
 LIBSPEC int
 UPNP_GetLinkLayerMaxBitRates(const char * controlURL,
@@ -272,7 +272,7 @@ UPNP_GetLinkLayerMaxBitRates(const char * controlURL,
 /* UPNP_GetExternalIPAddress() call the corresponding UPNP method.
  * if the third arg is not null the value is copied to it.
  * at least 16 bytes must be available
- * 
+ *
  * Return values :
  * 0 : SUCCESS
  * NON ZERO : ERROR Either an UPnP error code or an unknown error.

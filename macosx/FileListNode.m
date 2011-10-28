@@ -39,7 +39,7 @@
         fChildren = [[NSMutableArray alloc] init];
         fSize = 0;
     }
-    
+
     return self;
 }
 
@@ -50,21 +50,21 @@
         fSize = size;
         [fIndexes addIndex: index];
     }
-    
+
     return self;
 }
 
 - (void) insertChild: (FileListNode *) child
 {
     NSAssert(fIsFolder, @"method can only be invoked on folders");
-    
+
     [fChildren addObject: child];
 }
 
 - (void) insertIndex: (NSUInteger) index withSize: (uint64_t) size
 {
     NSAssert(fIsFolder, @"method can only be invoked on folders");
-    
+
     [fIndexes addIndex: index];
     fSize += size;
 }
@@ -80,11 +80,11 @@
     [fName release];
     [fPath release];
     [fIndexes release];
-    
+
     [fIcon release];
-    
+
     [fChildren release];
-    
+
     [super dealloc];
 }
 
@@ -132,7 +132,7 @@
 - (NSMutableArray *) children
 {
     NSAssert(fIsFolder, @"method can only be invoked on folders");
-    
+
     return fChildren;
 }
 
@@ -152,12 +152,12 @@
         fIsFolder = isFolder;
         fName = [name retain];
         fPath = [path retain];
-        
+
         fIndexes = [[NSMutableIndexSet alloc] init];
-        
+
         fTorrent = torrent;
     }
-    
+
     return self;
 }
 

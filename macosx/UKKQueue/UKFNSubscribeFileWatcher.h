@@ -1,11 +1,11 @@
 /* =============================================================================
 	FILE:		UKFNSubscribeFileWatcher.m
 	PROJECT:	Filie
-    
+
     COPYRIGHT:  (c) 2005 M. Uli Kusterer, all rights reserved.
-    
+
 	AUTHORS:	M. Uli Kusterer - UK
-    
+
     LICENSES:   MIT License
 
 	REVISIONS:

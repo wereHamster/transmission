@@ -35,18 +35,18 @@
     IBOutlet NSButton * fStartCheck, * fDeleteCheck;
     IBOutlet NSPopUpButton * fGroupPopUp, * fPriorityPopUp;
     IBOutlet NSProgressIndicator * fVerifyIndicator;
-    
+
     IBOutlet FileOutlineController * fFileController;
-    
+
     Controller * fController;
-    
+
     Torrent * fTorrent;
     NSString * fDestination, * fTorrentFile;
     BOOL fLockDestination;
-    
+
     BOOL fDeleteTorrentInitial, fDeleteEnableInitial;
     NSInteger fGroupValue;
-    
+
     NSTimer * fTimer;
 }
 
