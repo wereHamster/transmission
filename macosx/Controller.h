@@ -49,8 +49,7 @@ typedef enum
     ADD_CREATED
 } addType;
 
-#warning uncomment
-@interface Controller : NSObject <GrowlApplicationBridgeDelegate> //, QLPreviewPanelDataSource, QLPreviewPanelDelegate>
+@interface Controller : NSObject <GrowlApplicationBridgeDelegate, NSPopoverDelegate, NSSoundDelegate, NSToolbarDelegate, NSWindowDelegate, QLPreviewPanelDataSource, QLPreviewPanelDelegate>
 {
     tr_session                      * fLib;
     
@@ -80,6 +79,8 @@ typedef enum
                                 
     IBOutlet NSMenuItem             * fNextInfoTabItem, * fPrevInfoTabItem;
     
+    IBOutlet NSMenu                 * fActionMenu;
+    
     IBOutlet NSMenu                 * fUploadMenu, * fDownloadMenu;
     IBOutlet NSMenuItem             * fUploadLimitItem, * fUploadNoLimitItem,
                                     * fDownloadLimitItem, * fDownloadNoLimitItem;
@@ -89,20 +90,19 @@ typedef enum
     
     IBOutlet NSMenu                 * fGroupsSetMenu, * fGroupsSetContextMenu;
     
-    #warning change to QLPreviewPanel
-    id                              fPreviewPanel;
+    QLPreviewPanel                  * fPreviewPanel;
     BOOL                            fQuitting;
     BOOL                            fQuitRequested;
     BOOL                            fPauseOnLaunch;
     
     Badger                          * fBadger;
-    IBOutlet NSMenu                 * fDockMenu;
     
     NSMutableArray                  * fAutoImportedNames;
     NSTimer                         * fAutoImportTimer;
     
     NSMutableDictionary             * fPendingTorrentDownloads;
     
+    BOOL                            fGlobalPopoverShown;
     BOOL                            fSoundPlaying;
 }
 
@@ -178,11 +178,9 @@ typedef enum
 - (void) showStatsWindow: (id) sender;
 
 - (void) updateUI;
+- (void) fullUpdateUI;
 
 - (void) setBottomCountText: (BOOL) filtering;
-
-- (void) updateTorrentsInQueue;
-- (NSUInteger) numToStartFromQueue: (BOOL) downloadQueue;
 
 - (void) torrentFinishedDownloading: (NSNotification *) notification;
 - (void) torrentRestartedDownloading: (NSNotification *) notification;
@@ -199,6 +197,8 @@ typedef enum
 - (void) setSortReverse: (id) sender;
 
 - (void) switchFilter: (id) sender;
+
+- (IBAction) showGlobalPopover: (id) sender;
 
 - (void) setGroup: (id) sender; //used by delegate-generated menu items
 
@@ -259,5 +259,6 @@ typedef enum
 - (void) rpcStartedStoppedTorrent: (Torrent *) torrent;
 - (void) rpcChangedTorrent: (Torrent *) torrent;
 - (void) rpcMovedTorrent: (Torrent *) torrent;
+- (void) rpcUpdateQueue;
 
 @end

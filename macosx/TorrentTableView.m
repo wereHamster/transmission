@@ -25,6 +25,7 @@
 #import "TorrentTableView.h"
 #import "Controller.h"
 #import "FileListNode.h"
+#import "InfoOptionsViewController.h"
 #import "NSApplicationAdditions.h"
 #import "NSStringAdditions.h"
 #import "Torrent.h"
@@ -33,6 +34,7 @@
 
 #define MAX_GROUP 999999
 
+//eliminate when Lion-only
 #define ACTION_MENU_GLOBAL_TAG 101
 #define ACTION_MENU_UNLIMITED_TAG 102
 #define ACTION_MENU_LIMIT_TAG 103
@@ -71,7 +73,10 @@
         fMouseControlRow = -1;
         fMouseRevealRow = -1;
         fMouseActionRow = -1;
+        #warning we can get rid of the on 10.7
         fActionPushedRow = -1;
+        
+        fActionPopoverShown = NO;
         
         [self setDelegate: self];
         
@@ -83,6 +88,8 @@
 
 - (void) dealloc
 {
+    [[NSNotificationCenter defaultCenter] removeObserver: self];
+    
     [fCollapsedGroups release];
     
     [fPiecesBarAnimation release];
@@ -99,6 +106,9 @@
 {
     //set group columns to show ratio, needs to be in awakeFromNib to size columns correctly
     [self setGroupStatusColumns];
+    
+    [[NSNotificationCenter defaultCenter] addObserver: self selector: @selector(reloadData)
+                                                 name: @"ReloadTorrentTable" object: nil];
 }
 
 - (BOOL) isGroupCollapsed: (NSInteger) value
@@ -151,14 +161,17 @@
 {
     if ([item isKindOfClass: [Torrent class]])
     {
-        [cell setRepresentedObject: item];
-        
-        const NSInteger row = [self rowForItem: item];
-        [cell setHover: row == fMouseRow];
-        [cell setControlHover: row == fMouseControlRow];
-        [cell setRevealHover: row == fMouseRevealRow];
-        [cell setActionHover: row == fMouseActionRow];
-        [cell setActionPushed: row == fActionPushedRow];
+        if (!tableColumn)
+        {
+            [cell setRepresentedObject: item];
+            
+            const NSInteger row = [self rowForItem: item];
+            [cell setHover: row == fMouseRow];
+            [cell setControlHover: row == fMouseControlRow];
+            [cell setRevealHover: row == fMouseRevealRow];
+            [cell setActionHover: row == fMouseActionRow];
+            [cell setActionPushed: row == fActionPushedRow];
+        }
     }
     else
     {
@@ -166,19 +179,7 @@
         if ([ident isEqualToString: @"UL Image"] || [ident isEqualToString: @"DL Image"])
         {
             //ensure arrows are white only when selected
-            if ([NSApp isOnSnowLeopardOrBetter])
-                [[cell image] setTemplate: [cell backgroundStyle] == NSBackgroundStyleLowered];
-            else
-            {
-                NSImage * image = [cell image];
-                const BOOL template = [cell backgroundStyle] == NSBackgroundStyleLowered;
-                if ([image isTemplate] != template)
-                {
-                    [image setTemplate: template];
-                    [cell setImage: nil];
-                    [cell setImage: image];
-                }
-            }
+            [[cell image] setTemplate: [cell backgroundStyle] == NSBackgroundStyleLowered];
         }
     }
 }
@@ -400,13 +401,20 @@
     //avoid weird behavior when showing menu by doing this after mouse down
     if (row != -1 && fMouseActionRow == row)
     {
-        fActionPushedRow = row;
-        [self setNeedsDisplayInRect: [self rectOfRow: row]]; //ensure button is pushed down
+        if (![NSApp isOnLionOrBetter])
+        {
+            fActionPushedRow = row;
+            [self setNeedsDisplayInRect: [self rectOfRow: row]]; //ensure button is pushed down
+        }
         
-        [self displayTorrentMenuForEvent: event];
+        #warning maybe make appear on mouse down
+        [self displayTorrentActionPopoverForEvent: event];
         
-        fActionPushedRow = -1;
-        [self setNeedsDisplayInRect: [self rectOfRow: row]];
+        if (![NSApp isOnLionOrBetter])
+        {
+            fActionPushedRow = -1;
+            [self setNeedsDisplayInRect: [self rectOfRow: row]];
+        }
     }
     else if (!pushed && [event clickCount] == 2) //double click
     {
@@ -522,6 +530,8 @@
         [fController focusFilterField];
     else if (firstChar == ' ')
         [fController toggleQuickLook: nil];
+    else if ([event keyCode] == 53) //esc key
+        [self deselectAll: nil];
     else
         [super keyDown: event];
 }
@@ -555,7 +565,7 @@
         [fController stopTorrents: [NSArray arrayWithObject: torrent]];
     else
     {
-        if (([NSApp isOnSnowLeopardOrBetter] ? [NSEvent modifierFlags] : [[NSApp currentEvent] modifierFlags]) & NSAlternateKeyMask)
+        if ([NSEvent modifierFlags] & NSAlternateKeyMask)
             [fController resumeTorrentsNoWait: [NSArray arrayWithObject: torrent]];
         else if ([torrent waitingToStart])
             [fController stopTorrents: [NSArray arrayWithObject: torrent]];
@@ -564,42 +574,66 @@
     }
 }
 
-- (void) displayTorrentMenuForEvent: (NSEvent *) event
+- (void) displayTorrentActionPopoverForEvent: (NSEvent *) event
 {
     const NSInteger row = [self rowAtPoint: [self convertPoint: [event locationInWindow] fromView: nil]];
     if (row < 0)
         return;
     
-    //update file action menu
-    fMenuTorrent = [[self itemAtRow: row] retain];
+    const NSRect rect = [fTorrentCell iconRectForBounds: [self rectOfRow: row]];
     
-    //update global limit check
-    [fGlobalLimitItem setState: [fMenuTorrent usesGlobalSpeedLimit] ? NSOnState : NSOffState];
-    
-    //place menu below button
-    NSRect rect = [fTorrentCell iconRectForBounds: [self rectOfRow: row]];
-    NSPoint location = rect.origin;
-    location.y += rect.size.height + 5.0;
-    
-    if ([NSApp isOnSnowLeopardOrBetter])
+    if ([NSApp isOnLionOrBetter])
     {
-        location = [self convertPoint: location toView: self];
-        [fActionMenu popUpMenuPositioningItem: nil atLocation: location inView: self];
+        if (fActionPopoverShown)
+            return;
+        
+        Torrent * torrent = [self itemAtRow: row];
+        
+        NSPopover * popover = [[NSPopoverLion alloc] init];
+        [popover setBehavior: NSPopoverBehaviorTransient];
+        InfoOptionsViewController * infoViewController = [[InfoOptionsViewController alloc] init];
+        [popover setContentViewController: infoViewController];
+        [popover setDelegate: self];
+        
+        [popover showRelativeToRect: rect ofView: self preferredEdge: NSMaxYEdge];
+        [infoViewController setInfoForTorrents: [NSArray arrayWithObject: torrent]];
+        [infoViewController updateInfo];
+        
+        [infoViewController release];
+        [popover release];
     }
     else
     {
-        location = [self convertPoint: location toView: nil];
-        NSEvent * newEvent = [NSEvent mouseEventWithType: [event type] location: location
-            modifierFlags: [event modifierFlags] timestamp: [event timestamp] windowNumber: [event windowNumber]
-            context: [event context] eventNumber: [event eventNumber] clickCount: [event clickCount] pressure: [event pressure]];
+        //update file action menu
+        fMenuTorrent = [[self itemAtRow: row] retain];
         
-        [NSMenu popUpContextMenu: fActionMenu withEvent: newEvent forView: self];
+        //update global limit check
+        [fGlobalLimitItem setState: [fMenuTorrent usesGlobalSpeedLimit] ? NSOnState : NSOffState];
+        
+        //place menu below button
+        NSPoint location = rect.origin;
+        location.y += NSHeight(rect) + 5.0;
+        
+        location = [self convertPoint: location toView: self];
+        [fActionMenu popUpMenuPositioningItem: nil atLocation: location inView: self];
+        
+        [fMenuTorrent release];
+        fMenuTorrent = nil;
     }
-    
-    [fMenuTorrent release];
-    fMenuTorrent = nil;
 }
 
+//don't show multiple popovers when clicking the gear button repeatedly
+- (void) popoverWillShow: (NSNotification *) notification
+{
+    fActionPopoverShown = YES;
+}
+
+- (void) popoverWillClose: (NSNotification *) notification
+{
+    fActionPopoverShown = NO;
+}
+
+//eliminate when Lion-only, along with all the menu item instance variables
 - (void) menuNeedsUpdate: (NSMenu *) menu
 {
     //this method seems to be called when it shouldn't be
@@ -683,6 +717,7 @@
     }
 }
 
+//the following methods might not be needed when Lion-only
 - (void) setQuickLimitMode: (id) sender
 {
     const BOOL limit = [sender tag] == ACTION_MENU_LIMIT_TAG;
@@ -702,7 +737,7 @@
 
 - (void) setGlobalLimit: (id) sender
 {
-    [fMenuTorrent setUseGlobalSpeedLimit: [sender state] != NSOnState];
+    [fMenuTorrent setUseGlobalSpeedLimit: [(NSButton *)sender state] != NSOnState];
     
     [[NSNotificationCenter defaultCenter] postNotificationName: @"UpdateOptions" object: nil];
 }

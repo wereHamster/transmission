@@ -199,8 +199,10 @@
 
 - (void) confirmAdd
 {
-    [fTorrent setWaitToStart: [fStartCheck state] == NSOnState];
     [fTorrent setGroupValue: fGroupValue];
+    
+    if ([fStartCheck state] == NSOnState)
+        [fTorrent startTransfer];
     
     [self close];
     [fController askOpenMagnetConfirmed: self add: YES]; //ensure last, since it releases this controller
@@ -228,7 +230,7 @@
 - (void) folderChoiceClosed: (NSOpenPanel *) openPanel returnCode: (NSInteger) code contextInfo: (void *) contextInfo
 {
     if (code == NSOKButton)
-        [self setDestinationPath: [[openPanel filenames] objectAtIndex: 0]];
+        [self setDestinationPath: [[[openPanel URLs] objectAtIndex: 0] path]];
     else
     {
         if (!fDestination)

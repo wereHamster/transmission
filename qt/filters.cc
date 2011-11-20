@@ -20,7 +20,6 @@ const QString FilterMode::names[NUM_MODES] =
     "show-seeding",
     "show-paused",
     "show-finished",
-    "show-queued",
     "show-verifying",
     "show-error",
 };
@@ -40,6 +39,7 @@ const QString SortMode::names[NUM_MODES] = {
     "sort-by-eta",
     "sort-by-name",
     "sort-by-progress",
+    "sort-by-queue"
     "sort-by-ratio",
     "sort-by-size",
     "sort-by-state",

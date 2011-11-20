@@ -31,7 +31,7 @@
 
 #define GROUP_SEPARATOR_HEIGHT 18.0
 
-@interface TorrentTableView : NSOutlineView
+@interface TorrentTableView : NSOutlineView <NSOutlineViewDelegate, NSAnimationDelegate, NSPopoverDelegate>
 {
     IBOutlet Controller * fController;
     
@@ -52,6 +52,8 @@
     
     CGFloat fPiecesBarPercent;
     NSAnimation * fPiecesBarAnimation;
+    
+    BOOL fActionPopoverShown;
 }
 
 - (BOOL) isGroupCollapsed: (NSInteger) value;
@@ -75,7 +77,7 @@
 
 - (void) toggleControlForTorrent: (Torrent *) torrent;
 
-- (void) displayTorrentMenuForEvent: (NSEvent *) event;
+- (void) displayTorrentActionPopoverForEvent: (NSEvent *) event;
 
 - (void) setQuickLimitMode: (id) sender;
 - (void) setQuickLimit: (id) sender;

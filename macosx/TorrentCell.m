@@ -24,7 +24,6 @@
 
 #import "TorrentCell.h"
 #import "GroupsController.h"
-#import "NSApplicationAdditions.h"
 #import "NSStringAdditions.h"
 #import "ProgressGradients.h"
 #import "Torrent.h"
@@ -46,9 +45,10 @@
 #define HEIGHT_TITLE 16.0
 #define HEIGHT_STATUS 12.0
 
-#define PADDING_HORIZONTAL 3.0
-#define PADDING_BETWEEN_IMAGE_AND_TITLE 5.0
-#define PADDING_BETWEEN_IMAGE_AND_BAR 7.0
+#define PADDING_HORIZONTAL 5.0
+#define PADDING_BETWEEN_BUTTONS 3.0
+#define PADDING_BETWEEN_IMAGE_AND_TITLE (PADDING_HORIZONTAL + 1.0)
+#define PADDING_BETWEEN_IMAGE_AND_BAR PADDING_HORIZONTAL
 #define PADDING_BETWEEN_TITLE_AND_PRIORITY 3.0
 #define PADDING_ABOVE_TITLE 4.0
 #define PADDING_BETWEEN_TITLE_AND_MIN_STATUS 3.0
@@ -84,8 +84,6 @@
 - (NSString *) buttonString;
 - (NSString *) statusString;
 - (NSString *) minimalStatusString;
-
-- (void) drawImage: (NSImage *) image inRect: (NSRect) rect; //use until 10.5 dropped
 
 @end
 
@@ -209,20 +207,11 @@
         fMouseDownRevealButton = NO;
         [controlView setNeedsDisplayInRect: cellFrame];
         
-        if ([NSApp isOnSnowLeopardOrBetter])
+        NSString * location = [[self representedObject] dataLocation];
+        if (location)
         {
-            NSString * location = [[self representedObject] dataLocation];
-            if (location)
-            {
-                NSURL * file = [NSURL fileURLWithPath: location];
-                [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs: [NSArray arrayWithObject: file]];
-            }
-        }
-        else
-        {
-            NSString * location = [[self representedObject] dataLocation];
-            if (location)
-                [[NSWorkspace sharedWorkspace] selectFile: location inFileViewerRootedAtPath: nil];
+            NSURL * file = [NSURL fileURLWithPath: location];
+            [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs: [NSArray arrayWithObject: file]];
         }
     }
     else;
@@ -377,17 +366,17 @@
     //icon
     if (!minimal || !(!fTracking && fHoverAction)) //don't show in minimal mode when hovered over
     {
-        NSImage * icon = (minimal && error) ? [NSImage imageNamed: [NSApp isOnSnowLeopardOrBetter] ? NSImageNameCaution : @"Error.png"]
+        NSImage * icon = (minimal && error) ? [NSImage imageNamed: NSImageNameCaution]
                                             : [torrent icon];
-        [self drawImage: icon inRect: iconRect];
+        [icon drawInRect: iconRect fromRect: NSZeroRect operation: NSCompositeSourceOver fraction: 1.0 respectFlipped: YES hints: nil];
     }
     
     //error badge
     if (error && !minimal)
     {
-        NSRect errorRect = NSMakeRect(NSMaxX(iconRect) - ERROR_IMAGE_SIZE, NSMaxY(iconRect) - ERROR_IMAGE_SIZE,
-                                        ERROR_IMAGE_SIZE, ERROR_IMAGE_SIZE);
-        [self drawImage: [NSImage imageNamed: [NSApp isOnSnowLeopardOrBetter] ? NSImageNameCaution : @"Error.png"] inRect: errorRect];
+        NSImage * errorImage = [NSImage imageNamed: NSImageNameCaution];
+        const NSRect errorRect = NSMakeRect(NSMaxX(iconRect) - ERROR_IMAGE_SIZE, NSMaxY(iconRect) - ERROR_IMAGE_SIZE, ERROR_IMAGE_SIZE, ERROR_IMAGE_SIZE);
+        [errorImage drawInRect: errorRect fromRect: NSZeroRect operation: NSCompositeSourceOver fraction: 1.0 respectFlipped: YES hints: nil];
     }
     
     //text color
@@ -450,7 +439,7 @@
         }
         
         const NSRect controlRect = [self controlButtonRectForBounds: cellFrame];
-        [self drawImage: controlImage inRect: controlRect];
+        [controlImage drawInRect: controlRect fromRect: NSZeroRect operation: NSCompositeSourceOver fraction: 1.0 respectFlipped: YES hints: nil];
         minimalTitleRightBound = MIN(minimalTitleRightBound, NSMinX(controlRect));
         
         //reveal button
@@ -463,11 +452,13 @@
             revealImageString = @"RevealOff.png";
         
         NSImage * revealImage = [NSImage imageNamed: revealImageString];
-        [self drawImage: revealImage inRect: [self revealButtonRectForBounds: cellFrame]];
+        [revealImage drawInRect: [self revealButtonRectForBounds: cellFrame] fromRect: NSZeroRect operation: NSCompositeSourceOver fraction: 1.0 respectFlipped: YES hints: nil];
         
         //action button
+        #warning image should use new gear
         NSString * actionImageString;
         if (fMouseDownActionButton)
+            #warning we can get rid of this on 10.7
             actionImageString = @"ActionOn.png";
         else if (!fTracking && fHoverAction)
             actionImageString = @"ActionHover.png";
@@ -477,7 +468,7 @@
         if (actionImageString)
         {
             NSImage * actionImage = [NSImage imageNamed: actionImageString];
-            [self drawImage: actionImage inRect: [self actionButtonRectForBounds: cellFrame]];
+            [actionImage drawInRect: [self actionButtonRectForBounds: cellFrame] fromRect: NSZeroRect operation: NSCompositeSourceOver fraction: 1.0 respectFlipped: YES hints: nil];
         }
     }
     
@@ -491,15 +482,12 @@
     {
         NSImage * priorityImage = [torrent priority] == TR_PRI_HIGH ? [NSImage imageNamed: @"PriorityHigh.png"]
                                                                     : [NSImage imageNamed: @"PriorityLow.png"];
-        //take line out completely when 10.6-only
-        priorityImage = [NSApp isOnSnowLeopardOrBetter] ? [priorityImage retain] : [priorityImage copy];
         
         const NSRect priorityRect = NSMakeRect(NSMaxX(titleRect) + PADDING_BETWEEN_TITLE_AND_PRIORITY,
                                                NSMidY(titleRect) - PRIORITY_ICON_HEIGHT  * 0.5,
                                                PRIORITY_ICON_WIDTH, PRIORITY_ICON_HEIGHT);
         
-        [self drawImage: priorityImage inRect: priorityRect];
-        [priorityImage release];
+        [priorityImage drawInRect: priorityRect fromRect: NSZeroRect operation: NSCompositeSourceOver fraction: 1.0 respectFlipped: YES hints: nil];
     }
     
     //status
@@ -519,7 +507,7 @@
     const BOOL minimal = [fDefaults boolForKey: @"SmallView"];
     
     const CGFloat piecesBarPercent = [(TorrentTableView *)[self controlView] piecesBarPercent];
-    if (piecesBarPercent > 0.0 && (!minimal || [NSApp isOnSnowLeopardOrBetter]))
+    if (piecesBarPercent > 0.0)
     {
         NSRect piecesBarRect, regularBarRect;
         NSDivideRect(barRect, &piecesBarRect, &regularBarRect, floor(NSHeight(barRect) * PIECES_TOTAL_PERCENT * piecesBarPercent),
@@ -657,11 +645,8 @@
     [torrent setPreviousFinishedPieces: [finishedIndexes count] > 0 ? finishedIndexes : nil]; //don't bother saving if none are complete
     
     //actually draw image
-    if ([NSApp isOnSnowLeopardOrBetter])
-        [bitmap drawInRect: barRect fromRect: NSZeroRect operation: NSCompositeSourceOver
-            fraction: ([fDefaults boolForKey: @"SmallView"] ? 0.25 : 1.0) respectFlipped: YES hints: nil];
-    else
-        [bitmap drawInRect: barRect];
+    [bitmap drawInRect: barRect fromRect: NSZeroRect operation: NSCompositeSourceOver
+        fraction: ([fDefaults boolForKey: @"SmallView"] ? 0.25 : 1.0) respectFlipped: YES hints: nil];
 
     [bitmap release];
 }
@@ -671,7 +656,7 @@
     NSRect result;
     result.size = [string size];
     
-    result.origin.x = NSMaxX(bounds) - (NSWidth(result) + PADDING_HORIZONTAL * 2.0);
+    result.origin.x = NSMaxX(bounds) - (PADDING_HORIZONTAL + NSWidth(result));
     result.origin.y = ceil(NSMidY(bounds) - NSHeight(result) * 0.5);
     
     return result;
@@ -735,12 +720,12 @@
 {
     NSRect result;
     result.size.height = BAR_HEIGHT;
-    result.origin.x = NSMinX(bounds) + IMAGE_SIZE_REG + PADDING_BETWEEN_IMAGE_AND_BAR;
+    result.origin.x = NSMinX(bounds) + PADDING_HORIZONTAL + IMAGE_SIZE_REG + PADDING_BETWEEN_IMAGE_AND_BAR;
     result.origin.y = NSMinY(bounds) + PADDING_ABOVE_TITLE + HEIGHT_TITLE + PADDING_BETWEEN_TITLE_AND_PROGRESS
                         + HEIGHT_STATUS + PADDING_BETWEEN_PROGRESS_AND_BAR;
     
     result.size.width = floor(NSMaxX(bounds) - NSMinX(result) - PADDING_HORIZONTAL
-                        - 2.0 * (PADDING_HORIZONTAL + NORMAL_BUTTON_WIDTH));
+                        - 2.0 * (PADDING_BETWEEN_BUTTONS + NORMAL_BUTTON_WIDTH));
     
     return result;
 }
@@ -748,10 +733,10 @@
 - (NSRect) barRectMinForBounds: (NSRect) bounds
 {
     NSRect result;
-    result.origin.x = NSMinX(bounds) + IMAGE_SIZE_MIN + PADDING_BETWEEN_IMAGE_AND_BAR;
+    result.origin.x = NSMinX(bounds) + PADDING_HORIZONTAL + IMAGE_SIZE_MIN + PADDING_BETWEEN_IMAGE_AND_BAR;
     result.origin.y = NSMinY(bounds) + PADDING_BETWEEN_BAR_AND_EDGE_MIN;
     result.size.height = NSHeight(bounds) - 2.0 * PADDING_BETWEEN_BAR_AND_EDGE_MIN;
-    result.size.width = NSMaxX(bounds) - NSMinX(result) - PADDING_HORIZONTAL;
+    result.size.width = NSMaxX(bounds) - NSMinX(result) - PADDING_BETWEEN_BAR_AND_EDGE_MIN;
     
     return result;
 }
@@ -761,16 +746,13 @@
     NSRect result;
     result.size.height = NORMAL_BUTTON_WIDTH;
     result.size.width = NORMAL_BUTTON_WIDTH;
-    result.origin.x = NSMaxX(bounds) - 2.0 * (PADDING_HORIZONTAL + NORMAL_BUTTON_WIDTH);
+    result.origin.x = NSMaxX(bounds) - (PADDING_HORIZONTAL + NORMAL_BUTTON_WIDTH + PADDING_BETWEEN_BUTTONS + NORMAL_BUTTON_WIDTH);
     
     if (![fDefaults boolForKey: @"SmallView"])
         result.origin.y = NSMinY(bounds) + PADDING_ABOVE_TITLE + HEIGHT_TITLE - (NORMAL_BUTTON_WIDTH - BAR_HEIGHT) * 0.5
                             + PADDING_BETWEEN_TITLE_AND_PROGRESS + HEIGHT_STATUS + PADDING_BETWEEN_PROGRESS_AND_BAR;
     else
-    {
         result.origin.y = ceil(NSMidY(bounds) - NSHeight(result) * 0.5);
-        result.origin.x -= PADDING_HORIZONTAL;
-    }
     
     return result;
 }
@@ -786,10 +768,7 @@
         result.origin.y = NSMinY(bounds) + PADDING_ABOVE_TITLE + HEIGHT_TITLE - (NORMAL_BUTTON_WIDTH - BAR_HEIGHT) * 0.5
                             + PADDING_BETWEEN_TITLE_AND_PROGRESS + HEIGHT_STATUS + PADDING_BETWEEN_PROGRESS_AND_BAR;
     else
-    {
         result.origin.y = ceil(NSMidY(bounds) - NSHeight(result) * 0.5);
-        result.origin.x -= PADDING_HORIZONTAL;
-    }
     
     return result;
 }
@@ -852,17 +831,6 @@
 {
     Torrent * torrent = [self representedObject];
     return [fDefaults boolForKey: @"DisplaySmallStatusRegular"] ? [torrent shortStatusString] : [torrent remainingTimeString];
-}
-
-- (void) drawImage: (NSImage *) image inRect: (NSRect) rect
-{
-    if ([NSApp isOnSnowLeopardOrBetter])
-        [image drawInRect: rect fromRect: NSZeroRect operation: NSCompositeSourceOver fraction: 1.0 respectFlipped: YES hints: nil];
-    else
-    {
-        [image setFlipped: YES];
-        [image drawInRect: rect fromRect: NSZeroRect operation: NSCompositeSourceOver fraction: 1.0];
-    }
 }
 
 @end

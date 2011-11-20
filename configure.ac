@@ -3,8 +3,8 @@ dnl STATUS: "X" for prerelease beta builds,
 dnl         "Z" for unsupported trunk builds,
 dnl         "0" for stable, supported releases
 dnl these should be the only two lines you need to change
-m4_define([user_agent_prefix],[2.32+])
-m4_define([peer_id_prefix],[-WH232Z-])
+m4_define([user_agent_prefix],[2.40+])
+m4_define([peer_id_prefix],[-WH240Z-])
 
 AC_INIT([transmission],
         [user_agent_prefix],
@@ -50,34 +50,22 @@ AC_SUBST(OPENSSL_MINIMUM)
 ##   MANDATORY for the GTK+ client
 ##
 ##
-GLIB_MINIMUM=2.8.0
-AC_SUBST(GLIB_MINIMUM)
-GTK_MINIMUM=2.8.0
+GTK_MINIMUM=2.22.0
 AC_SUBST(GTK_MINIMUM)
+GLIB_MINIMUM=2.28.0
+AC_SUBST(GLIB_MINIMUM)
+GIO_MINIMUM=2.26.0
+AC_SUBST(GIO_MINIMUM)
 
 ##
 ##
 ##   OPTIONAL for the GTK+ client
 ##
 ##
-# play the XDG "download done" sound...
-CANBERRA_MINIMUM=0.10
-AC_SUBST(CANBERRA_MINIMUM)
-# inhibit hibernation when a torrent is active...
-DBUS_GLIB_MINIMUM=0.70
-AC_SUBST(DBUS_GLIB_MINIMUM)
-# register the GTK+ client as a magnet link handler...
-GCONF2_MINIMUM=2.20.0
-AC_SUBST(GCONF2_MINIMUM)
-# implement "watch" directories to use new .torrent files...
-GIO_MINIMUM=2.15.5
-AC_SUBST(GIO_MINIMUM)
-# pop up a "download done" notice...
-LIBNOTIFY_MINIMUM=0.4.3
-AC_SUBST(LIBNOTIFY_MINIMUM)
+
 # create the tray icon with AppIndicator
 LIBAPPINDICATOR_MINIMUM=0.0.11
-  AC_SUBST(LIBAPPINDICATOR_MINIMUM)
+AC_SUBST(LIBAPPINDICATOR_MINIMUM)
 
 
 AC_PROG_CC
@@ -145,35 +133,35 @@ dnl ----------------------------------------------------------------------------
 dnl
 dnl file monitoring for the daemon
 
-AC_CHECK_HEADER([sys/inotify.h],
-                [AC_CHECK_FUNC([inotify_init],[have_inotify="yes"],[have_inotify="no"])],
-                [have_inotify="no"])
-AC_ARG_WITH([inotify],
-            [AS_HELP_STRING([--with-inotify],[Enable inotify support (default=auto)])],
-            [want_inotify=${withval}],
-            [want_inotify=${have_inotify}])
-if test "x$want_inotify" = "xyes" ; then
-    if test "x$have_inotify" = "xyes"; then
-      AC_DEFINE([WITH_INOTIFY],[1])
-    else
-      AC_MSG_ERROR("inotify not found!")
-    fi
-fi
-
-AC_CHECK_HEADER([sys/event.h],
-                [AC_CHECK_FUNC([kqueue],[have_kqueue="yes"],[have_kqueue="no"])],
-                [have_kqueue="no"])
-AC_ARG_WITH([kqueue],
-            [AS_HELP_STRING([--with-kqueue],[Enable kqueue support (default=auto)])],
-            [want_kqueue=${withval}],
-            [want_kqueue=${have_kqueue}])
-if test "x$want_kqueue" = "xyes" ; then
-    if test "x$have_kqueue" = "xyes"; then
-      AC_DEFINE([WITH_KQUEUE],[1])
-    else
-      AC_MSG_ERROR("kqueue not found!")
-    fi
-fi
+AC_CHECK_HEADER([sys/inotify.h], 
+                [AC_CHECK_FUNC([inotify_init],[have_inotify="yes"],[have_inotify="no"])], 
+                [have_inotify="no"]) 
+AC_ARG_WITH([inotify], 
+            [AS_HELP_STRING([--with-inotify],[Enable inotify support (default=auto)])], 
+            [want_inotify=${withval}], 
+            [want_inotify=${have_inotify}]) 
+if test "x$want_inotify" = "xyes" ; then 
+    if test "x$have_inotify" = "xyes"; then 
+      AC_DEFINE([WITH_INOTIFY],[1]) 
+    else 
+      AC_MSG_ERROR("inotify not found!") 
+    fi 
+fi 
+ 
+AC_CHECK_HEADER([sys/event.h], 
+                [AC_CHECK_FUNC([kqueue],[have_kqueue="yes"],[have_kqueue="no"])], 
+                [have_kqueue="no"]) 
+AC_ARG_WITH([kqueue], 
+            [AS_HELP_STRING([--with-kqueue],[Enable kqueue support (default=auto)])], 
+            [want_kqueue=${withval}], 
+            [want_kqueue=${have_kqueue}]) 
+if test "x$want_kqueue" = "xyes" ; then 
+    if test "x$have_kqueue" = "xyes"; then 
+      AC_DEFINE([WITH_KQUEUE],[1]) 
+    else 
+      AC_MSG_ERROR("kqueue not found!") 
+    fi 
+fi 
 
 AC_CHECK_HEADERS([sys/statvfs.h \
                   xfs/xfs.h])
@@ -227,7 +215,7 @@ AC_ARG_ENABLE([utp],
               [want_utp=${enableval}],
               [want_utp=${have_utp}])
 if test "x$want_utp" = "xyes" ; then
-    if test "x$have_utp" = "xyes"; then
+    if test "x$have_utp" = "xyes"; then 
         LIBUTP_CFLAGS="-I\$(top_srcdir)/third-party/"
         LIBUTP_LIBS="\$(top_builddir)/third-party/libutp/libutp.a"
 	if test "x$libutp_extra_libs" != "x" ; then
@@ -235,10 +223,10 @@ if test "x$want_utp" = "xyes" ; then
 	fi
         AC_DEFINE([WITH_UTP],[1])
         build_utp="yes"
-    else
-      AC_MSG_ERROR("Unable to build uTP support -- C++ compiler not found")
-    fi
-fi
+    else 
+      AC_MSG_ERROR("Unable to build uTP support -- C++ compiler not found") 
+    fi 
+fi 
 AC_SUBST(LIBUTP_CFLAGS)
 AC_SUBST(LIBUTP_LIBS)
 AM_CONDITIONAL([BUILD_UTP],[test "x$build_utp" = "xyes"])
@@ -252,6 +240,7 @@ dnl  detection for the GTK+ client
 PKG_CHECK_MODULES(GTK,
                   [gtk+-2.0 >= $GTK_MINIMUM
                    glib-2.0 >= $GLIB_MINIMUM
+                   gio-2.0 >= $GIO_MINIMUM,
                    gmodule-2.0 >= $GLIB_MINIMUM
                    gthread-2.0 >= $GLIB_MINIMUM],
                   [have_gtk=yes],
@@ -261,12 +250,7 @@ AC_ARG_ENABLE([gtk],
               [want_gtk=${enableval}],
               [want_gtk=${have_gtk}])
 build_gtk=no
-use_gio=no
 use_libappindicator=no
-use_libnotify=no
-use_dbus_glib=no
-use_canberra=no
-use_gconf2=no
 if test "x$want_gtk" = "xyes" ; then
     if test "x$have_gtk" = "xyes"; then
       build_gtk=yes
@@ -278,102 +262,27 @@ AM_CONDITIONAL([BUILD_GTK],[test "x$build_gtk" = "xyes"])
 
 if test "x$build_gtk" = "xyes"; then
 
-    PKG_CHECK_MODULES([GIO],
-                      [gio-2.0 >= $GIO_MINIMUM],
-                      [use_gio=yes],
-                      [use_gio=no])
-    if test "x$use_gio" = "xyes"; then
-        AC_DEFINE([HAVE_GIO], 1)
-    fi
-
-    PKG_CHECK_MODULES([LIBNOTIFY],
-                      [libnotify >= $LIBNOTIFY_MINIMUM],
-                      [have_libnotify=yes],
-                      [have_libnotify=no])
-    AC_ARG_ENABLE([libnotify],
-                  AS_HELP_STRING([--enable-libnotify],[enable notifications]),,
-                  [enable_libnotify=yes])
-    use_libnotify=no
-    if test "x$have_libnotify" = "xyes"; then
-        if test "x$enable_libnotify" = "xyes" ; then
-            use_libnotify=yes
-            AC_DEFINE([HAVE_LIBNOTIFY], 1)
-        else
-            LIBNOTIFY_CFLAGS=
-            LIBNOTIFY_LIBS=
-        fi
-    fi
-
     PKG_CHECK_MODULES([LIBAPPINDICATOR],
                       [appindicator-0.1 >= $LIBAPPINDICATOR_MINIMUM],
                       [have_libappindicator=yes],
                       [have_libappindicator=no])
 
-    AC_ARG_ENABLE([libappindicator],
-                  AS_HELP_STRING([--enable-libappindicator],[enable AppIndicator support]),,
+    AC_ARG_ENABLE([libappindicator], 
+                  AS_HELP_STRING([--enable-libappindicator],[enable AppIndicator support]),, 
                   [enable_libappindicator=yes])
     use_libappindicator=no
     if test "x$have_libappindicator" = "xyes"; then
         if test "x$enable_libappindicator" = "xyes" ; then
             use_libappindicator=yes
-            AC_DEFINE([HAVE_LIBAPPINDICATOR], 1)
+            AC_DEFINE([HAVE_LIBAPPINDICATOR], 1) 
         else
             LIBAPPINDICATOR_CFLAGS=
             LIBAPPINDICATOR_LIBS=
         fi
     fi
-
-    PKG_CHECK_MODULES([LIBCANBERRA],
-                      [libcanberra-gtk >= $CANBERRA_MINIMUM],
-                      [have_libcanberra=yes],
-                      [have_libcanberra=no])
-    AC_ARG_ENABLE([libcanberra],
-                  AS_HELP_STRING([--enable-libcanberra],[enable sounds]),,
-                  [enable_libcanberra=yes])
-    if test "x$have_libcanberra" = "xyes"; then
-        if test "x$enable_libcanberra" = "xyes" ; then
-            use_canberra=yes
-            AC_DEFINE([HAVE_LIBCANBERRA], 1)
-        else
-            LIBCANBERRA_CFLAGS=
-            LIBCANBERRA_LIBS=
-        fi
-    fi
-
-    PKG_CHECK_MODULES([GCONF2],
-                      [gconf-2.0 >= $GCONF2_MINIMUM],
-                      [have_gconf2=yes],
-                      [have_gconf2=no])
-    AC_ARG_ENABLE([gconf2],
-                  AS_HELP_STRING([--enable-gconf2],[enable GConf support]),,
-                  [enable_gconf2=yes])
-    if test "x$have_gconf2" = "xyes"; then
-        if test "x$enable_gconf2" = "xyes" ; then
-            use_gconf2=yes
-            AC_DEFINE([HAVE_GCONF2], 1)
-        else
-            GCONF2_CFLAGS=
-            GCONF2_LIBS=
-        fi
-    fi
-
-    PKG_CHECK_MODULES([DBUS_GLIB],
-                      [dbus-glib-1 >= $DBUS_GLIB_MINIMUM],
-                      [use_dbus_glib=yes],
-                      [use_dbus_glib=no])
-    if test "x$use_dbus_glib" = "xyes"; then
-        AC_DEFINE([HAVE_DBUS_GLIB], 1)
-    fi
-    if test "x$use_dbus_glib" = "xyes"; then
-        AC_PATH_PROG(DBUS_BINDING_TOOL, dbus-binding-tool, no)
-        if test "x$DBUS_BINDING_TOOL" = xno; then
-          AC_MSG_WARN([Cannot find dbus-binding-tool])
-          use_dbus_glib="no (dbus-binding-tool not found)"
-        fi
-    fi
 fi
 
-AC_ARG_ENABLE([nls],
+AC_ARG_ENABLE([nls], 
               AS_HELP_STRING([--enable-nls],[enable native language support]),,
               [enable_nls=yes])
 
@@ -440,9 +349,9 @@ AC_ARG_ENABLE([lightweight],
               AS_HELP_STRING([--enable-lightweight],[optimize libtransmission for low-resource systems: smaller cache size, prefer unencrypted peer connections, etc.]),
               [enable_lightweight=${enableval}],
               [enable_lightweight="no"])
-if test "x$enable_lightweight" = "xyes" ; then
+if test "x$enable_lightweight" = "xyes" ; then 
   AC_DEFINE([TR_LIGHTWEIGHT],[1],[optimize libtransmission for low-resource systems])
-fi
+fi 
 
 AC_ARG_ENABLE([cli],
               [AS_HELP_STRING([--enable-cli],[build command-line client])],
@@ -525,21 +434,12 @@ Configuration:
    Compiler:                                          ${CXX}
 
    Build libtransmission:                             yes
-
       * optimized for low-resource systems:           ${enable_lightweight}
       * µTP enabled:                                  ${build_utp}
 
    Build Command-Line client:                         ${build_cli}
 
    Build GTK+ client:                                 ${build_gtk}
-
-     Optional dependencies for GTK+ client:
-
-      * dbus support:                                 ${use_dbus_glib}
-      * gio for watchdir support:                     ${use_gio}
-      * libnotify for 'download completed' popups:    ${use_libnotify}
-      * libcanberra for 'download completed' sounds:  ${use_canberra}
-      * gconf2 to register as a magnet link handler:  ${use_gconf2}
       * libappindicator for an Ubuntu-style tray:     ${use_libappindicator}
 
    Build Daemon:                                      ${build_daemon}
