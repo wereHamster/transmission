@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2006-2011 Transmission authors and contributors
+ * Copyright (c) 2006-2012 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -24,6 +24,7 @@
 
 #import "TorrentCell.h"
 #import "GroupsController.h"
+#import "NSImageAdditions.h"
 #import "NSStringAdditions.h"
 #import "ProgressGradients.h"
 #import "Torrent.h"
@@ -38,8 +39,8 @@
 #define NORMAL_BUTTON_WIDTH 14.0
 #define ACTION_BUTTON_WIDTH 16.0
 
-#define PRIORITY_ICON_WIDTH 14.0
-#define PRIORITY_ICON_HEIGHT 14.0
+#define PRIORITY_ICON_WIDTH 12.0
+#define PRIORITY_ICON_HEIGHT 12.0
 
 //ends up being larger than font height
 #define HEIGHT_TITLE 16.0
@@ -49,13 +50,14 @@
 #define PADDING_BETWEEN_BUTTONS 3.0
 #define PADDING_BETWEEN_IMAGE_AND_TITLE (PADDING_HORIZONTAL + 1.0)
 #define PADDING_BETWEEN_IMAGE_AND_BAR PADDING_HORIZONTAL
-#define PADDING_BETWEEN_TITLE_AND_PRIORITY 3.0
+#define PADDING_BETWEEN_TITLE_AND_PRIORITY 6.0
 #define PADDING_ABOVE_TITLE 4.0
 #define PADDING_BETWEEN_TITLE_AND_MIN_STATUS 3.0
 #define PADDING_BETWEEN_TITLE_AND_PROGRESS 1.0
 #define PADDING_BETWEEN_PROGRESS_AND_BAR 2.0
 #define PADDING_BETWEEN_BAR_AND_STATUS 2.0
 #define PADDING_BETWEEN_BAR_AND_EDGE_MIN 3.0
+#define PADDING_EXPANSION_FRAME 2.0
 
 #define PIECES_TOTAL_PERCENT 0.6
 
@@ -480,13 +482,12 @@
     //priority icon
     if ([torrent priority] != TR_PRI_NORMAL)
     {
-        NSImage * priorityImage = [torrent priority] == TR_PRI_HIGH ? [NSImage imageNamed: @"PriorityHigh.png"]
-                                                                    : [NSImage imageNamed: @"PriorityLow.png"];
-        
         const NSRect priorityRect = NSMakeRect(NSMaxX(titleRect) + PADDING_BETWEEN_TITLE_AND_PRIORITY,
                                                NSMidY(titleRect) - PRIORITY_ICON_HEIGHT  * 0.5,
                                                PRIORITY_ICON_WIDTH, PRIORITY_ICON_HEIGHT);
         
+        NSColor * priorityColor = [self backgroundStyle] == NSBackgroundStyleDark ? [NSColor whiteColor] : [NSColor darkGrayColor];
+        NSImage * priorityImage = [[NSImage imageNamed: ([torrent priority] == TR_PRI_HIGH ? @"PriorityHighTemplate.png" : @"PriorityLowTemplate.png")] imageWithColor: priorityColor];
         [priorityImage drawInRect: priorityRect fromRect: NSZeroRect operation: NSCompositeSourceOver fraction: 1.0 respectFlipped: YES hints: nil];
     }
     
@@ -496,6 +497,50 @@
         NSAttributedString * statusString = [self attributedStatusString: [self statusString]];
         [statusString drawInRect: [self rectForStatusWithStringInBounds: cellFrame]];
     }
+}
+
+- (NSRect) expansionFrameWithFrame: (NSRect) cellFrame inView: (NSView *) view
+{
+    BOOL minimal = [fDefaults boolForKey: @"SmallView"];
+    
+    //this code needs to match the code in drawInteriorWithFrame:withView:
+    CGFloat minimalTitleRightBound;
+    if (minimal)
+    {
+        NSAttributedString * minimalString = [self attributedStatusString: [self minimalStatusString]];
+        NSRect minimalStatusRect = [self rectForMinimalStatusWithString: minimalString inBounds: cellFrame];
+        
+        minimalTitleRightBound = NSMinX(minimalStatusRect);
+    }
+    
+    if (!minimal || fHover)
+    {
+        const NSRect controlRect = [self controlButtonRectForBounds: cellFrame];
+        minimalTitleRightBound = MIN(minimalTitleRightBound, NSMinX(controlRect));
+    }
+    
+    NSAttributedString * titleString = [self attributedTitle];
+    NSRect realRect = [self rectForTitleWithString: titleString withRightBound: minimalTitleRightBound inBounds: cellFrame];
+    
+    NSAssert([titleString size].width >= NSWidth(realRect), @"Full rect width should not be less than the used title rect width!");
+    
+    if ([titleString size].width > NSWidth(realRect)
+        && NSMouseInRect([view convertPoint: [[view window] convertScreenToBase: [NSEvent mouseLocation]] fromView: nil], realRect, [view isFlipped]))
+    {
+        realRect.size.width = [titleString size].width;
+        return NSInsetRect(realRect, -PADDING_EXPANSION_FRAME, -PADDING_EXPANSION_FRAME);
+    }
+    
+    return NSZeroRect;
+}
+
+- (void) drawWithExpansionFrame: (NSRect) cellFrame inView: (NSView *)view
+{
+    cellFrame.origin.x += PADDING_EXPANSION_FRAME;
+    cellFrame.origin.y += PADDING_EXPANSION_FRAME;
+    
+    NSAttributedString * titleString = [self attributedTitle];
+    [titleString drawInRect: cellFrame];
 }
 
 @end
@@ -683,10 +728,8 @@
     }
     
     if ([(Torrent *)[self representedObject] priority] != TR_PRI_NORMAL)
-    {
         result.size.width -= PRIORITY_ICON_WIDTH + PADDING_BETWEEN_TITLE_AND_PRIORITY;
-        result.size.width = MIN(NSWidth(result), [string size].width); //only need to force it smaller for the priority icon
-    }
+    result.size.width = MIN(NSWidth(result), [string size].width);
     
     return result;
 }
@@ -784,7 +827,7 @@
 
 - (NSAttributedString *) attributedTitle
 {
-    NSString * title = [[self representedObject] name];
+    NSString * title = [(Torrent *)[self representedObject] name];
     return [[[NSAttributedString alloc] initWithString: title attributes: fTitleAttributes] autorelease];
 }
 

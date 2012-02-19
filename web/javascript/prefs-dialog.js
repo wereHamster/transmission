@@ -118,6 +118,10 @@ function PrefsDialog(remote) {
                 return e.prop('checked');
 
             case 'text':
+            case 'url':
+            case 'email':
+            case 'number':
+            case 'search':
             case 'select-one':
                 str = e.val();
                 if( parseInt(str,10).toString() === str)
@@ -235,7 +239,8 @@ function PrefsDialog(remote) {
 
     onDialogClosed = function()
     {
-        window.scrollTo(0,1);
+        transmission.hideMobileAddressbar();
+
         $(data.dialog).trigger('closed', getValues());
     };
 
@@ -290,12 +295,18 @@ function PrefsDialog(remote) {
 
     this.show = function ()
     {
-        window.scrollTo(0,1);
+        transmission.hideMobileAddressbar();
 
         setBlocklistButtonEnabled(true);
         data.remote.checkPort(onPortChecked,this);
         data.elements.root.dialog('open');
     };
+
+    this.close = function ()
+    {
+        transmission.hideMobileAddressbar();
+        data.elements.root.dialog('close');
+    },
 
     this.shouldAddedTorrentsStart = function()
     {

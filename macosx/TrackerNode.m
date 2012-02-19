@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2009-2011 Transmission authors and contributors
+ * Copyright (c) 2009-2012 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -27,12 +27,15 @@
 
 @implementation TrackerNode
 
+#warning remove ivars in header when 64-bit only (or it compiles in 32-bit mode)
+@synthesize torrent = fTorrent;
+
 - (id) initWithTrackerStat: (tr_tracker_stat *) stat torrent: (Torrent *) torrent
 {
     if ((self = [super init]))
     {
         fStat = *stat;
-        fTorrent = torrent;
+        fTorrent = torrent; //weak reference
     }
     
     return self;
@@ -47,6 +50,20 @@
 {
     //this object is essentially immutable after initial setup
     return [self retain];
+}
+
+- (BOOL) isEqual: (id) object
+{
+    if (self == object)
+        return YES;
+    
+    if (![object isKindOfClass: [self class]])
+        return NO;
+    
+    if ([self torrent] != [object torrent])
+        return NO;
+    
+    return [self tier] == [object tier] && [[self fullAnnounceAddress] isEqualToString: [object fullAnnounceAddress]];
 }
 
 - (NSString *) host
@@ -67,11 +84,6 @@
 - (NSUInteger) identifier
 {
     return fStat.id;
-}
-
-- (Torrent *) torrent
-{
-    return fTorrent;
 }
 
 - (NSInteger) totalSeeders

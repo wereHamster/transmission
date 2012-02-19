@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2006-2011 Transmission authors and contributors
+ * Copyright (c) 2006-2012 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -76,6 +76,8 @@ typedef enum
     
     //window location and size
     NSPanel * window = (NSPanel *)[self window];
+    
+    [window setFloatingPanel: NO];
     
     const CGFloat windowHeight = NSHeight([window frame]);
     
@@ -294,12 +296,25 @@ typedef enum
     
     NSRect windowRect = [window frame], viewRect = [view frame];
     
-    CGFloat difference = (NSHeight(viewRect) - oldHeight) * [window userSpaceScaleFactor];
+    const CGFloat difference = (NSHeight(viewRect) - oldHeight) * [window userSpaceScaleFactor];
     windowRect.origin.y -= difference;
     windowRect.size.height += difference;
     
     if ([fViewController respondsToSelector: @selector(saveViewSize)]) //a little bit hacky, but avoids requiring an extra method
     {
+        if ([window screen])
+        {
+            const CGFloat screenHeight = NSHeight([[window screen] visibleFrame]);
+            if (NSHeight(windowRect) > screenHeight)
+            {
+                const CGFloat difference = (screenHeight - NSHeight(windowRect)) * [window userSpaceScaleFactor];
+                windowRect.origin.y -= difference;
+                windowRect.size.height += difference;
+                
+                viewRect.size.height += difference;
+            }
+        }
+        
         [window setMinSize: NSMakeSize([window minSize].width, NSHeight(windowRect) - NSHeight(viewRect) + TAB_MIN_HEIGHT)];
         [window setMaxSize: NSMakeSize(FLT_MAX, FLT_MAX)];
     }

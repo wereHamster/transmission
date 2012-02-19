@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2008-2011 Transmission authors and contributors
+ * Copyright (c) 2008-2012 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -31,6 +31,14 @@
 @end
 
 @implementation FileListNode
+
+#warning remove ivars in header when 64-bit only (or it compiles in 32-bit mode)
+@synthesize name = fName;
+@synthesize path = fPath;
+@synthesize torrent = fTorrent;
+@synthesize size = fSize;
+@synthesize icon = fIcon;
+@synthesize isFolder = fIsFolder;
 
 - (id) initWithFolderName: (NSString *) name path: (NSString *) path torrent: (Torrent *) torrent
 {
@@ -96,29 +104,9 @@
         return [NSString stringWithFormat: @"%@ (folder: %@)", fName, fIndexes];
 }
 
-- (BOOL) isFolder
-{
-    return fIsFolder;
-}
-
-- (NSString *) name
-{
-    return fName;
-}
-
-- (NSString *) path
-{
-    return fPath;
-}
-
 - (NSIndexSet *) indexes
 {
     return fIndexes;
-}
-
-- (uint64_t) size
-{
-    return fSize;
 }
 
 - (NSImage *) icon
@@ -134,11 +122,6 @@
     NSAssert(fIsFolder, @"method can only be invoked on folders");
     
     return fChildren;
-}
-
-- (Torrent *) torrent
-{
-    return fTorrent;
 }
 
 @end

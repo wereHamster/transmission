@@ -40,17 +40,17 @@ const char * mem_M_str = N_("MiB");
 const char * mem_G_str = N_("GiB");
 const char * mem_T_str = N_("TiB");
 
-const int disk_K = 1024;
-const char * disk_K_str = N_("KiB");
-const char * disk_M_str = N_("MiB");
-const char * disk_G_str = N_("GiB");
-const char * disk_T_str = N_("TiB");
+const int disk_K = 1000;
+const char * disk_K_str = N_("kB");
+const char * disk_M_str = N_("MB");
+const char * disk_G_str = N_("GB");
+const char * disk_T_str = N_("TB");
 
-const int speed_K = 1024;
-const char * speed_K_str = N_("KiB/s");
-const char * speed_M_str = N_("MiB/s");
-const char * speed_G_str = N_("GiB/s");
-const char * speed_T_str = N_("TiB/s");
+const int speed_K = 1000;
+const char * speed_K_str = N_("kB/s");
+const char * speed_M_str = N_("MB/s");
+const char * speed_G_str = N_("GB/s");
+const char * speed_T_str = N_("TB/s");
 
 /***
 ****
@@ -313,7 +313,7 @@ gtr_file_trash_or_remove( const char * filename )
 
     if( !trashed ) {
         GError * err = NULL;
-        trashed = g_file_delete( file, NULL, &err );
+        g_file_delete( file, NULL, &err );
         if( err ) {
             g_message( "Unable to delete file \"%s\": %s", filename, err->message );
             g_clear_error( &err );
@@ -343,10 +343,9 @@ gtr_get_help_uri( void )
 void
 gtr_open_file( const char * path )
 {
-    char * uri = NULL;
+    char * uri;
 
     GFile * file = g_file_new_for_path( path );
-    uri = g_file_get_uri( file );
     g_object_unref( G_OBJECT( file ) );
 
     if( g_path_is_absolute( path ) )
@@ -473,6 +472,28 @@ gtr_priority_combo_new( void )
 ****
 ***/
 
+GtkWidget*
+gtr_hbox_new( gboolean homogenous UNUSED, gint spacing )
+{
+#if GTK_CHECK_VERSION( 3,2,0 )
+    return gtk_box_new( GTK_ORIENTATION_HORIZONTAL, spacing );
+#else
+    return gtk_hbox_new( homogenous, spacing );
+#endif
+}
+
+GtkWidget*
+gtr_vbox_new( gboolean homogenous UNUSED, gint spacing )
+{
+#if GTK_CHECK_VERSION( 3,2,0 )
+    return gtk_box_new( GTK_ORIENTATION_VERTICAL, spacing );
+#else
+    return gtk_vbox_new( homogenous, spacing );
+#endif
+}
+
+#define GTR_CHILD_HIDDEN "gtr-child-hidden"
+
 void
 gtr_widget_set_visible( GtkWidget * w, gboolean b )
 {
@@ -484,9 +505,25 @@ gtr_widget_set_visible( GtkWidget * w, gboolean b )
         GtkWindow * window = GTK_WINDOW( w );
 
         for( l=windows; l!=NULL; l=l->next )
-            if( GTK_IS_WINDOW( l->data ) )
-                if( gtk_window_get_transient_for( GTK_WINDOW( l->data ) ) == window )
-                    gtr_widget_set_visible( GTK_WIDGET( l->data ), b );
+        {
+            if( !GTK_IS_WINDOW( l->data ) )
+                continue;
+            if( gtk_window_get_transient_for( GTK_WINDOW( l->data ) ) != window )
+                continue;
+            if( gtk_widget_get_visible( GTK_WIDGET( l->data ) ) == b )
+                continue;
+
+            if( b && g_object_get_data( G_OBJECT( l->data ), GTR_CHILD_HIDDEN ) != NULL )
+            {
+                g_object_steal_data( G_OBJECT( l->data ), GTR_CHILD_HIDDEN );
+                gtr_widget_set_visible( GTK_WIDGET( l->data ), TRUE );
+            }
+            else if( !b )
+            {
+                g_object_set_data( G_OBJECT( l->data ), GTR_CHILD_HIDDEN, GINT_TO_POINTER( 1 ) );
+                gtr_widget_set_visible( GTK_WIDGET( l->data ), FALSE );
+            }
+        }
 
         g_list_free( windows );
     }

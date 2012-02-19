@@ -322,7 +322,7 @@ torrentPage( GObject * core )
     guint row = 0;
 
     t = hig_workarea_create( );
-    hig_workarea_add_section_title( t, &row, _( "Adding" ) );
+    hig_workarea_add_section_title( t, &row, C_( "Gerund", "Adding" ) );
 
     s = _( "_Start when added" );
     w = new_check_button( s, TR_PREFS_KEY_START, core );
@@ -344,7 +344,7 @@ torrentPage( GObject * core )
     hig_workarea_add_row_w( t, &row, l, w, NULL );
 
     hig_workarea_add_section_divider( t, &row );
-    hig_workarea_add_section_title( t, &row, _( "Seeding" ) );
+    hig_workarea_add_section_title( t, &row, C_( "Gerund", "Seeding" ) );
 
     s = _( "Stop seeding at _ratio:" );
     w = new_check_button( s, TR_PREFS_KEY_RATIO_ENABLED, core );
@@ -481,7 +481,7 @@ onBlocklistUpdate( GtkButton * w, gpointer gdata )
                                 GTK_BUTTONS_CLOSE,
                                 "%s", _( "Update Blocklist" ) );
     gtk_widget_set_sensitive( data->updateBlocklistButton, FALSE );
-    gtk_message_dialog_format_secondary_text( GTK_MESSAGE_DIALOG( d ), "%s", _( "Getting new blocklist..." ) );
+    gtk_message_dialog_format_secondary_text( GTK_MESSAGE_DIALOG( d ), "%s", _( "Getting new blocklist…" ) );
     data->updateBlocklistDialog = d;
     g_signal_connect( d, "response", G_CALLBACK(onBlocklistUpdateResponse), data );
     gtk_widget_show( d );
@@ -549,7 +549,7 @@ privacyPage( GObject * core )
     gtk_misc_set_alignment( GTK_MISC( w ), 0.0f, 0.5f );
     updateBlocklistText( w, TR_CORE( core ) );
     data->label = w;
-    h = gtk_hbox_new( FALSE, GUI_PAD_BIG );
+    h = gtr_hbox_new( FALSE, GUI_PAD_BIG );
     gtk_box_pack_start( GTK_BOX( h ), w, TRUE, TRUE, 0 );
     b = data->updateBlocklistButton = gtk_button_new_with_mnemonic( _( "_Update" ) );
     g_object_set_data( G_OBJECT( b ), "session", gtr_core_session( TR_CORE( core ) ) );
@@ -811,7 +811,7 @@ webPage( GObject * core )
     w = new_check_button( s, TR_PREFS_KEY_RPC_ENABLED, core );
     page->rpc_tb = GTK_TOGGLE_BUTTON( w );
     g_signal_connect( w, "clicked", G_CALLBACK( onRPCToggled ), page );
-    h = gtk_hbox_new( FALSE, GUI_PAD_BIG );
+    h = gtr_hbox_new( FALSE, GUI_PAD_BIG );
     gtk_box_pack_start( GTK_BOX( h ), w, TRUE, TRUE, 0 );
     w = gtk_button_new_with_mnemonic( _( "_Open web client" ) );
     page->widgets = g_slist_prepend( page->widgets, w );
@@ -902,7 +902,7 @@ webPage( GObject * core )
         gtk_misc_set_padding( GTK_MISC( w ), 0, GUI_PAD );
         page->whitelist_widgets = g_slist_prepend( page->whitelist_widgets, w );
 
-        h = gtk_hbox_new( TRUE, GUI_PAD );
+        h = gtr_hbox_new( TRUE, GUI_PAD );
         w = gtk_button_new_from_stock( GTK_STOCK_REMOVE );
         g_signal_connect( w, "clicked", G_CALLBACK(
                               onRemoveWhitelistClicked ), page );
@@ -913,7 +913,7 @@ webPage( GObject * core )
         page->whitelist_widgets = g_slist_prepend( page->whitelist_widgets, w );
         g_signal_connect( w, "clicked", G_CALLBACK( onAddWhitelistClicked ), page );
         gtk_box_pack_start( GTK_BOX( h ), w, TRUE, TRUE, 0 );
-        w = gtk_hbox_new( FALSE, 0 );
+        w = gtr_hbox_new( FALSE, 0 );
         gtk_box_pack_start( GTK_BOX( w ), gtk_alignment_new( 0, 0, 0, 0 ),
                             TRUE, TRUE, 0 );
         gtk_box_pack_start( GTK_BOX( w ), h, FALSE, FALSE, 0 );
@@ -1071,7 +1071,7 @@ bandwidthPage( GObject * core )
         hig_workarea_add_row_w( t, &row, w, w2, NULL );
 
     hig_workarea_add_section_divider( t, &row );
-    h = gtk_hbox_new( FALSE, GUI_PAD );
+    h = gtr_hbox_new( FALSE, GUI_PAD );
     w = gtk_image_new_from_stock( "alt-speed-on", -1 );
     gtk_box_pack_start( GTK_BOX( h ), w, FALSE, FALSE, 0 );
     g_snprintf( buf, sizeof( buf ), "<b>%s</b>", _( "Alternative Speed Limits" ) );
@@ -1097,7 +1097,7 @@ bandwidthPage( GObject * core )
         hig_workarea_add_row( t, &row, buf, w, NULL );
 
         s = _( "_Scheduled times:" );
-        h = gtk_hbox_new( FALSE, 0 );
+        h = gtr_hbox_new( FALSE, 0 );
         w2 = new_time_combo( core, TR_PREFS_KEY_ALT_SPEED_TIME_BEGIN );
         page->sched_widgets = g_slist_prepend( page->sched_widgets, w2 );
         gtk_box_pack_start( GTK_BOX( h ), w2, TRUE, TRUE, 0 );
@@ -1182,7 +1182,7 @@ onPortTest( GtkButton * button UNUSED, gpointer vdata )
     struct network_page_data * data = vdata;
     gtk_widget_set_sensitive( data->portButton, FALSE );
     gtk_widget_set_sensitive( data->portSpin, FALSE );
-    gtk_label_set_markup( GTK_LABEL( data->portLabel ), _( "<i>Testing TCP port...</i>" ) );
+    gtk_label_set_markup( GTK_LABEL( data->portLabel ), _( "<i>Testing TCP port…</i>" ) );
     if( !data->portTag )
         data->portTag = g_signal_connect( data->core, "port-tested", G_CALLBACK(onPortTested), data );
     gtr_core_port_test( data->core );
@@ -1211,7 +1211,7 @@ networkPage( GObject * core )
     w = data->portSpin = new_spin_button( TR_PREFS_KEY_PEER_PORT, core, 1, USHRT_MAX, 1 );
     hig_workarea_add_row( t, &row, s, w, NULL );
 
-    h = gtk_hbox_new( FALSE, GUI_PAD_BIG );
+    h = gtr_hbox_new( FALSE, GUI_PAD_BIG );
     l = data->portLabel = gtk_label_new( _( "Status unknown" ) );
     gtk_misc_set_alignment( GTK_MISC( l ), 0.0f, 0.5f );
     gtk_box_pack_start( GTK_BOX( h ), l, TRUE, TRUE, 0 );
@@ -1281,7 +1281,7 @@ gtr_prefs_dialog_new( GtkWindow * parent, GObject * core )
                               gtk_label_new ( _( "Torrents" ) ) );
     gtk_notebook_append_page( GTK_NOTEBOOK( n ),
                               downloadPage( core ),
-                              gtk_label_new ( _( "Downloading" ) ) );
+                              gtk_label_new ( C_( "Gerund", "Downloading" ) ) );
     gtk_notebook_append_page( GTK_NOTEBOOK( n ),
                               bandwidthPage( core ),
                               gtk_label_new ( _( "Speed" ) ) );

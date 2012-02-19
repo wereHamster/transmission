@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2005-2011 Transmission authors and contributors
+ * Copyright (c) 2005-2012 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -107,8 +107,7 @@
     //set group columns to show ratio, needs to be in awakeFromNib to size columns correctly
     [self setGroupStatusColumns];
     
-    [[NSNotificationCenter defaultCenter] addObserver: self selector: @selector(reloadData)
-                                                 name: @"ReloadTorrentTable" object: nil];
+    [[NSNotificationCenter defaultCenter] addObserver: self selector: @selector(setNeedsDisplay) name: @"RefreshTorrentTable" object: nil];
 }
 
 - (BOOL) isGroupCollapsed: (NSInteger) value
@@ -202,12 +201,11 @@
 
 - (NSString *) outlineView: (NSOutlineView *) outlineView typeSelectStringForTableColumn: (NSTableColumn *) tableColumn item: (id) item
 {
-    return [item isKindOfClass: [Torrent class]] ? [item name]
+    return [item isKindOfClass: [Torrent class]] ? [(Torrent *)item name]
             : [[self preparedCellAtColumn: [self columnWithIdentifier: @"Group"] row: [self rowForItem: item]] stringValue];
 }
 
-- (NSString *) outlineView: (NSOutlineView *) outlineView toolTipForCell: (NSCell *) cell rect: (NSRectPointer) rect
-                tableColumn: (NSTableColumn *) column item: (id) item mouseLocation: (NSPoint) mouseLocation
+- (NSString *) outlineView: (NSOutlineView *) outlineView toolTipForCell: (NSCell *) cell rect: (NSRectPointer) rect tableColumn: (NSTableColumn *) column item: (id) item mouseLocation: (NSPoint) mouseLocation
 {
     NSString * ident = [column identifier];
     if ([ident isEqualToString: @"DL"] || [ident isEqualToString: @"DL Image"])
@@ -346,6 +344,8 @@
 
 - (void) outlineViewSelectionIsChanging: (NSNotification *) notification
 {
+    #warning elliminate when view-based?
+    //if pushing a button, don't change the selected rows
     if (fSelectedValues)
         [self selectValues: fSelectedValues];
 }
@@ -541,12 +541,30 @@
     return [fTorrentCell iconRectForBounds: [self rectOfRow: row]];
 }
 
-#warning catch string urls?
 - (void) paste: (id) sender
 {
     NSURL * url;
     if ((url = [NSURL URLFromPasteboard: [NSPasteboard generalPasteboard]]))
         [fController openURL: [url absoluteString]];
+    else if ([NSApp isOnLionOrBetter])
+    {
+        NSArray * items = [[NSPasteboard generalPasteboard] readObjectsForClasses: [NSArray arrayWithObject: [NSString class]] options: nil];
+        if (items)
+        {
+            NSDataDetector * detector = [NSDataDetectorLion dataDetectorWithTypes: NSTextCheckingTypeLink error: nil];
+            for (NSString * pbItem in items)
+            {
+                if ([pbItem rangeOfString: @"magnet:" options: (NSAnchoredSearch | NSCaseInsensitiveSearch)].location != NSNotFound)
+                    [fController openURL: pbItem];
+                else
+                {
+                    #warning only accept full text?
+                    for (NSTextCheckingResult * result in [detector matchesInString: pbItem options: 0 range: NSMakeRange(0, [pbItem length])])
+                        [fController openURL: [[result URL] absoluteString]];
+                }
+            }
+        }
+    }
 }
 
 - (BOOL) validateMenuItem: (NSMenuItem *) menuItem
@@ -554,7 +572,27 @@
     SEL action = [menuItem action];
     
     if (action == @selector(paste:))
-        return [[[NSPasteboard generalPasteboard] types] containsObject: NSURLPboardType];
+    {
+        if ([[[NSPasteboard generalPasteboard] types] containsObject: NSURLPboardType])
+            return YES;
+        
+        if ([NSApp isOnLionOrBetter])
+        {
+            NSArray * items = [[NSPasteboard generalPasteboard] readObjectsForClasses: [NSArray arrayWithObject: [NSString class]] options: nil];
+            if (items)
+            {
+                NSDataDetector * detector = [NSDataDetectorLion dataDetectorWithTypes: NSTextCheckingTypeLink error: nil];
+                for (NSString * pbItem in items)
+                {
+                    if (([pbItem rangeOfString: @"magnet:" options: (NSAnchoredSearch | NSCaseInsensitiveSearch)].location != NSNotFound)
+                        || [detector firstMatchInString: pbItem options: 0 range: NSMakeRange(0, [pbItem length])])
+                        return YES;
+                }
+            }
+        }
+        
+        return NO;
+    }
     
     return YES;
 }
@@ -804,7 +842,7 @@
     
     NSMutableArray * progressMarks = [NSMutableArray arrayWithCapacity: 16];
     for (NSAnimationProgress i = 0.0625; i <= 1.0; i += 0.0625)
-        [progressMarks addObject: [NSNumber numberWithDouble: i]];
+        [progressMarks addObject: [NSNumber numberWithFloat: i]];
     
     fPiecesBarAnimation = [[NSAnimation alloc] initWithDuration: TOGGLE_PROGRESS_SECONDS animationCurve: NSAnimationEaseIn];
     [fPiecesBarAnimation setAnimationBlockingMode: NSAnimationNonblocking];
@@ -832,7 +870,7 @@
         else
             fPiecesBarPercent = 1.0 - progress;
         
-        [self reloadData];
+        [self setNeedsDisplay: YES];
     }
 }
 

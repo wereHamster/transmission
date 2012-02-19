@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2007-2011 Transmission authors and contributors
+ * Copyright (c) 2007-2012 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -34,7 +34,6 @@
 @interface CreatorWindowController (Private)
 
 + (NSString *) chooseFile;
-- (void) locationSheetClosed: (NSSavePanel *) openPanel returnCode: (NSInteger) code contextInfo: (void *) info;
 
 - (void) createBlankAddressAlertDidEnd: (NSAlert *) alert returnCode: (NSInteger) returnCode contextInfo: (void *) contextInfo;
 - (void) createReal;
@@ -209,9 +208,19 @@
     [panel setAllowedFileTypes: [NSArray arrayWithObjects: @"org.bittorrent.torrent", @"torrent", nil]];
     [panel setCanSelectHiddenExtension: YES];
     
-    [panel beginSheetForDirectory: [fLocation stringByDeletingLastPathComponent] file: [fLocation lastPathComponent]
-            modalForWindow: [self window] modalDelegate: self didEndSelector: @selector(locationSheetClosed:returnCode:contextInfo:)
-            contextInfo: nil];
+    [panel setDirectoryURL: [NSURL fileURLWithPath: [fLocation stringByDeletingLastPathComponent]]];
+    [panel setNameFieldStringValue: [fLocation lastPathComponent]];
+    
+    [panel beginSheetModalForWindow: [self window] completionHandler: ^(NSInteger result) {
+        if (result == NSFileHandlingPanelOKButton)
+        {
+            [fLocation release];
+            fLocation = [[[panel URL] path] retain];
+            
+            [fLocationField setStringValue: [fLocation stringByAbbreviatingWithTildeInPath]];
+            [fLocationField setToolTip: fLocation];
+        }
+    }];
 }
 
 - (void) create: (id) sender
@@ -254,7 +263,7 @@
 
 - (void) windowWillClose: (NSNotification *) notification
 {
-    [self release];
+    [self autorelease];
 }
 
 - (void) cancelCreateProgress: (id) sender
@@ -405,18 +414,6 @@
     
     BOOL success = [panel runModal] == NSOKButton;
     return success ? [[[panel URLs] objectAtIndex: 0] path] : nil;
-}
-
-- (void) locationSheetClosed: (NSSavePanel *) panel returnCode: (NSInteger) code contextInfo: (void *) info
-{
-    if (code == NSOKButton)
-    {
-        [fLocation release];
-        fLocation = [[[panel URL] path] retain];
-        
-        [fLocationField setStringValue: [fLocation stringByAbbreviatingWithTildeInPath]];
-        [fLocationField setToolTip: fLocation];
-    }
 }
 
 - (void) createBlankAddressAlertDidEnd: (NSAlert *) alert returnCode: (NSInteger) returnCode contextInfo: (void *) contextInfo

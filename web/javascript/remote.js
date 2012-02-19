@@ -113,7 +113,7 @@ TransmissionRemote.prototype =
 		var o = {
 			method: 'torrent-get',
 				'arguments': {
-				'fields': fields,
+				'fields': fields
 			}
 		};
 		if (torrentIds)
@@ -132,7 +132,7 @@ TransmissionRemote.prototype =
 			arguments: args,
 			method: 'torrent-set'
 		}, function() {
-			remote._controller.refreshTorrents(torrent_ids);
+			remote._controller.refreshTorrents([torrentId]);
 		});
 	},
 

@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Copyright (c) 2008-2011 Transmission authors and contributors
+ * Copyright (c) 2008-2012 Transmission authors and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -32,8 +32,6 @@
 #import "NSStringAdditions.h"
 #import <Quartz/Quartz.h>
 
-#import "utils.h"
-
 #define ROW_SMALL_HEIGHT 18.0
 
 typedef enum
@@ -53,7 +51,7 @@ typedef enum
 
 - (NSMenu *) menu;
 
-- (NSUInteger) findFileNode: (FileListNode *) node inList: (NSArray *) list inRange: (NSRange) range currentParent: (FileListNode *) currentParent finalParent: (FileListNode **) parent;
+- (NSUInteger) findFileNode: (FileListNode *) node inList: (NSArray *) list atIndexes: (NSIndexSet *) range currentParent: (FileListNode *) currentParent finalParent: (FileListNode **) parent;
 
 @end
 
@@ -72,9 +70,6 @@ typedef enum
     
     [fOutline setMenu: [self menu]];
     
-    fLock = [[NSRecursiveLock alloc] init];
-    [fLock setName: @"File Table"];
-    
     [self setTorrent: nil];
 }
 
@@ -82,8 +77,6 @@ typedef enum
 {
     [fFileList release];
     [fFilterText release];
-    
-    [fLock release];
     
     [super dealloc];
 }
@@ -102,13 +95,8 @@ typedef enum
     [fFilterText release];
     fFilterText = nil;
     
-    while (![fLock tryLock])
-        tr_wait_msec(100);
-    
-    [fOutline deselectAll: nil];
     [fOutline reloadData];
-    
-    [fLock unlock];
+    [fOutline deselectAll: nil]; //do this after reloading the data #4575
 }
 
 - (void) setFilterText: (NSString *) text
@@ -125,16 +113,8 @@ typedef enum
     
     const BOOL onLion = [NSApp isOnLionOrBetter];
     
-    while (![fLock tryLock])
-        tr_wait_msec(100);
-    
     if (onLion)
-    {
-        [[NSAnimationContext currentContext] setCompletionHandler: ^{ [fLock unlock]; }];
-        [NSAnimationContext beginGrouping];
-        
         [fOutline beginUpdates];
-    }
     
     NSUInteger currentIndex = 0, totalCount = 0;
     NSMutableArray * itemsToAdd = [NSMutableArray array];
@@ -145,21 +125,22 @@ typedef enum
     NSArray * tempList = !text ? [fTorrent fileList] : [fTorrent flatFileList];
     for (FileListNode * item in tempList)
     {
-        BOOL filter = NO;
+        __block BOOL filter = NO;
         if (components)
         {
-            for (NSString * sub in components)
-                if ([[item name] rangeOfString: sub options: (NSCaseInsensitiveSearch | NSDiacriticInsensitiveSearch)].location == NSNotFound)
+            [components enumerateObjectsWithOptions: NSEnumerationConcurrent usingBlock: ^(id obj, NSUInteger idx, BOOL * stop) {
+                if ([[item name] rangeOfString: (NSString *)obj options: (NSCaseInsensitiveSearch | NSDiacriticInsensitiveSearch)].location == NSNotFound)
                 {
                     filter = YES;
-                    break;
+                    *stop = YES;
                 }
+            }];
         }
         
         if (!filter)
         {
             FileListNode * parent = nil;
-            NSUInteger previousIndex = ![item isFolder] ? [self findFileNode: item inList: fFileList inRange: NSMakeRange(currentIndex, [fFileList count]-currentIndex) currentParent: nil finalParent: &parent] : NSNotFound;
+            NSUInteger previousIndex = ![item isFolder] ? [self findFileNode: item inList: fFileList atIndexes: [NSIndexSet indexSetWithIndexesInRange: NSMakeRange(currentIndex, [fFileList count]-currentIndex)] currentParent: nil finalParent: &parent] : NSNotFound;
             
             if (previousIndex == NSNotFound)
             {
@@ -222,32 +203,19 @@ typedef enum
         [fOutline insertItemsAtIndexes: itemsToAddIndexes inParent: nil withAnimation: NSTableViewAnimationSlideUp];
     
     if (onLion)
-    {
         [fOutline endUpdates];
-        
-        [NSAnimationContext endGrouping];
-    }
     else
-    {
         [fOutline reloadData];
-    
-        [fLock unlock];
-    }
     
     [fFilterText release];
     fFilterText = [text retain];
 }
 
-- (void) reloadData
+- (void) refresh
 {
     [fTorrent updateFileStat];
     
-    while (![fLock tryLock])
-        tr_wait_msec(100);
-    
-    [fOutline reloadData];
-    
-    [fLock unlock];
+    [fOutline setNeedsDisplay: YES];
 }
 
 - (void) outlineViewSelectionDidChange: (NSNotification *) notification
@@ -285,8 +253,7 @@ typedef enum
         return item;
 }
 
-- (void) outlineView: (NSOutlineView *) outlineView willDisplayCell: (id) cell
-            forTableColumn: (NSTableColumn *) tableColumn item: (id) item
+- (void) outlineView: (NSOutlineView *) outlineView willDisplayCell: (id) cell forTableColumn: (NSTableColumn *) tableColumn item: (id) item
 {
     NSString * identifier = [tableColumn identifier];
     if ([identifier isEqualToString: @"Check"])
@@ -301,8 +268,7 @@ typedef enum
     else;
 }
 
-- (void) outlineView: (NSOutlineView *) outlineView setObjectValue: (id) object
-        forTableColumn: (NSTableColumn *) tableColumn byItem: (id) item
+- (void) outlineView: (NSOutlineView *) outlineView setObjectValue: (id) object forTableColumn: (NSTableColumn *) tableColumn byItem: (id) item
 {
     NSString * identifier = [tableColumn identifier];
     if ([identifier isEqualToString: @"Check"])
@@ -314,7 +280,7 @@ typedef enum
             indexSet = [(FileListNode *)item indexes];
         
         [fTorrent setFileCheckState: [object intValue] != NSOffState ? NSOnState : NSOffState forIndexes: indexSet];
-        [fOutline reloadData];
+        [fOutline setNeedsDisplay: YES];
         
         [[NSNotificationCenter defaultCenter] postNotificationName: @"UpdateUI" object: nil];
     }
@@ -333,7 +299,7 @@ typedef enum
     {
         NSString * path = [fTorrent fileLocation: item];
         if (!path)
-            path = [[item path] stringByAppendingPathComponent: [item name]];
+            path = [[(FileListNode *)item path] stringByAppendingPathComponent: [(FileListNode *)item name]];
         return path;
     }
     else if ([ident isEqualToString: @"Check"])
@@ -385,9 +351,6 @@ typedef enum
 
 - (void) setCheck: (id) sender
 {
-    while (![fLock tryLock])
-        tr_wait_msec(100);
-    
     NSInteger state = [sender tag] == FILE_UNCHECK_TAG ? NSOffState : NSOnState;
     
     NSIndexSet * indexSet = [fOutline selectedRowIndexes];
@@ -396,16 +359,11 @@ typedef enum
         [itemIndexes addIndexes: [[fOutline itemAtRow: i] indexes]];
     
     [fTorrent setFileCheckState: state forIndexes: itemIndexes];
-    [fOutline reloadData];
-    
-    [fLock unlock];
+    [fOutline setNeedsDisplay: YES];
 }
 
 - (void) setOnlySelectedCheck: (id) sender
 {
-    while (![fLock tryLock])
-        tr_wait_msec(100);
-    
     NSIndexSet * indexSet = [fOutline selectedRowIndexes];
     NSMutableIndexSet * itemIndexes = [NSMutableIndexSet indexSet];
     for (NSInteger i = [indexSet firstIndex]; i != NSNotFound; i = [indexSet indexGreaterThanIndex: i])
@@ -417,9 +375,7 @@ typedef enum
     [remainingItemIndexes removeIndexes: itemIndexes];
     [fTorrent setFileCheckState: NSOffState forIndexes: remainingItemIndexes];
     
-    [fOutline reloadData];
-    
-    [fLock unlock];
+    [fOutline setNeedsDisplay: YES];
 }
 
 - (void) setPriority: (id) sender
@@ -437,25 +393,17 @@ typedef enum
             priority = TR_PRI_LOW;
     }
     
-    while (![fLock tryLock])
-        tr_wait_msec(100);
-    
     NSIndexSet * indexSet = [fOutline selectedRowIndexes];
     NSMutableIndexSet * itemIndexes = [NSMutableIndexSet indexSet];
     for (NSInteger i = [indexSet firstIndex]; i != NSNotFound; i = [indexSet indexGreaterThanIndex: i])
         [itemIndexes addIndexes: [[fOutline itemAtRow: i] indexes]];
     
     [fTorrent setFilePriority: priority forIndexes: itemIndexes];
-    [fOutline reloadData];
-    
-    [fLock unlock];
+    [fOutline setNeedsDisplay: YES];
 }
 
 - (void) revealFile: (id) sender
 {
-    while (![fLock tryLock])
-        tr_wait_msec(100);
-    
     NSIndexSet * indexes = [fOutline selectedRowIndexes];
     NSMutableArray * paths = [NSMutableArray arrayWithCapacity: [indexes count]];
     for (NSUInteger i = [indexes firstIndex]; i != NSNotFound; i = [indexes indexGreaterThanIndex: i])
@@ -467,8 +415,6 @@ typedef enum
     
     if ([paths count] > 0)
         [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs: paths];
-    
-    [fLock unlock];
 }
 
 #warning make real view controller (Leopard-only) so that Command-R will work
@@ -604,7 +550,7 @@ typedef enum
             action: @selector(setPriority:) keyEquivalent: @""];
     [item setTarget: self];
     [item setTag: FILE_PRIORITY_HIGH_TAG];
-    [item setImage: [NSImage imageNamed: @"PriorityHigh.png"]];
+    [item setImage: [NSImage imageNamed: @"PriorityHighTemplate.png"]];
     [priorityMenu addItem: item];
     [item release];
     
@@ -612,7 +558,7 @@ typedef enum
             action: @selector(setPriority:) keyEquivalent: @""];
     [item setTarget: self];
     [item setTag: FILE_PRIORITY_NORMAL_TAG];
-    [item setImage: [NSImage imageNamed: @"PriorityNormal.png"]];
+    [item setImage: [NSImage imageNamed: @"PriorityNormalTemplate.png"]];
     [priorityMenu addItem: item];
     [item release];
     
@@ -620,7 +566,7 @@ typedef enum
             action: @selector(setPriority:) keyEquivalent: @""];
     [item setTarget: self];
     [item setTag: FILE_PRIORITY_LOW_TAG];
-    [item setImage: [NSImage imageNamed: @"PriorityLow.png"]];
+    [item setImage: [NSImage imageNamed: @"PriorityLowTemplate.png"]];
     [priorityMenu addItem: item];
     [item release];
     
@@ -638,28 +584,34 @@ typedef enum
     return [menu autorelease];
 }
 
-- (NSUInteger) findFileNode: (FileListNode *) node inList: (NSArray *) list inRange: (NSRange) range currentParent: (FileListNode *) currentParent finalParent: (FileListNode **) parent
+- (NSUInteger) findFileNode: (FileListNode *) node inList: (NSArray *) list atIndexes: (NSIndexSet *) indexes currentParent: (FileListNode *) currentParent finalParent: (FileListNode **) parent
 {
     NSAssert(![node isFolder], @"Looking up folder node!");
     
-    const NSUInteger nodeIndex = [[node indexes] firstIndex];
-    for (NSUInteger index = range.location; index < NSMaxRange(range); ++index)
-    {
-        FileListNode * checkNode = [list objectAtIndex: index];
-        if ([checkNode isEqualTo: node])
-        {
-            *parent = currentParent;
-            return index;
-        }
-        else if ([checkNode isFolder] && [[checkNode indexes] containsIndex: nodeIndex])
-        {
-            const NSUInteger subIndex = [self findFileNode: node inList: [checkNode children] inRange: NSMakeRange(0, [[checkNode children] count]) currentParent: checkNode finalParent: parent];
-            NSAssert(subIndex != NSNotFound, @"We didn't find an expected file node.");
-            return subIndex;
-        }
-    }
+    __block NSUInteger retIndex = NSNotFound;
     
-    return NSNotFound;
+    [list enumerateObjectsAtIndexes: indexes options: NSEnumerationConcurrent usingBlock: ^(id checkNode, NSUInteger index, BOOL * stop) {
+        if ([[checkNode indexes] containsIndex: [[node indexes] firstIndex]])
+        {
+            if (![checkNode isFolder])
+            {
+                NSAssert2([checkNode isEqualTo: node], @"Expected file nodes to be equal: %@ %@", checkNode, node);
+                
+                *parent = currentParent;
+                retIndex = index;
+            }
+            else
+            {
+                const NSUInteger subIndex = [self findFileNode: node inList: [checkNode children] atIndexes: [NSIndexSet indexSetWithIndexesInRange: NSMakeRange(0, [[checkNode children] count])] currentParent: checkNode finalParent: parent];
+                NSAssert(subIndex != NSNotFound, @"We didn't find an expected file node.");
+                retIndex = subIndex;
+            }
+            
+            *stop = YES;
+        }
+    }];
+    
+    return retIndex;
 }
 
 @end

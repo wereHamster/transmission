@@ -378,6 +378,17 @@ addMessages( GtkListStore * store, struct tr_msg_list * head )
                                            COL_MESSAGE, i->message,
                                            COL_SEQUENCE, ++sequence,
                                            -1 );
+
+        /* if it's an error message, dump it to the terminal too */
+        if( i->level == TR_MSG_ERR )
+        {
+            GString * gstr = g_string_sized_new( 512 );
+            g_string_append_printf( gstr, "%s:%d %s", i->file, i->line, i->message );
+            if( i->name != NULL )
+                g_string_append_printf( gstr, " (%s)", i->name );
+            g_warning( "%s", gstr->str );
+            g_string_free( gstr, TRUE );
+        }
     }
 
     return i; /* tail */
@@ -445,7 +456,7 @@ gtr_message_log_window_new( GtkWindow * parent, TrCore * core )
     gtk_window_set_title( GTK_WINDOW( win ), _( "Message Log" ) );
     gtk_window_set_default_size( GTK_WINDOW( win ), 560, 350 );
     gtk_window_set_role( GTK_WINDOW( win ), "message-log" );
-    vbox = gtk_vbox_new( FALSE, 0 );
+    vbox = gtr_vbox_new( FALSE, 0 );
 
     /**
     ***  toolbar
@@ -453,6 +464,10 @@ gtr_message_log_window_new( GtkWindow * parent, TrCore * core )
 
     toolbar = gtk_toolbar_new( );
     gtk_toolbar_set_style( GTK_TOOLBAR( toolbar ), GTK_TOOLBAR_BOTH_HORIZ );
+#if GTK_CHECK_VERSION( 3,0,0 )
+    gtk_style_context_add_class( gtk_widget_get_style_context( toolbar ),
+                                 GTK_STYLE_CLASS_PRIMARY_TOOLBAR );
+#endif
 
     item = gtk_tool_button_new_from_stock( GTK_STOCK_SAVE_AS );
     g_object_set( G_OBJECT( item ), "is-important", TRUE, NULL );
