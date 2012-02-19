@@ -1,3 +1,9 @@
+# include/Makefile.am for libevent
+# Copyright 2000-2007 Niels Provos
+# Copyright 2007-2012 Niels Provos and Nick Mathewson
+#
+# See LICENSE for copying information.
+
 AUTOMAKE_OPTIONS = foreign
 
 EVENT2_EXPORT = \
@@ -28,7 +34,14 @@ EVENT2_EXPORT = \
 
 EXTRA_SRC = $(EVENT2_EXPORT)
 
-nobase_include_HEADERS = $(EVENT2_EXPORT)
+## Without the nobase_ prefixing, Automake would strip "event2/" from
+## the source header filename to derive the installed header filename.
+## With nobase_ the installed path is $(includedir)/event2/ev*.h.
 
+if INSTALL_LIBEVENT
+nobase_include_HEADERS =	$(EVENT2_EXPORT)
 nobase_nodist_include_HEADERS = ./event2/event-config.h
-
+else
+noinst_HEADERS =		$(EVENT2_EXPORT)
+nodist_noinst_HEADERS =		./event2/event-config.h
+endif

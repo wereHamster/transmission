@@ -1,6 +1,9 @@
 /*
  * Submitted by David Pacheco (dp.spambait@gmail.com)
  *
+ * Copyright 2006-2007 Niels Provos
+ * Copyright 2007-2012 Niels Provos and Nick Mathewson
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -336,10 +339,20 @@ evport_dispatch(struct event_base *base, struct timeval *tv)
 		 * (because we have to pass this to the callback)
 		 */
 		res = 0;
-		if (pevt->portev_events & POLLIN)
-			res |= EV_READ;
-		if (pevt->portev_events & POLLOUT)
-			res |= EV_WRITE;
+		if (pevt->portev_events & (POLLERR|POLLHUP)) {
+			res = EV_READ | EV_WRITE;
+		} else {
+			if (pevt->portev_events & POLLIN)
+				res |= EV_READ;
+			if (pevt->portev_events & POLLOUT)
+				res |= EV_WRITE;
+		}
+
+		/*
+		 * Check for the error situations or a hangup situation
+		 */
+		if (pevt->portev_events & (POLLERR|POLLHUP|POLLNVAL))
+			res |= EV_READ|EV_WRITE;
 
 		EVUTIL_ASSERT(epdp->ed_nevents > fd);
 		fdi = &(epdp->ed_fds[fd]);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2010 Niels Provos and Nick Mathewson
+ * Copyright (c) 2008-2012 Niels Provos and Nick Mathewson
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -36,6 +36,7 @@ extern "C" {
 #include "evthread-internal.h"
 #include "event2/thread.h"
 #include "ratelim-internal.h"
+#include "event2/bufferevent_struct.h"
 
 /* These flags are reasons that we might be declining to actually enable
    reading or writing on a bufferevent.
@@ -97,6 +98,8 @@ struct bufferevent_rate_limit_group {
 	/** The smallest number of bytes that any member of the group should
 	 * be limited to read or write at a time. */
 	ev_ssize_t min_share;
+	ev_ssize_t configured_min_share;
+
 	/** Timeout event that goes off once a tick, when the bucket is ready
 	 * to refill. */
 	struct event master_refill_event;
@@ -194,7 +197,8 @@ struct bufferevent_private {
 enum bufferevent_ctrl_op {
 	BEV_CTRL_SET_FD,
 	BEV_CTRL_GET_FD,
-	BEV_CTRL_GET_UNDERLYING
+	BEV_CTRL_GET_UNDERLYING,
+	BEV_CTRL_CANCEL_ALL
 };
 
 /** Possible data types for a control callback */
@@ -286,6 +290,20 @@ void bufferevent_unsuspend_write(struct bufferevent *bufev, bufferevent_suspend_
 	bufferevent_suspend_read((b), BEV_SUSPEND_WM)
 #define bufferevent_wm_unsuspend_read(b) \
 	bufferevent_unsuspend_read((b), BEV_SUSPEND_WM)
+
+/*
+  Disable a bufferevent.  Equivalent to bufferevent_disable(), but
+  first resets 'connecting' flag to force EV_WRITE down for sure.
+
+  XXXX this method will go away in the future; try not to add new users.
+    See comment in evhttp_connection_reset() for discussion.
+
+  @param bufev the bufferevent to be disabled
+  @param event any combination of EV_READ | EV_WRITE.
+  @return 0 if successful, or -1 if an error occurred
+  @see bufferevent_disable()
+ */
+int bufferevent_disable_hard(struct bufferevent *bufev, short event);
 
 /** Internal: Set up locking on a bufferevent.  If lock is set, use it.
  * Otherwise, use a new lock. */

@@ -2,7 +2,7 @@
 
 /*
  * Copyright 2000-2007 Niels Provos <provos@citi.umich.edu>
- * Copyright 2007-2010 Niels Provos and Nick Mathewson
+ * Copyright 2007-2012 Niels Provos and Nick Mathewson
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -50,16 +50,21 @@
 #include "log-internal.h"
 #include "evmap-internal.h"
 
-#ifndef howmany
-#define howmany(x, y)   (((x)+((y)-1))/(y))
-#endif
-
 #ifndef _EVENT_HAVE_FD_MASK
 /* This type is mandatory, but Android doesn't define it. */
-#undef NFDBITS
-#define NFDBITS (sizeof(long)*8)
 typedef unsigned long fd_mask;
 #endif
+
+#ifndef NFDBITS
+#define NFDBITS (sizeof(fd_mask)*8)
+#endif
+
+/* Divide positive x by y, rounding up. */
+#define DIV_ROUNDUP(x, y)   (((x)+((y)-1))/(y))
+
+/* How many bytes to allocate for N fds? */
+#define SELECT_ALLOC_SIZE(n) \
+	(DIV_ROUNDUP(n, NFDBITS) * sizeof(fd_mask))
 
 struct selectop {
 	int event_fds;		/* Highest fd in fd set */
@@ -90,6 +95,7 @@ const struct eventop selectops = {
 };
 
 static int select_resize(struct selectop *sop, int fdsz);
+static void select_free_selectop(struct selectop *sop);
 
 static void *
 select_init(struct event_base *base)
@@ -99,7 +105,10 @@ select_init(struct event_base *base)
 	if (!(sop = mm_calloc(1, sizeof(struct selectop))))
 		return (NULL);
 
-	select_resize(sop, howmany(32 + 1, NFDBITS)*sizeof(fd_mask));
+	if (select_resize(sop, SELECT_ALLOC_SIZE(32 + 1))) {
+		select_free_selectop(sop);
+		return (NULL);
+	}
 
 	evsig_init(base);
 
@@ -128,11 +137,14 @@ select_dispatch(struct event_base *base, struct timeval *tv)
 		size_t sz = sop->event_fdsz;
 		if (!(readset_out = mm_realloc(sop->event_readset_out, sz)))
 			return (-1);
+		sop->event_readset_out = readset_out;
 		if (!(writeset_out = mm_realloc(sop->event_writeset_out, sz))) {
-			mm_free(readset_out);
+			/* We don't free readset_out here, since it was
+			 * already successfully reallocated. The next time
+			 * we call select_dispatch, the realloc will be a
+			 * no-op. */
 			return (-1);
 		}
-		sop->event_readset_out = readset_out;
 		sop->event_writeset_out = writeset_out;
 		sop->resize_out_sets = 0;
 	}
@@ -165,9 +177,9 @@ select_dispatch(struct event_base *base, struct timeval *tv)
 	event_debug(("%s: select reports %d", __func__, res));
 
 	check_selectop(sop);
-	i = random() % (nfds+1);
-	for (j = 0; j <= nfds; ++j) {
-		if (++i >= nfds+1)
+	i = random() % nfds;
+	for (j = 0; j < nfds; ++j) {
+		if (++i >= nfds)
 			i = 0;
 		res = 0;
 		if (FD_ISSET(i, sop->event_readset_out))
@@ -185,7 +197,6 @@ select_dispatch(struct event_base *base, struct timeval *tv)
 	return (0);
 }
 
-
 static int
 select_resize(struct selectop *sop, int fdsz)
 {
@@ -198,8 +209,15 @@ select_resize(struct selectop *sop, int fdsz)
 	if ((readset_in = mm_realloc(sop->event_readset_in, fdsz)) == NULL)
 		goto error;
 	sop->event_readset_in = readset_in;
-	if ((writeset_in = mm_realloc(sop->event_writeset_in, fdsz)) == NULL)
+	if ((writeset_in = mm_realloc(sop->event_writeset_in, fdsz)) == NULL) {
+		/* Note that this will leave event_readset_in expanded.
+		 * That's okay; we wouldn't want to free it, since that would
+		 * change the semantics of select_resize from "expand the
+		 * readset_in and writeset_in, or return -1" to "expand the
+		 * *set_in members, or trash them and return -1."
+		 */
 		goto error;
+	}
 	sop->event_writeset_in = writeset_in;
 	sop->resize_out_sets = 1;
 
@@ -240,8 +258,7 @@ select_add(struct event_base *base, int fd, short old, short events, void *p)
 		/* In theory we should worry about overflow here.  In
 		 * reality, though, the highest fd on a unixy system will
 		 * not overflow here. XXXX */
-		while (fdsz <
-		    (int) (howmany(fd + 1, NFDBITS) * sizeof(fd_mask)))
+		while (fdsz < (int) SELECT_ALLOC_SIZE(fd + 1))
 			fdsz *= 2;
 
 		if (fdsz != sop->event_fdsz) {
@@ -292,11 +309,8 @@ select_del(struct event_base *base, int fd, short old, short events, void *p)
 }
 
 static void
-select_dealloc(struct event_base *base)
+select_free_selectop(struct selectop *sop)
 {
-	struct selectop *sop = base->evbase;
-
-	evsig_dealloc(base);
 	if (sop->event_readset_in)
 		mm_free(sop->event_readset_in);
 	if (sop->event_writeset_in)
@@ -308,4 +322,12 @@ select_dealloc(struct event_base *base)
 
 	memset(sop, 0, sizeof(struct selectop));
 	mm_free(sop);
+}
+
+static void
+select_dealloc(struct event_base *base)
+{
+	evsig_dealloc(base);
+
+	select_free_selectop(base->evbase);
 }
