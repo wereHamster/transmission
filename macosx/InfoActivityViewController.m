@@ -56,6 +56,45 @@
 - (void) awakeFromNib
 {
     [[NSNotificationCenter defaultCenter] addObserver: self selector: @selector(updatePiecesView) name: @"UpdatePiecesView" object: nil];
+    
+    [fTransferSectionLabel sizeToFit];
+    [fDatesSectionLabel sizeToFit];
+    [fTimeSectionLabel sizeToFit];
+    
+    NSArray * labels = @[ fStateLabel, fProgressLabel, fHaveLabel, fDownloadedLabel, fUploadedLabel, fFailedDLLabel, fRatioLabel, fErrorLabel, fDateAddedLabel, fDateCompletedLabel, fDateActivityLabel, fDownloadTimeLabel, fSeedTimeLabel ];
+    
+    CGFloat oldMaxWidth = 0.0, originX, newMaxWidth = 0.0;
+    for (NSTextField * label in labels)
+    {
+        const NSRect oldFrame = [label frame];
+        if (oldFrame.size.width > oldMaxWidth)
+        {
+            oldMaxWidth = oldFrame.size.width;
+            originX = oldFrame.origin.x;
+        }
+        
+        [label sizeToFit];
+        const CGFloat newWidth = [label bounds].size.width;
+        if (newWidth > newMaxWidth)
+            newMaxWidth = newWidth;
+    }
+    
+    for (NSTextField * label in labels)
+    {
+        NSRect frame = [label frame];
+        frame.origin.x = originX + (newMaxWidth - frame.size.width);
+        [label setFrame: frame];
+    }
+    
+    NSArray * fields = @[ fDateAddedField, fDateCompletedField, fDateActivityField, fStateField, fProgressField, fHaveField, fDownloadedTotalField, fUploadedTotalField, fFailedHashField, fRatioField, fDownloadTimeField, fSeedTimeField, fErrorScrollView ];
+    
+    const CGFloat widthIncrease = newMaxWidth - oldMaxWidth;
+    for (NSView * field in fields) {
+        NSRect frame = [field frame];
+        frame.origin.x += widthIncrease;
+        frame.size.width -= widthIncrease;
+        [field setFrame: frame];
+    }
 }
 
 - (void) dealloc
@@ -142,6 +181,9 @@
         
         [fDateCompletedField setObjectValue: [torrent dateCompleted]];
         
+        //uses a relative date, so can't be set once
+        [fDateAddedField setObjectValue: [torrent dateAdded]];
+        
         [fDownloadTimeField setStringValue: [NSString timeString: [torrent secondsDownloading] showSeconds: YES]];
         [fSeedTimeField setStringValue: [NSString timeString: [torrent secondsSeeding] showSeconds: YES]];
         
@@ -181,17 +223,18 @@
             [fDownloadedTotalField setStringValue: @""];
             [fUploadedTotalField setStringValue: @""];
             [fFailedHashField setStringValue: @""];
-            [fDateActivityField setStringValue: @""];
+            [fDateActivityField setObjectValue: @""]; //using [field setStringValue: @""] causes "December 31, 1969 7:00 PM" to be displayed, at least on 10.7.3
             [fRatioField setStringValue: @""];
         }
-    
+        
         [fStateField setStringValue: @""];
         [fProgressField setStringValue: @""];
         
         [fErrorMessageView setString: @""];
         
-        [fDateAddedField setStringValue: @""];
-        [fDateCompletedField setStringValue: @""];
+        //using [field setStringValue: @""] causes "December 31, 1969 7:00 PM" to be displayed, at least on 10.7.3
+        [fDateAddedField setObjectValue: @""];
+        [fDateCompletedField setObjectValue: @""];
         
         [fDownloadTimeField setStringValue: @""];
         [fSeedTimeField setStringValue: @""];
@@ -204,8 +247,6 @@
     else
     {
         Torrent * torrent = [fTorrents objectAtIndex: 0];
-        
-        [fDateAddedField setObjectValue: [torrent dateAdded]];
         
         const BOOL piecesAvailableSegment = [[NSUserDefaults standardUserDefaults] boolForKey: @"PiecesViewShowAvailability"];
         [fPiecesControl setSelected: piecesAvailableSegment forSegment: PIECES_CONTROL_AVAILABLE];

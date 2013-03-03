@@ -44,7 +44,7 @@ body.open_showing #torrent_filter_bar, body.open_showing #torrent_container {
 ***/
 div#toolbar {
   width: 100%;
-  height: 36px;
+  height: 39px;
   margin: 0px;
   padding: 2px;
   border-bottom: 1px solid #AAA;
@@ -69,27 +69,29 @@ div#toolbar {
     height: 34px;
     float: left;
     border: none;
-    padding: 0px 3px; }
+    padding: 0px 3px;
+    background-position: center center;
+    background-repeat: no-repeat; }
   div#toolbar > div#toolbar-separator {
     height: 25px;
     margin-top: 8px;
-    margin-bottom: 5px;
+    margin-bottom: 8px;
     border-left: 1px solid #aaa;
     width: 3px; }
-  div#toolbar div#toolbar-open {
-    background: url("images/toolbar-folder.png") no-repeat; }
+  div#toolbar > div#toolbar-open {
+    background-image: url("images/toolbar-folder.png"); }
   div#toolbar > div#toolbar-remove {
-    background: url("images/toolbar-close.png") no-repeat; }
+    background-image: url("images/toolbar-close.png"); }
   div#toolbar > div#toolbar-start {
-    background: url("images/toolbar-start.png") no-repeat; }
+    background-image: url("images/toolbar-start.png"); }
   div#toolbar > div#toolbar-pause {
-    background: url("images/toolbar-pause.png") no-repeat; }
+    background-image: url("images/toolbar-pause.png"); }
   div#toolbar > div#toolbar-start-all {
-    background: url("images/toolbar-start-all.png") no-repeat; }
+    background-image: url("images/toolbar-start-all.png"); }
   div#toolbar > div#toolbar-pause-all {
-    background: url("images/toolbar-pause-all.png") no-repeat; }
+    background-image: url("images/toolbar-pause-all.png"); }
   div#toolbar > div#toolbar-inspector {
-    background: url("images/toolbar-info.png") no-repeat;
+    background-image: url("images/toolbar-info.png");
     float: right; }
   div#toolbar > *.disabled {
     opacity: 0.25; }
@@ -100,7 +102,7 @@ div#toolbar {
 ****
 ***/
 #statusbar {
-  height: 26px;
+  height: 24px;
   width: 100%;
   border-bottom: 1px solid #AAA;
   overflow: hidden;
@@ -164,7 +166,7 @@ ul.torrent_list {
    */ }
   ul.torrent_list li.torrent {
     border-bottom: 1px solid #ccc;
-    padding: 4px 30px 5px 0px;
+    padding: 4px 30px 5px 14px;
     color: #666;
     background-color: white; }
     ul.torrent_list li.torrent.compact {
@@ -513,34 +515,6 @@ div#torrent_inspector {
     font-size: 1.2em;
     font-weight: bold;
     color: #222; }
-  div#torrent_inspector #file-list-header {
-    float: right; }
-    div#torrent_inspector #file-list-header > * {
-      background-color: #dddddd;
-      background-image: -webkit-gradient(linear, left top, left bottom, from(white), to(#bbbbbb));
-      background-image: -webkit-linear-gradient(top, white, #bbbbbb);
-      background-image: -moz-linear-gradient(top, white, #bbbbbb);
-      background-image: -ms-linear-gradient(top, white, #bbbbbb);
-      background-image: -o-linear-gradient(top, white, #bbbbbb);
-      background-image: linear-gradient(top, white, #bbbbbb);
-      cursor: pointer;
-      -moz-user-select: none;
-      -webkit-user-select: none;
-      display: inline-block;
-      border-style: solid;
-      border-color: #aaa;
-      border-width: 1px;
-      padding: 3px;
-      -moz-border-radius: 5px;
-      border-radius: 5px; }
-      div#torrent_inspector #file-list-header > *:active {
-        background-color: #e6e6ff;
-        background-image: -webkit-gradient(linear, left top, left bottom, from(#cdcdff), to(white));
-        background-image: -webkit-linear-gradient(top, #cdcdff, white);
-        background-image: -moz-linear-gradient(top, #cdcdff, white);
-        background-image: -ms-linear-gradient(top, #cdcdff, white);
-        background-image: -o-linear-gradient(top, #cdcdff, white);
-        background-image: linear-gradient(top, #cdcdff, white); }
   div#torrent_inspector #inspector_file_list {
     padding: 0 0 0 0;
     margin: 0 0 0 0;
@@ -577,13 +551,8 @@ div#torrent_inspector {
   div#torrent_inspector div.inspector_torrent_file_list_entry_progress {
     color: #999;
     margin-left: 20px; }
-  div#torrent_inspector li.inspector_torrent_file_list_entry.skip > .file_wanted_control {
-    background-position: left top; }
-  div#torrent_inspector li.inspector_torrent_file_list_entry.complete > .file_wanted_control {
-    background-position: left -19px; }
   div#torrent_inspector ul.single_file li.inspector_torrent_file_list_entry > .file_wanted_control,
   div#torrent_inspector li.inspector_torrent_file_list_entry.complete > .file_wanted_control {
-    background-position: left -38px;
     cursor: default; }
 
 /* Peers Inspector Tab */
@@ -854,6 +823,22 @@ div.torrent_footer {
       background-image: url("images/turtle.png"), -ms-linear-gradient(top, #cdcdff, white);
       /* IE10 */
       background-image: url("images/turtle.png"), -o-linear-gradient(top, #cdcdff, white);
+      /* Opera 11.10+ */
+      background-position: center;
+      background-repeat: no-repeat; }
+    div.torrent_footer #turtle-button:active, div.torrent_footer #turtle-button.selected {
+      background-color: #e6e6ff;
+      background-image: url("images/blue-turtle.png");
+      /* fallback */
+      background-image: url("images/blue-turtle.png"), -webkit-gradient(linear, left top, left bottom, from(#cdcdff), to(white));
+      /* Saf4+, Chrome */
+      background-image: url("images/blue-turtle.png"), -webkit-linear-gradient(top, #cdcdff, white);
+      /* Chrome 10+, Saf5.1+ */
+      background-image: url("images/blue-turtle.png"), -moz-linear-gradient(top, #cdcdff, white);
+      /* FF3.6+ */
+      background-image: url("images/blue-turtle.png"), -ms-linear-gradient(top, #cdcdff, white);
+      /* IE10 */
+      background-image: url("images/blue-turtle.png"), -o-linear-gradient(top, #cdcdff, white);
       /* Opera 11.10+ */
       background-position: center;
       background-repeat: no-repeat; }

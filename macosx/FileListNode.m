@@ -39,6 +39,8 @@
 @synthesize size = fSize;
 @synthesize icon = fIcon;
 @synthesize isFolder = fIsFolder;
+@synthesize indexes = fIndexes;
+@synthesize children = fChildren;
 
 - (id) initWithFolderName: (NSString *) name path: (NSString *) path torrent: (Torrent *) torrent
 {
@@ -88,25 +90,17 @@
     [fName release];
     [fPath release];
     [fIndexes release];
-    
     [fIcon release];
-    
     [fChildren release];
-    
     [super dealloc];
 }
 
 - (NSString *) description
 {
     if (!fIsFolder)
-        return [NSString stringWithFormat: @"%@ (%d)", fName, [fIndexes firstIndex]];
+        return [NSString stringWithFormat: @"%@ (%ld)", fName, [fIndexes firstIndex]];
     else
         return [NSString stringWithFormat: @"%@ (folder: %@)", fName, fIndexes];
-}
-
-- (NSIndexSet *) indexes
-{
-    return fIndexes;
 }
 
 - (NSImage *) icon
@@ -124,6 +118,45 @@
     return fChildren;
 }
 
+- (BOOL) updateFromOldName: (NSString *) oldName toNewName: (NSString *) newName inPath: (NSString *) path
+{
+    NSParameterAssert(oldName != nil);
+    NSParameterAssert(newName != nil);
+    NSParameterAssert(path != nil);
+    
+    NSArray * lookupPathComponents = [path pathComponents];
+    NSArray * thesePathComponents = [self.path pathComponents];
+    
+    if ([lookupPathComponents isEqualToArray: thesePathComponents]) //this node represents what's being renamed
+    {
+        if ([oldName isEqualToString: self.name])
+        {
+            [fName release];
+            fName = [newName copy];
+            return YES;
+        }
+    }
+    else if ([lookupPathComponents count] < [thesePathComponents count]) //what's being renamed is part of this node's path
+    {
+        lookupPathComponents = [lookupPathComponents arrayByAddingObject: oldName];
+        const BOOL allSame = NSNotFound == [lookupPathComponents indexOfObjectWithOptions: NSEnumerationConcurrent passingTest: ^BOOL(NSString * name, NSUInteger idx, BOOL * stop) {
+            return ![name isEqualToString: [thesePathComponents objectAtIndex: idx]];
+        }];
+        
+        if (allSame)
+        {
+            NSString * oldPathPrefix = [path stringByAppendingPathComponent: oldName];
+            NSString * newPathPrefix = [path stringByAppendingPathComponent: newName];
+            
+            [fPath autorelease];
+            fPath = [[fPath stringByReplacingCharactersInRange: NSMakeRange(0, [oldPathPrefix length]) withString: newPathPrefix] retain];
+            return YES;
+        }
+    }
+    
+    return NO;
+}
+
 @end
 
 @implementation FileListNode (Private)
@@ -133,8 +166,8 @@
     if ((self = [super init]))
     {
         fIsFolder = isFolder;
-        fName = [name retain];
-        fPath = [path retain];
+        fName = [name copy];
+        fPath = [path copy];
         
         fIndexes = [[NSMutableIndexSet alloc] init];
         

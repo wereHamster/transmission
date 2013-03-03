@@ -28,6 +28,13 @@
 
 @class FileListNode;
 
+typedef enum {
+	TorrentDeterminationAutomatic = 0,
+	TorrentDeterminationUserSpecified
+} TorrentDeterminationType;
+
+#define kTorrentDidChangeGroupNotification @"TorrentDidChangeGroup"
+
 @interface Torrent : NSObject <NSCopying, QLPreviewItem>
 {
     tr_torrent * fHandle;
@@ -46,11 +53,16 @@
     NSIndexSet * fPreviousFinishedIndexes;
     NSDate * fPreviousFinishedIndexesDate;
     
+    BOOL fRemoveWhenFinishSeeding;
+    
     NSInteger fGroupValue;
+	TorrentDeterminationType fGroupValueDetermination;
+	
+	TorrentDeterminationType fDownloadFolderDetermination;
     
     BOOL fResumeOnWake;
     
-    NSString * fTimeMachineExclude;
+    BOOL fTimeMachineExcludeInitialized;
 }
 
 - (id) initWithPath: (NSString *) path location: (NSString *) location deleteTorrentFile: (BOOL) torrentDelete
@@ -63,7 +75,7 @@
 
 - (void) closeRemoveTorrent: (BOOL) trashFiles;
 
-- (void) changeDownloadFolderBeforeUsing: (NSString *) folder;
+- (void) changeDownloadFolderBeforeUsing: (NSString *) folder determinationType: (TorrentDeterminationType) determinationType;
 
 - (NSString *) currentDirectory;
 
@@ -114,6 +126,8 @@
 - (void) setMaxPeerConnect: (uint16_t) count;
 - (uint16_t) maxPeerConnect;
 
+@property (nonatomic) BOOL removeWhenFinishSeeding;
+
 - (BOOL) waitingToStart;
 
 - (tr_priority_t) priority;
@@ -149,6 +163,9 @@
 - (NSString *) torrentLocation;
 - (NSString *) dataLocation;
 - (NSString *) fileLocation: (FileListNode *) node;
+
+- (void) renameTorrent: (NSString *) newName completionHandler: (void (^)(BOOL didRename)) completionHandler;
+- (void) renameFileNode: (FileListNode *) node withName: (NSString *) newName completionHandler: (void (^)(BOOL didRename)) completionHandler;
 
 - (CGFloat) progress;
 - (CGFloat) progressDone;
@@ -202,7 +219,7 @@
 - (uint64_t) failedHash;
 
 - (NSInteger) groupValue;
-- (void) setGroupValue: (NSInteger) groupValue;
+- (void) setGroupValue: (NSInteger) groupValue determinationType: (TorrentDeterminationType) determinationType;;
 - (NSInteger) groupOrderValue;
 - (void) checkGroupValueForRemoval: (NSNotification *) notification;
 

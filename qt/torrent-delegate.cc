@@ -13,7 +13,6 @@
 #include <iostream>
 
 #include <QApplication>
-#include <QBrush>
 #include <QFont>
 #include <QFontMetrics>
 #include <QIcon>
@@ -21,7 +20,7 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QPixmapCache>
-#include <QStyleOptionProgressBarV2>
+#include <QStyleOptionProgressBar>
 
 #include "formatter.h"
 #include "torrent.h"
@@ -34,12 +33,28 @@ enum
    BAR_HEIGHT = 12
 };
 
+QColor TorrentDelegate :: greenBrush;
+QColor TorrentDelegate :: blueBrush;
+QColor TorrentDelegate :: silverBrush;
+QColor TorrentDelegate :: greenBack;
+QColor TorrentDelegate :: blueBack;
+QColor TorrentDelegate :: silverBack;
+
 TorrentDelegate :: TorrentDelegate( QObject * parent ):
-    QItemDelegate( parent ),
-    myProgressBarStyle( new QStyleOptionProgressBarV2 )
+    QStyledItemDelegate( parent ),
+    myProgressBarStyle( new QStyleOptionProgressBar )
 {
     myProgressBarStyle->minimum = 0;
     myProgressBarStyle->maximum = 1000;
+
+    greenBrush = QColor("forestgreen");
+    greenBack = QColor("darkseagreen");
+
+    blueBrush = QColor("steelblue");
+    blueBack = QColor("lightgrey");
+
+    silverBrush = QColor("silver");
+    silverBack = QColor("grey");
 }
 
 TorrentDelegate :: ~TorrentDelegate( )
@@ -158,38 +173,28 @@ TorrentDelegate :: progressString( const Torrent& tor ) const
 }
 
 QString
-TorrentDelegate :: shortTransferString( const Torrent& tor ) const
+TorrentDelegate :: shortTransferString (const Torrent& tor) const
 {
-    static const QChar upArrow( 0x2191 );
-    static const QChar downArrow( 0x2193 );
-    const bool haveMeta( tor.hasMetadata( ) );
-    const bool haveDown( haveMeta && tor.peersWeAreDownloadingFrom( ) > 0 );
-    const bool haveUp( haveMeta && tor.peersWeAreUploadingTo( ) > 0 );
-    QString downStr, upStr, str;
+  QString str;
+  const bool haveMeta (tor.hasMetadata());
+  const bool haveDown (haveMeta && ((tor.webseedsWeAreDownloadingFrom()>0) || (tor.peersWeAreDownloadingFrom()>0)));
+  const bool haveUp (haveMeta && tor.peersWeAreUploadingTo()>0);
 
-    if( haveDown )
-        downStr = Formatter::speedToString( tor.downloadSpeed( ) );
-    if( haveUp )
-        upStr = Formatter::speedToString( tor.uploadSpeed( ) );
+  if (haveDown)
+    str = tr( "%1   %2" ).arg(Formatter::downloadSpeedToString(tor.downloadSpeed()))
+                         .arg(Formatter::uploadSpeedToString(tor.uploadSpeed()));
 
-    if( haveDown && haveUp )
-        str = tr( "%1 %2, %3 %4" ).arg(downArrow).arg(downStr).arg(upArrow).arg(upStr);
-    else if( haveDown )
-        str = tr( "%1 %2" ).arg(downArrow).arg(downStr);
-    else if( haveUp )
-        str = tr( "%1 %2" ).arg(upArrow).arg(upStr);
-    else if( tor.isStalled( ) )
-        str = tr( "Stalled" );
-    else if( tor.hasMetadata( ) )
-        str = tr( "Idle" );
+  else if (haveUp)
+    str = Formatter::uploadSpeedToString(tor.uploadSpeed());
 
-    return str;
+  return str;
 }
 
 QString
 TorrentDelegate :: shortStatusString( const Torrent& tor ) const
 {
     QString str;
+    static const QChar ratioSymbol (0x262F);
 
     switch( tor.getActivity( ) )
     {
@@ -199,9 +204,9 @@ TorrentDelegate :: shortStatusString( const Torrent& tor ) const
 
         case TR_STATUS_DOWNLOAD:
         case TR_STATUS_SEED:
-            if( !tor.isDownloading( ) )
-                str = tr( "Ratio: %1, " ).arg( Formatter::ratioToString( tor.ratio( ) ) );
-            str += shortTransferString( tor );
+            str = tr("%1    %2 %3").arg(shortTransferString(tor))
+                                   .arg(tr("Ratio:"))
+                                   .arg(Formatter::ratioToString(tor.ratio()));
             break;
 
         default:
@@ -232,12 +237,16 @@ TorrentDelegate :: statusString( const Torrent& tor ) const
             break;
 
         case TR_STATUS_DOWNLOAD:
-            if( tor.hasMetadata( ) )
-                str = tr( "Downloading from %1 of %n connected peer(s)", 0, tor.connectedPeersAndWebseeds( ) )
-                        .arg( tor.peersWeAreDownloadingFrom( ) );
-            else
+            if( !tor.hasMetadata() ) {
                 str = tr( "Downloading metadata from %n peer(s) (%1% done)", 0, tor.peersWeAreDownloadingFrom( ) )
                         .arg( Formatter::percentToString( 100.0 * tor.metadataPercentDone( ) ) );
+            } else {
+                /* it would be nicer for translation if this was all one string, but I don't see how to do multiple %n's in tr() */
+                str = tr( "Downloading from %1 of %n connected peer(s)", 0, tor.connectedPeersAndWebseeds( ) )
+                        .arg( tor.peersWeAreDownloadingFrom( ) );
+                if (tor.webseedsWeAreDownloadingFrom())
+                    str += tr(" and %n web seed(s)", "", tor.webseedsWeAreDownloadingFrom());
+            }
             break;
 
         case TR_STATUS_SEED:
@@ -314,9 +323,7 @@ TorrentDelegate :: paint( QPainter                    * painter,
     const Torrent * tor( index.data( TorrentModel::TorrentRole ).value<const Torrent*>() );
     painter->save( );
     painter->setClipRect( option.rect );
-    drawBackground( painter, option, index );
     drawTorrent( painter, option, *tor );
-    drawFocus(painter, option, option.rect );
     painter->restore( );
 }
 
@@ -327,8 +334,7 @@ TorrentDelegate :: setProgressBarPercentDone( const QStyleOptionViewItem& option
     if (tor.isSeeding() && tor.getSeedRatio(seedRatioLimit))
     {
         const double seedRateRatio = tor.ratio() / seedRatioLimit;
-        const double invertedRatio = 1. - seedRateRatio;
-        const int scaledProgress = invertedRatio * (myProgressBarStyle->maximum - myProgressBarStyle->minimum);
+        const int scaledProgress = seedRateRatio * (myProgressBarStyle->maximum - myProgressBarStyle->minimum);
         myProgressBarStyle->progress = myProgressBarStyle->minimum + scaledProgress;
     }
     else
@@ -419,8 +425,21 @@ TorrentDelegate :: drawTorrent( QPainter * painter, const QStyleOptionViewItem& 
     painter->setFont( progressFont );
     painter->drawText( progArea, 0, progressFM.elidedText( progressStr, Qt::ElideRight, progArea.width( ) ) );
     myProgressBarStyle->rect = barArea;
-    myProgressBarStyle->palette = option.palette;
-    myProgressBarStyle->palette.setCurrentColorGroup( cg );
+    if ( tor.isDownloading() ) {
+        myProgressBarStyle->palette.setBrush( QPalette::Highlight, blueBrush );
+        myProgressBarStyle->palette.setColor( QPalette::Base, blueBack );
+        myProgressBarStyle->palette.setColor( QPalette::Window, blueBack );
+    }
+    else if ( tor.isSeeding() ) {
+        myProgressBarStyle->palette.setBrush( QPalette::Highlight, greenBrush );
+        myProgressBarStyle->palette.setColor( QPalette::Base, greenBack );
+        myProgressBarStyle->palette.setColor( QPalette::Window, greenBack );
+    }
+    else {
+        myProgressBarStyle->palette.setBrush( QPalette::Highlight, silverBrush );
+        myProgressBarStyle->palette.setColor( QPalette::Base, silverBack );
+        myProgressBarStyle->palette.setColor( QPalette::Window, silverBack );
+    }
     myProgressBarStyle->state = progressBarState;
     setProgressBarPercentDone( option, tor );
 

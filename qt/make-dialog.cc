@@ -113,8 +113,8 @@ MakeDialog :: makeTorrent( )
 
     // get the tiers
     int tier = 0;
-    QList<tr_tracker_info> trackers;
-    foreach( QString line, myTrackerEdit->toPlainText().split(QChar::fromAscii('\n')) ) {
+    QVector<tr_tracker_info> trackers;
+    foreach( QString line, myTrackerEdit->toPlainText().split("\n") ) {
         line = line.trimmed( );
         if( line.isEmpty( ) )
             ++tier;
@@ -147,10 +147,9 @@ MakeDialog :: makeTorrent( )
     myTimer.start( 100 );
 
     // the file to create
-    const QString path = QString::fromLocal8Bit( myBuilder->top );
-    const QString torrentName = QFileInfo(path).completeBaseName() + QString::fromAscii(".torrent");
+    const QString path = QString::fromUtf8( myBuilder->top );
+    const QString torrentName = QFileInfo(path).completeBaseName() + ".torrent";
     myTarget = QDir( myDestination ).filePath( torrentName );
-    std::cerr << qPrintable(myTarget) << std::endl;
 
     // comment
     QString comment;
@@ -160,7 +159,7 @@ MakeDialog :: makeTorrent( )
     // start making the torrent
     tr_makeMetaInfo( myBuilder,
                      myTarget.toUtf8().constData(),
-                     (trackers.isEmpty() ? 0 : &trackers.front()),
+                     (trackers.isEmpty() ? NULL : trackers.data()),
                      trackers.size(),
                      (comment.isEmpty() ? NULL : comment.toUtf8().constData()),
                      myPrivateCheck->isChecked() );
@@ -175,6 +174,7 @@ MakeDialog :: onFileClicked( )
 {
     QFileDialog * d = new QFileDialog( this, tr( "Select File" ) );
     d->setFileMode( QFileDialog::ExistingFile );
+    d->setAttribute( Qt::WA_DeleteOnClose );
     connect( d, SIGNAL(filesSelected(const QStringList&)),
              this, SLOT(onFileSelected(const QStringList&)) );
     d->show( );
@@ -197,7 +197,9 @@ void
 MakeDialog :: onFolderClicked( )
 {
     QFileDialog * d = new QFileDialog( this, tr( "Select Folder" ) );
-    d->setFileMode( QFileDialog::DirectoryOnly );
+    d->setFileMode( QFileDialog::Directory );
+    d->setOption( QFileDialog::ShowDirsOnly );
+    d->setAttribute( Qt::WA_DeleteOnClose );
     connect( d, SIGNAL(filesSelected(const QStringList&)),
              this, SLOT(onFolderSelected(const QStringList&)) );
     d->show( );
@@ -220,7 +222,9 @@ void
 MakeDialog :: onDestinationClicked( )
 {
     QFileDialog * d = new QFileDialog( this, tr( "Select Folder" ) );
-    d->setFileMode( QFileDialog::DirectoryOnly );
+    d->setFileMode( QFileDialog::Directory );
+    d->setOption( QFileDialog::ShowDirsOnly );
+    d->setAttribute( Qt::WA_DeleteOnClose );
     connect( d, SIGNAL(filesSelected(const QStringList&)),
              this, SLOT(onDestinationSelected(const QStringList&)) );
     d->show( );

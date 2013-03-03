@@ -30,8 +30,9 @@
 }
 
 + (BonjourController *) defaultController;
++ (BOOL) defaultControllerExists;
 
-- (void) startWithPort: (NSInteger) port;
+- (void) startWithPort: (int) port;
 - (void) stop;
 
 @end

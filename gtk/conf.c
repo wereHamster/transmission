@@ -24,7 +24,7 @@
 
 #include <errno.h>
 #include <stdio.h>
-#include <stdlib.h> /* strtol() */
+#include <stdlib.h> /* strtol () */
 #include <string.h>
 
 #include <unistd.h>
@@ -34,7 +34,7 @@
 #include <glib/gstdio.h>
 
 #include <libtransmission/transmission.h>
-#include <libtransmission/bencode.h>
+#include <libtransmission/variant.h>
 
 #include "conf.h"
 #include "tr-prefs.h"
@@ -46,9 +46,9 @@
 static char * gl_confdir = NULL;
 
 void
-gtr_pref_init( const char * config_dir )
+gtr_pref_init (const char * config_dir)
 {
-    gl_confdir = g_strdup( config_dir );
+  gl_confdir = g_strdup (config_dir);
 }
 
 /***
@@ -57,124 +57,111 @@ gtr_pref_init( const char * config_dir )
 ****
 ***/
 
-static void cf_check_older_configs( void );
-
 /**
  * This is where we initialize the preferences file with the default values.
  * If you add a new preferences key, you /must/ add a default value here.
  */
 static void
-tr_prefs_init_defaults( tr_benc * d )
+tr_prefs_init_defaults (tr_variant * d)
 {
-    const char * str;
+  const char * str;
+  const char * special_dl_dir = g_get_user_special_dir (G_USER_DIRECTORY_DOWNLOAD);
 
-    cf_check_older_configs( );
+  str = g_get_user_special_dir (G_USER_DIRECTORY_DOWNLOAD);
+  if (!str)
+    str = g_get_user_special_dir (G_USER_DIRECTORY_DESKTOP);
+  if (!str)
+    str = tr_getDefaultDownloadDir ();
 
-    str = NULL;
-    if( !str ) str = g_get_user_special_dir( G_USER_DIRECTORY_DOWNLOAD );
-    if( !str ) str = g_get_user_special_dir( G_USER_DIRECTORY_DESKTOP );
-    if( !str ) str = tr_getDefaultDownloadDir( );
-    tr_bencDictAddStr ( d, PREF_KEY_DIR_WATCH, str );
-    tr_bencDictAddBool( d, PREF_KEY_DIR_WATCH_ENABLED, FALSE );
-
-    tr_bencDictAddBool( d, PREF_KEY_USER_HAS_GIVEN_INFORMED_CONSENT, FALSE );
-    tr_bencDictAddBool( d, PREF_KEY_INHIBIT_HIBERNATION, FALSE );
-    tr_bencDictAddBool( d, PREF_KEY_BLOCKLIST_UPDATES_ENABLED, TRUE );
-
-    tr_bencDictAddStr ( d, PREF_KEY_OPEN_DIALOG_FOLDER, g_get_home_dir( ) );
-
-    tr_bencDictAddBool( d, PREF_KEY_TOOLBAR, TRUE );
-    tr_bencDictAddBool( d, PREF_KEY_FILTERBAR, TRUE );
-    tr_bencDictAddBool( d, PREF_KEY_STATUSBAR, TRUE );
-    tr_bencDictAddBool( d, PREF_KEY_TRASH_CAN_ENABLED, TRUE );
-    tr_bencDictAddBool( d, PREF_KEY_SHOW_TRAY_ICON, FALSE );
-    tr_bencDictAddBool( d, PREF_KEY_SHOW_MORE_TRACKER_INFO, FALSE );
-    tr_bencDictAddBool( d, PREF_KEY_SHOW_MORE_PEER_INFO, FALSE );
-    tr_bencDictAddBool( d, PREF_KEY_SHOW_BACKUP_TRACKERS, FALSE );
-    tr_bencDictAddStr ( d, PREF_KEY_STATUSBAR_STATS, "total-ratio" );
-
-    tr_bencDictAddBool( d, PREF_KEY_TORRENT_ADDED_NOTIFICATION_ENABLED, true );
-    tr_bencDictAddBool( d, PREF_KEY_TORRENT_COMPLETE_NOTIFICATION_ENABLED, true );
-    tr_bencDictAddStr ( d, PREF_KEY_TORRENT_COMPLETE_SOUND_COMMAND, "canberra-gtk-play -i complete-download -d 'transmission torrent downloaded'" );
-    tr_bencDictAddBool( d, PREF_KEY_TORRENT_COMPLETE_SOUND_ENABLED, true );
-
-    tr_bencDictAddBool( d, PREF_KEY_OPTIONS_PROMPT, TRUE );
-
-    tr_bencDictAddBool( d, PREF_KEY_MAIN_WINDOW_IS_MAXIMIZED, FALSE );
-    tr_bencDictAddInt( d, PREF_KEY_MAIN_WINDOW_HEIGHT, 500 );
-    tr_bencDictAddInt( d, PREF_KEY_MAIN_WINDOW_WIDTH, 300 );
-    tr_bencDictAddInt( d, PREF_KEY_MAIN_WINDOW_X, 50 );
-    tr_bencDictAddInt( d, PREF_KEY_MAIN_WINDOW_Y, 50 );
-
-    str = g_get_user_special_dir( G_USER_DIRECTORY_DOWNLOAD );
-    tr_bencDictAddStr( d, TR_PREFS_KEY_DOWNLOAD_DIR, str );
-
-    tr_bencDictAddStr( d, PREF_KEY_SORT_MODE, "sort-by-name" );
-    tr_bencDictAddBool( d, PREF_KEY_SORT_REVERSED, FALSE );
-    tr_bencDictAddBool( d, PREF_KEY_COMPACT_VIEW, FALSE );
+  tr_variantDictReserve (d, 29);
+  tr_variantDictAddStr  (d, TR_KEY_watch_dir, str);
+  tr_variantDictAddBool (d, TR_KEY_watch_dir_enabled, FALSE);
+  tr_variantDictAddBool (d, TR_KEY_user_has_given_informed_consent, FALSE);
+  tr_variantDictAddBool (d, TR_KEY_inhibit_desktop_hibernation, FALSE);
+  tr_variantDictAddBool (d, TR_KEY_blocklist_updates_enabled, TRUE);
+  tr_variantDictAddStr  (d, TR_KEY_open_dialog_dir, g_get_home_dir ());
+  tr_variantDictAddBool (d, TR_KEY_show_toolbar, TRUE);
+  tr_variantDictAddBool (d, TR_KEY_show_filterbar, TRUE);
+  tr_variantDictAddBool (d, TR_KEY_show_statusbar, TRUE);
+  tr_variantDictAddBool (d, TR_KEY_trash_can_enabled, TRUE);
+  tr_variantDictAddBool (d, TR_KEY_show_notification_area_icon, FALSE);
+  tr_variantDictAddBool (d, TR_KEY_show_tracker_scrapes, FALSE);
+  tr_variantDictAddBool (d, TR_KEY_show_extra_peer_details, FALSE);
+  tr_variantDictAddBool (d, TR_KEY_show_backup_trackers, FALSE);
+  tr_variantDictAddStr  (d, TR_KEY_statusbar_stats, "total-ratio");
+  tr_variantDictAddBool (d, TR_KEY_torrent_added_notification_enabled, true);
+  tr_variantDictAddBool (d, TR_KEY_torrent_complete_notification_enabled, true);
+  tr_variantDictAddStr  (d, TR_KEY_torrent_complete_sound_command, "canberra-gtk-play -i complete-download -d 'transmission torrent downloaded'");
+  tr_variantDictAddBool (d, TR_KEY_torrent_complete_sound_enabled, true);
+  tr_variantDictAddBool (d, TR_KEY_show_options_window, TRUE);
+  tr_variantDictAddBool (d, TR_KEY_main_window_is_maximized, FALSE);
+  tr_variantDictAddInt  (d, TR_KEY_main_window_height, 500);
+  tr_variantDictAddInt  (d, TR_KEY_main_window_width, 300);
+  tr_variantDictAddInt  (d, TR_KEY_main_window_x, 50);
+  tr_variantDictAddInt  (d, TR_KEY_main_window_y, 50);
+  tr_variantDictAddStr  (d, TR_KEY_download_dir, special_dl_dir ? special_dl_dir : str);
+  tr_variantDictAddStr  (d, TR_KEY_sort_mode, "sort-by-name");
+  tr_variantDictAddBool (d, TR_KEY_sort_reversed, FALSE);
+  tr_variantDictAddBool (d, TR_KEY_compact_view, FALSE);
 }
 
-static char*
-getPrefsFilename( void )
+static tr_variant*
+getPrefs (void)
 {
-    g_assert( gl_confdir != NULL );
-    return g_build_filename( gl_confdir, "settings.json", NULL );
-}
+  static tr_variant settings;
+  static gboolean loaded = FALSE;
 
-static tr_benc*
-getPrefs( void )
-{
-    static tr_benc settings;
-    static gboolean loaded = FALSE;
-
-    if( !loaded )
+  if (!loaded)
     {
-        tr_bencInitDict( &settings, 0 );
-        tr_prefs_init_defaults( &settings );
-        tr_sessionLoadSettings( &settings, gl_confdir, MY_CONFIG_NAME );
-        loaded = TRUE;
+      tr_variantInitDict (&settings, 0);
+      tr_prefs_init_defaults (&settings);
+      tr_sessionLoadSettings (&settings, gl_confdir, MY_CONFIG_NAME);
+      loaded = TRUE;
     }
 
-    return &settings;
+  return &settings;
 }
 
 /***
 ****
 ***/
 
-tr_benc*
-gtr_pref_get_all( void )
+tr_variant*
+gtr_pref_get_all (void)
 {
-    return getPrefs( );
+  return getPrefs ();
 }
 
 int64_t
-gtr_pref_int_get( const char * key )
+gtr_pref_int_get (const tr_quark key)
 {
-    int64_t i = 0;
+  int64_t i = 0;
 
-    tr_bencDictFindInt( getPrefs( ), key, &i );
-    return i;
+  tr_variantDictFindInt (getPrefs (), key, &i);
+
+  return i;
 }
 
 void
-gtr_pref_int_set( const char * key, int64_t value )
+gtr_pref_int_set (const tr_quark key, int64_t value)
 {
-    tr_bencDictAddInt( getPrefs( ), key, value );
+  tr_variantDictAddInt (getPrefs (), key, value);
 }
 
 double
-gtr_pref_double_get( const char * key )
+gtr_pref_double_get (const tr_quark key)
 {
-    double d = 0.0;
-    tr_bencDictFindReal( getPrefs( ), key, &d );
-    return d;
+  double d = 0.0;
+
+  tr_variantDictFindReal (getPrefs (), key, &d);
+
+  return d;
 }
 
 void
-gtr_pref_double_set( const char * key, double value )
+gtr_pref_double_set (const tr_quark key, double value)
 {
-    tr_bencDictAddReal( getPrefs( ), key, value );
+  tr_variantDictAddReal (getPrefs (), key, value);
 }
 
 /***
@@ -182,17 +169,19 @@ gtr_pref_double_set( const char * key, double value )
 ***/
 
 gboolean
-gtr_pref_flag_get( const char * key )
+gtr_pref_flag_get (const tr_quark key)
 {
-    bool boolVal;
-    tr_bencDictFindBool( getPrefs( ), key, &boolVal );
-    return boolVal != 0;
+  bool boolVal;
+
+  tr_variantDictFindBool (getPrefs (), key, &boolVal);
+
+  return boolVal != 0;
 }
 
 void
-gtr_pref_flag_set( const char * key, gboolean value )
+gtr_pref_flag_set (const tr_quark key, gboolean value)
 {
-    tr_bencDictAddBool( getPrefs( ), key, value );
+  tr_variantDictAddBool (getPrefs (), key, value);
 }
 
 /***
@@ -200,17 +189,19 @@ gtr_pref_flag_set( const char * key, gboolean value )
 ***/
 
 const char*
-gtr_pref_string_get( const char * key )
+gtr_pref_string_get (const tr_quark key)
 {
-    const char * str = NULL;
-    tr_bencDictFindStr( getPrefs( ), key, &str );
-    return str;
+  const char * str = NULL;
+
+  tr_variantDictFindStr (getPrefs (), key, &str, NULL);
+
+  return str;
 }
 
 void
-gtr_pref_string_set( const char * key, const char * value )
+gtr_pref_string_set (const tr_quark key, const char * value)
 {
-    tr_bencDictAddStr( getPrefs( ), key, value );
+  tr_variantDictAddStr (getPrefs (), key, value);
 }
 
 /***
@@ -218,114 +209,8 @@ gtr_pref_string_set( const char * key, const char * value )
 ***/
 
 void
-gtr_pref_save( tr_session * session )
+gtr_pref_save (tr_session * session)
 {
-    tr_sessionSaveSettings( session, gl_confdir, getPrefs( ) );
+  tr_sessionSaveSettings (session, gl_confdir, getPrefs ());
 }
 
-/***
-****
-***/
-
-static char*
-getCompat090PrefsFilename( void )
-{
-    g_assert( gl_confdir != NULL );
-
-    return g_build_filename( g_get_home_dir( ), ".transmission", "gtk", "prefs.ini", NULL );
-}
-
-static char*
-getCompat121PrefsFilename( void )
-{
-    return g_build_filename( g_get_user_config_dir( ), "transmission", "gtk", "prefs.ini", NULL );
-}
-
-static void
-translate_keyfile_to_json( const char * old_file, const char * new_file )
-{
-    tr_benc    dict;
-    GKeyFile * keyfile;
-    gchar **   keys;
-    gsize      i;
-    gsize      length;
-
-    static struct pref_entry {
-        const char*   oldkey;
-        const char*   newkey;
-    } renamed[] = {
-        { "default-download-directory", "download-dir"             },
-        { "encrypted-connections-only", "encryption"               },
-        { "listening-port",             "peer-port"                },
-        { "nat-traversal-enabled",      "port-forwarding-enabled"  },
-        { "open-dialog-folder",         "open-dialog-dir"          },
-        { "watch-folder",               "watch-dir"                },
-        { "watch-folder-enabled",       "watch-dir-enabled"        }
-    };
-
-    keyfile = g_key_file_new( );
-    g_key_file_load_from_file( keyfile, old_file, 0, NULL );
-    length = 0;
-    keys = g_key_file_get_keys( keyfile, "general", &length, NULL );
-
-    tr_bencInitDict( &dict, length );
-    for( i = 0; i < length; ++i )
-    {
-        guint        j;
-        const char * key = keys[i];
-        gchar *      val = g_key_file_get_value( keyfile, "general", key,
-                                                 NULL );
-
-        for( j = 0; j < G_N_ELEMENTS( renamed ); ++j )
-            if( !strcmp( renamed[j].oldkey, key ) )
-                key = renamed[j].newkey;
-
-        if( !strcmp( val, "true" ) || !strcmp( val, "false" ) )
-            tr_bencDictAddInt( &dict, key, !strcmp( val, "true" ) );
-        else
-        {
-            char * end;
-            long   l;
-            errno = 0;
-            l = strtol( val, &end, 10 );
-            if( !errno && end && !*end )
-                tr_bencDictAddInt( &dict, key, l );
-            else
-                tr_bencDictAddStr( &dict, key, val );
-        }
-
-        g_free( val );
-    }
-
-    g_key_file_free( keyfile );
-    tr_bencToFile( &dict, TR_FMT_JSON, new_file );
-    tr_bencFree( &dict );
-}
-
-static void
-cf_check_older_configs( void )
-{
-    char * filename = getPrefsFilename( );
-
-    if( !g_file_test( filename, G_FILE_TEST_IS_REGULAR ) )
-    {
-        char * key1 = getCompat121PrefsFilename( );
-        char * key2 = getCompat090PrefsFilename( );
-
-        if( g_file_test( key1, G_FILE_TEST_IS_REGULAR ) )
-        {
-            g_message( _( "Importing \"%s\"" ), key1 );
-            translate_keyfile_to_json( key1, filename );
-        }
-        else if( g_file_test( key2, G_FILE_TEST_IS_REGULAR ) )
-        {
-            g_message( _( "Importing \"%s\"" ), key2 );
-            translate_keyfile_to_json( key2, filename );
-        }
-
-        g_free( key2 );
-        g_free( key1 );
-    }
-
-    g_free( filename );
-}

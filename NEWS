@@ -1,3 +1,243 @@
+=== Transmission 2.80 (2013/xx/yy) ===
+[http://trac.transmissionbt.com/query?milestone=2.80&group=component&order=severity All tickets closed by this release]
+==== All Platforms ====
+  * Support renaming a transfer's files and folders
+  * Better use of the OS' filesystem cache
+  * Lengthen the prefetch cache for data sent to peers
+  * Faster parsing of JSON data and bencoded data
+  * Fewer public API calls in libtransmission need thread locks (ie, fewer beachballs)
+  * Other CPU speedups
+  * Replace the previous JSON parser with jsonsl to resolve DFSG license issue
+  * Fix FTBFS when compiling with -Werror=format-security
+  * Add 'freespace' argument to session-get in the Remote API
+  * Improved unit tests in libtransmission
+  * Tarballs are now released only in .xz format
+==== Mac Client ====
+  * VDKQueue
+==== GTK+ Client ====
+  * Simplify the tracker filter pulldown's interface; now matches the Qt client
+  * Synced preferences text & shortcuts in the GTK+ and Qt clients
+  * Remove deprecated calls to gdk_threads_enter()
+  * Silence a handful of console warnings
+==== Qt Client ====
+  * More efficient updates when receiving information from the server
+  * Add an option to play a sound when a torrent finishes downloading
+  * Add an option to start up iconified into the notification area
+  * Fix an issue with the tray icon preventing hibernation/logout
+  * Other CPU speedups
+  * Open the correct folder when clicking on single-file torrents
+  * Synced preferences text & shortcuts in the GTK+ and Qt clients
+  * Fix non Latin-1 unit strings
+==== Daemon ====
+  * Add support for specifying recently-active torrents in transmission-remote
+==== Web Client ====
+  * Exend the cookie lifespan so that settings like sort order don't get lost
+==== Utils ====
+  * Support user-defined piece sizes in transmission-create
+
+=== Transmission 2.77 (2013/02/18) ===
+[http://trac.transmissionbt.com/query?milestone=2.77&group=component&order=severity All tickets closed by this release]
+==== All Platforms ====
+  * Fix 2.75 regression that broke JSON parsing of real numbers in locales that don't use '.' as a decimal separator
+  * Don't invalidate the OS's file cache when closing files
+  * Fix overflow error when setting speed limits above ~8589 kB/s
+  * Generated magnet links didn't include webseeds
+  * Fix minor memory leaks when using webseeds
+==== GTK+ Client ====
+  * Minor pluralization fixes in the UI
+  * Fix folder mis-selection issue in the Preferences dialog
+  * Fix GTK+ console warnings on shutdown
+==== Qt Client ====
+  * Fix non Latin-1 symbol issue when showing file transfer speeds
+  * Fix issue when creating new torrents with multiple trackers
+  * Fix lost text selection in the properties dialog's 'comment' field
+==== Daemon ====
+  * Fix documentation errors in the spec and manpages
+==== Web Client ====
+  * Fix minor DOM leak
+==== CLI ====
+  * Fix transmission-cli failure when the download directory doesn't exist
+
+=== Transmission 2.76 (2013/01/08) ===
+[http://trac.transmissionbt.com/query?milestone=2.76&group=component&order=severity All tickets closed by this release]
+==== All Platforms ====
+  * Better error logging when user-provided scripts can't be executed
+  * The "Time Remaining" property wasn't set for torrents with webseeds but no peers
+  * Fix rare error that created a directory name "$HOME"
+==== GTK+ Client ====
+  * Fix sort-by-age regression introduced in 2.74
+  * The "Edit Trackers" window didn't resize properly due to a 2.70 regression
+  * Raise the main window when presenting it from an App Indicator
+==== Qt Client ====
+  * Add magnet link support to transmission-qt.desktop
+  * Fix notification area bug that inhibited logouts & desktop hibernation
+  * Use the "video" icon when the torrent is an mkv or mp4 file
+  * Toggling the "Append '.part' to incomplete files' names" had no effect
+  * Fix display of the torrent name in the Torrent Options dialog
+  * Fix cursor point bug in the filterbar's entry field
+  * Fix crash when adding a magnet link when Transmission was only visible in the system tray
+  * Fix free-memory-read error on shutdown
+==== Daemon ====
+  * Better watchdir support
+  * Documentation fixes in transmission-remote's manpage
+==== Web Client ====
+  * Fix indentation of the torrent list and toolbar buttons on mobile devices
+==== CLI ====
+  * If the Download directory doesn't exist, try to create it instead of exiting
+
+=== Transmission 2.75 (2012/12/13) ===
+[http://trac.transmissionbt.com/query?milestone=2.75&group=component&order=severity All tickets closed by this release]
+==== Mac ====
+  * Fix crash on non-English localizations
+
+=== Transmission 2.74 (2012/12/10) ===
+[http://trac.transmissionbt.com/query?milestone=2.74&group=component&order=severity All tickets closed by this release]
+==== All Platforms ====
+  * Fix a bug that prevented IPv6 addresses from being saved in dht.dat
+  * Better handling of magnet links that contain 'tr.x=' parameters
+  * Add filtering of addresses used for uTP peer connections 
+  * Fix detection of whether or not a peer supports uTP connections
+==== Mac ====
+  * Auto-grouping won't apply until torrents are demagnetized
+  * Tweak the inspector's and add window's file lists to avoid auto-hiding scrollbars overlapping the priority controls
+  * Fix potential crash when downloading and seeding complete at the same time
+  * Fix bug where stopped torrents might start when waking the computer from sleep
+==== Web Client ====
+  * Fix a multi-file selection bug
+  * Fix bug where the upload and download arrows and rates would not appear for downloading torrents
+  * Fix bug when displaying the tracker list
+
+=== Transmission 2.73 (2012/10/08) ===
+[http://trac.transmissionbt.com/query?milestone=2.73&group=component&order=severity All tickets closed by this release]
+==== Mac ====
+  * Fix crash on non-English localizations
+
+=== Transmission 2.72 (2012/10/16) ===
+[http://trac.transmissionbt.com/query?milestone=2.72&group=component&order=severity All tickets closed by this release]
+==== All Platforms ====
+  * Fix crash when adding magnet links with malformed webseeds
+  * Fix handling of magnet links' webseed URLs that contain whitespace
+  * Fix remaining time estimates of magnet links that have webseeds
+  * Show the webseed count in the torrent list when downloading from webseeds
+==== Mac ====
+  * When possible allow automatic switching to the integrated GPU on dual-GPU machines
+  * Include seeding-complete transfers in the badged count on the Dock icon
+==== GTK+ ====
+  * When adding torrents by URL from the clipboard, handle whitespace in the link
+==== Qt ====
+  * Fix dialog memory leaks
+==== Web Client ====
+  * Minor interface fixes
+
+=== Transmission 2.71 (2012/09/26) ===
+[http://trac.transmissionbt.com/query?milestone=2.71&group=component&order=severity All tickets closed by this release]
+==== Mac ====
+  * Fix 2.70 crasher on 10.6 Snow Leopard
+
+=== Transmission 2.70 (2012/09/25) ===
+[http://trac.transmissionbt.com/query?milestone=2.70&group=component&order=severity All tickets closed by this release]
+==== All Platforms ====
+  * Improved speed with the µTP protocol
+  * Fix bug that caused some incoming encrypted peer connections to fail
+  * Fix bugs with the speed limit scheduler
+  * Fix crasher with magnet links
+==== Mac ====
+  * Notification Center support on Mountain Lion
+  * Torrent files can be previewed with Quick Look in the Finder
+  * Add an option to remove transfers when seeding completes
+  * Fix displaying the Web Client with Bonjour
+  * Fix bugs with Time Machine exclusions
+  * Other minor interface tweaks and bug fixes
+  * Removed Simplified Chinese localization because of lack of localizer
+==== GTK+ ====
+  * Require GTK+ 3.4
+==== Qt ====
+  * Control speed limit from the icon tray
+  * Improved behavior when clicking on torrents in the torrent list
+  * Fix bug where torrent files were not deleted
+  * Fix bug with unicode characters in the default location
+==== Web Client ====
+  * The file inspector tab displays files nested under directories
+  * Improved scrolling on iPad
+  * Fix incorrectly rendered characters
+  * Fix bug involving attempts to post notifications without permission
+
+=== Transmission 2.61 (2012/07/23) ===
+[http://trac.transmissionbt.com/query?milestone=2.61&group=component&order=severity All tickets closed by this release]
+==== Mac ====
+  * Fix crash when creating a torrent file on Lion or newer
+==== GTK+ ====
+  * Support startup notification
+  * Require GTK+ 3
+==== Qt ====
+  * Fix bug when opening the web client via the Preferences dialog
+  * Better opening of magnet links
+  * The Torrent File list now handles very long lists faster
+  * Fix i18n problem introduced in 2.60
+==== Web Client ====
+  * Close potential cross-scripting vulnerability from malicious torrent files
+==== Utils ====
+  * Add magnet link generation to the transmission-show command line tool
+
+=== Transmission 2.60 (2012/07/05) ===
+[http://trac.transmissionbt.com/query?milestone=2.60&group=component&order=severity All tickets closed by this release]
+==== All Platforms ====
+  * Fix issues when adding magnet links
+  * Improved scraping behavior for certain trackers
+  * Fix bug where cleared statistics might not save
+  * Updated versions of miniupnpc and libuTP
+  * Fixed compilation issues with Solaris and FreeBSD
+  * Other minor fixes
+==== Mac ====
+  * Ready for Gatekeeper on Mountain Lion
+  * Retina graphics
+  * Add a filter and select all/deselect all buttons to the add window
+  * Support Lion's window restoration for several windows
+==== Qt ====
+  * Add Basque translation
+==== Web Client ====
+  * Notification of downloading and seeding completion (requires browser support of notifications)
+  * Re-add select all and deselect all buttons to the file inspector tab
+
+=== Transmission 2.52 (2012/05/19) ===
+[http://trac.transmissionbt.com/query?milestone=2.52&group=component&order=severity All tickets closed by this release]
+==== All Platforms ====
+  * Fix bug with zero termination of multiscrape strings
+  * Update the bundled libnatpmp and miniupnp port forwarding libraries
+==== Mac ====
+  * Add select all and deselect all buttons to the file inspector tab
+  * Minor interface tweaks and bug fixes
+  * Danish localization
+==== GTK+ ====
+  * Fix minor bug in Ubuntu app indicator support
+
+=== Transmission 2.51 (2012/04/08) ===
+[http://trac.transmissionbt.com/query?milestone=2.51&group=component&order=severity All tickets closed by this release]
+==== All Platforms ====
+  * Update the bundled libnatpmp and miniupnp port forwarding libraries
+  * Add environment variable options to have libcurl verify SSL certs
+  * Support user-specified CXX environment variables during compile time
+==== Mac ====
+  * Raise the allowed limits for many configuration options
+  * Fix regression that ignored user-specified TRANSMISSION_HOME environment
+==== GTK+ ====
+  * Fix crash when adding torrents on systems without G_USER_DIRECTORY_DOWNLOAD
+  * Honor the notification sound setting
+  * Add a tooltip to files in the torrents' file list
+  * Fix broken handling of the Cancel button in the "Open URL" dialog
+  * Improve support for Gnome Shell and Unity
+  * Catch SIGTERM instead of SIGKILL
+==== Qt ====
+  * Progress bar colors are now similar to the Mac and Web clients'
+  * Improve the "Open Folder" behavior
+==== Web Client ====
+  * Fix global seed ratio progress bars
+  * Fix sometimes-incorrect ratio being displayed in the inspector
+  * If multiple torrents are selected, show the aggregate info in the inspector
+  * Upgrade to jQuery 1.7.2
+==== Daemon ====
+  * Show magnet link information in transmission-remote -i
+
 === Transmission 2.50 (2012/02/14) ===
 [http://trac.transmissionbt.com/query?milestone=2.50&group=component&order=severity All tickets closed by this release]
 ==== All Platforms ====

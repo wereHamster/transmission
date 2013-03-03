@@ -1,103 +1,150 @@
+#include <assert.h>
 #include <stdio.h>
+#include <unistd.h> /* sync() */
+
 #include "transmission.h"
 #include "blocklist.h"
 #include "net.h"
+#include "session.h" /* tr_sessionIsAddressBlocked() */
 #include "utils.h"
 
-#undef VERBOSE
+#include "libtransmission-test.h"
 
-#ifdef VERBOSE
-  #define check( A ) \
-    { \
-        ++test; \
-        if( A ){ \
-            fprintf( stderr, "PASS test #%d (%s, %d)\n", test, __FILE__, __LINE__ ); \
-        } else { \
-            fprintf( stderr, "FAIL test #%d (%s, %d)\n", test, __FILE__, __LINE__ ); \
-            return test; \
-        } \
-    }
-#else
-  #define check( A )\
-    { \
-        ++test; \
-        if( !( A ) ){ \
-            fprintf( stderr, "FAIL test #%d (%s, %d)\n", test, __FILE__, __LINE__ ); \
-            return test; \
-        } \
-    }
-#endif
+static const char * contents1 =
+  "Austin Law Firm:216.16.1.144-216.16.1.151\n"
+  "Sargent Controls and Aerospace:216.19.18.0-216.19.18.255\n"
+  "Corel Corporation:216.21.157.192-216.21.157.223\n"
+  "Fox Speed Channel:216.79.131.192-216.79.131.223\n";
+
+static const char * contents2 =
+  "Austin Law Firm:216.16.1.144-216.16.1.151\n"
+  "Sargent Controls and Aerospace:216.19.18.0-216.19.18.255\n"
+  "Corel Corporation:216.21.157.192-216.21.157.223\n"
+  "Fox Speed Channel:216.79.131.192-216.79.131.223\n"
+  "Evilcorp:216.88.88.0-216.88.88.255\n";
 
 static void
-createTestBlocklist( const char * tmpfile )
+create_text_file (const char * path, const char * contents)
 {
-    const char * lines[] = { "Austin Law Firm:216.16.1.144-216.16.1.151",
-                             "Sargent Controls and Aerospace:216.19.18.0-216.19.18.255",
-                             "Corel Corporation:216.21.157.192-216.21.157.223",
-                             "Fox Speed Channel:216.79.131.192-216.79.131.223" };
-    FILE *       out;
-    int          i;
-    const int    lineCount = sizeof( lines ) / sizeof( lines[0] );
+  FILE * fp;
+  char * dir;
 
-    /* create the ascii file to feed to libtransmission */
-    out = fopen( tmpfile, "w+" );
-    for( i = 0; i < lineCount; ++i )
-        fprintf( out, "%s\n", lines[i] );
-    fclose( out );
+  dir = tr_dirname (path);
+  tr_mkdirp (dir, 0700);
+  tr_free (dir);
+
+  tr_remove (path);
+  fp = fopen (path, "w+");
+  fprintf (fp, "%s", contents);
+  fclose (fp);
+
+  sync ();
 }
+
+static bool
+address_is_blocked (tr_session * session, const char * address_str)
+{
+  struct tr_address addr;
+  tr_address_from_string (&addr, address_str);
+  return tr_sessionIsAddressBlocked (session, &addr);
+}
+
+static int
+test_parsing (void)
+{
+  char * path;
+  tr_session * session;
+
+  /* init the session */
+  session = libttest_session_init (NULL);
+  check (!tr_blocklistExists (session));
+  check_int_eq (0, tr_blocklistGetRuleCount (session));
+
+  /* init the blocklist */
+  path = tr_buildPath (tr_sessionGetConfigDir(session), "blocklists", "level1", NULL);
+  create_text_file (path, contents1);
+  tr_free (path);
+  tr_sessionReloadBlocklists (session);
+  check (tr_blocklistExists (session));
+  check_int_eq (4, tr_blocklistGetRuleCount (session));
+
+  /* enable the blocklist */
+  check (!tr_blocklistIsEnabled (session));
+  tr_blocklistSetEnabled (session, true);
+  check (tr_blocklistIsEnabled (session));
+
+  /* test blocked addresses */
+  check (!address_is_blocked (session, "216.16.1.143"));
+  check ( address_is_blocked (session, "216.16.1.144"));
+  check ( address_is_blocked (session, "216.16.1.145"));
+  check ( address_is_blocked (session, "216.16.1.146"));
+  check ( address_is_blocked (session, "216.16.1.147"));
+  check ( address_is_blocked (session, "216.16.1.148"));
+  check ( address_is_blocked (session, "216.16.1.149"));
+  check ( address_is_blocked (session, "216.16.1.150"));
+  check ( address_is_blocked (session, "216.16.1.151"));
+  check (!address_is_blocked (session, "216.16.1.152"));
+  check (!address_is_blocked (session, "216.16.1.153"));
+  check (!address_is_blocked (session, "217.0.0.1"));
+  check (!address_is_blocked (session, "255.0.0.1"));
+
+  /* cleanup */
+  libttest_session_close (session);
+  return 0;
+}
+
+/***
+****
+***/
+
+static int
+test_updating (void)
+{
+  char * path;
+  tr_session * session;
+
+  /* init the session */
+  session = libttest_session_init (NULL);
+  path = tr_buildPath (tr_sessionGetConfigDir(session), "blocklists", "level1", NULL);
+
+  /* no blocklist to start with... */
+  check_int_eq (0, tr_blocklistGetRuleCount (session));
+
+  /* test that updated source files will get loaded */
+  create_text_file (path, contents1);
+  tr_sessionReloadBlocklists (session);
+  check_int_eq (4, tr_blocklistGetRuleCount (session));
+
+  /* test that updated source files will get loaded */
+  create_text_file (path, contents2);
+  tr_sessionReloadBlocklists (session);
+  check_int_eq (5, tr_blocklistGetRuleCount (session));
+
+  /* test that updated source files will get loaded */
+  create_text_file (path, contents1);
+  tr_sessionReloadBlocklists (session);
+  check_int_eq (4, tr_blocklistGetRuleCount (session));
+
+  /* ensure that new files, if bad, get skipped */
+  create_text_file (path,  "# nothing useful\n");
+  tr_sessionReloadBlocklists (session);
+  check_int_eq (4, tr_blocklistGetRuleCount (session));
+
+  /* cleanup */
+  libttest_session_close (session);
+  tr_free (path);
+  return 0;
+}
+
+/***
+****
+***/
 
 int
-main( void )
+main (void)
 {
-#ifndef WIN32
-    const char *   tmpfile_txt = "/tmp/transmission-blocklist-test.txt";
-    const char *   tmpfile_bin = "/tmp/transmission-blocklist-test.bin";
-#else
-    const char *   tmpfile_txt = "transmission-blocklist-test.txt";
-    const char *   tmpfile_bin = "transmission-blocklist-test.bin";
-#endif
-    struct tr_address addr;
-    int            test = 0;
-    tr_blocklist * b;
+  const testFunc tests[] = { test_parsing,
+                             test_updating };
 
-    remove( tmpfile_txt );
-    remove( tmpfile_bin );
-
-    b = _tr_blocklistNew( tmpfile_bin, true );
-    createTestBlocklist( tmpfile_txt );
-    _tr_blocklistSetContent( b, tmpfile_txt );
-
-    /* now run some tests */
-    check( tr_address_from_string( &addr, "216.16.1.143" ) );
-    check( !_tr_blocklistHasAddress( b, &addr ) );
-    check( tr_address_from_string( &addr, "216.16.1.144" ) );
-    check( _tr_blocklistHasAddress( b, &addr ) );
-    check( tr_address_from_string( &addr, "216.16.1.145" ) );
-    check( _tr_blocklistHasAddress( b, &addr ) );
-    check( tr_address_from_string( &addr, "216.16.1.146" ) );
-    check( _tr_blocklistHasAddress( b, &addr ) );
-    check( tr_address_from_string( &addr, "216.16.1.147" ) );
-    check( _tr_blocklistHasAddress( b, &addr ) );
-    check( tr_address_from_string( &addr, "216.16.1.148" ) );
-    check( _tr_blocklistHasAddress( b, &addr ) );
-    check( tr_address_from_string( &addr, "216.16.1.149" ) );
-    check( _tr_blocklistHasAddress( b, &addr ) );
-    check( tr_address_from_string( &addr, "216.16.1.150" ) );
-    check( _tr_blocklistHasAddress( b, &addr ) );
-    check( tr_address_from_string( &addr, "216.16.1.151" ) );
-    check( _tr_blocklistHasAddress( b, &addr ) );
-    check( tr_address_from_string( &addr, "216.16.1.152" ) );
-    check( !_tr_blocklistHasAddress( b, &addr ) );
-    check( tr_address_from_string( &addr, "216.16.1.153" ) );
-    check( !_tr_blocklistHasAddress( b, &addr ) );
-    check( tr_address_from_string( &addr, "217.0.0.1" ) );
-    check( !_tr_blocklistHasAddress( b, &addr ) );
-    check( tr_address_from_string( &addr, "255.0.0.1" ) );
-
-    /* cleanup */
-    _tr_blocklistFree( b );
-    remove( tmpfile_txt );
-    remove( tmpfile_bin );
-    return 0;
+  return runTests (tests, NUM_TESTS (tests));
 }
-

@@ -124,6 +124,18 @@ TransmissionRemote.prototype =
 		});
 	},
 
+	getFreeSpace: function(dir, callback, context) {
+		var remote = this;
+		var o = {
+			method: 'free-space',
+			arguments: { path: dir }
+		};
+		this.sendRequest(o, function(response) {
+			var args = response['arguments'];
+			callback.call (context, args.path, args['size-bytes']);
+		});
+	},
+
 	changeFileCommand: function(torrentId, fileIndices, command) {
 		var remote = this,
 		    args = { ids: [torrentId] };
@@ -157,6 +169,13 @@ TransmissionRemote.prototype =
 	stopTorrents: function(torrent_ids, callback, context) {
 		this.sendTorrentActionRequests('torrent-stop', torrent_ids, callback, context);
 	},
+
+	moveTorrents: function(torrent_ids, new_location, callback, context) {
+		var remote = this;
+		this.sendTorrentSetRequests( 'torrent-set-location', torrent_ids, 
+			{"move": true, "location": new_location}, callback, context);
+	},
+
 	removeTorrents: function(torrent_ids, callback, context) {
 		this.sendTorrentActionRequests('torrent-remove', torrent_ids, callback, context);
 	},

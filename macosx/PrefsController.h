@@ -29,6 +29,7 @@
 
 @interface PrefsController : NSWindowController <NSToolbarDelegate>
 {
+    tr_session * fHandle;
     NSUserDefaults * fDefaults;
     BOOL fHasLoaded;
     
@@ -36,8 +37,7 @@
     
     NSString * fInitialString;
     
-    IBOutlet NSButton * fBuiltInGrowlButton;
-    IBOutlet NSTextField * fGrowlInstalledField;
+    IBOutlet NSButton * fBuiltInGrowlButton, *fGrowlAppButton;
     IBOutlet NSTextField * fCheckForUpdatesLabel;
     IBOutlet NSButton * fCheckForUpdatesButton, * fCheckForUpdatesBetaButton;
     
@@ -67,8 +67,7 @@
     NSString * fRPCPassword;
 }
 
-+ (void) setHandle: (tr_session *) handle;
-+ (tr_session *) handle;
+- (id) initWithHandle: (tr_session *) handle;
 
 - (void) setAutoUpdateToBeta: (id) sender;
 
@@ -105,6 +104,8 @@
 - (void) setBadge: (id) sender;
 
 - (IBAction) setBuiltInGrowlEnabled: (id) sender;
+- (IBAction) openGrowlApp: (id) sender;
+- (void) openNotificationSystemPrefs: (id) sender;
 
 - (void) resetWarnings: (id) sender;
 

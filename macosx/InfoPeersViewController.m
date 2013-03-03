@@ -27,6 +27,7 @@
 #import "NSStringAdditions.h"
 #import "PeerProgressIndicatorCell.h"
 #import "Torrent.h"
+#import "WebSeedTableView.h"
 
 #import "transmission.h" // required by utils.h
 #import "utils.h"
@@ -174,6 +175,7 @@
     
     [fWebSeeds sortUsingDescriptors: [fWebSeedTable sortDescriptors]];
     [fWebSeedTable reloadData];
+    [fWebSeedTable setWebSeeds: fWebSeeds];
     
     if (anyActive)
     {
@@ -278,7 +280,7 @@
         NSDictionary * peer = [fPeers objectAtIndex: row];
         
         if ([ident isEqualToString: @"Encryption"])
-            return [[peer objectForKey: @"Encryption"] boolValue] ? [NSImage imageNamed: @"Lock.png"] : nil;
+            return [[peer objectForKey: @"Encryption"] boolValue] ? [NSImage imageNamed: @"Lock"] : nil;
         else if ([ident isEqualToString: @"Client"])
             return [peer objectForKey: @"Client"];
         else if  ([ident isEqualToString: @"Progress"])
@@ -335,7 +337,7 @@
 
 - (BOOL) tableView: (NSTableView *) tableView shouldSelectRow: (NSInteger) row
 {
-    return NO;
+    return tableView != fPeerTable;
 }
 
 - (NSString *) tableView: (NSTableView *) tableView toolTipForCell: (NSCell *) cell rect: (NSRectPointer) rect
@@ -371,7 +373,7 @@
         NSString * portString;
         NSInteger port;
         if ((port = [[peer objectForKey: @"Port"] intValue]) > 0)
-            portString = [NSString stringWithFormat: @"%d", port];
+            portString = [NSString stringWithFormat: @"%ld", port];
         else
             portString = NSLocalizedString(@"N/A", "Inspector -> Peers tab -> table row tooltip");
         [components addObject: [NSString stringWithFormat: @"%@: %@", NSLocalizedString(@"Port",
@@ -403,7 +405,7 @@
                                         "Inspector -> Peers tab -> table row tooltip")];
                 break;
             default:
-                NSAssert1(NO, @"Peer from unknown source: %d", peerFrom);
+                NSAssert1(NO, @"Peer from unknown source: %ld", peerFrom);
         }
         
         //determing status strings from flags
@@ -471,7 +473,7 @@
 
 - (void) setupInfo
 {
-    BOOL hasWebSeeds = NO;
+    __block BOOL hasWebSeeds = NO;
     
     if ([fTorrents count] == 0)
     {
@@ -483,12 +485,13 @@
     }
     else
     {
-        for (Torrent * torrent in fTorrents)
+        [fTorrents enumerateObjectsWithOptions: NSEnumerationConcurrent usingBlock: ^(Torrent * torrent, NSUInteger idx, BOOL *stop) {
             if ([torrent webSeedCount] > 0)
             {
                 hasWebSeeds = YES;
-                break;
+                *stop = YES;
             }
+        }];
     }
     
     if (!hasWebSeeds)
@@ -497,6 +500,8 @@
         fWebSeeds = nil;
         [fWebSeedTable reloadData];
     }
+    else
+        [fWebSeedTable deselectAll: self];
     [self setWebSeedTableHidden: !hasWebSeeds animate: YES];
     
     fSet = YES;

@@ -201,8 +201,10 @@
 
 - (NSString *) outlineView: (NSOutlineView *) outlineView typeSelectStringForTableColumn: (NSTableColumn *) tableColumn item: (id) item
 {
-    return [item isKindOfClass: [Torrent class]] ? [(Torrent *)item name]
-            : [[self preparedCellAtColumn: [self columnWithIdentifier: @"Group"] row: [self rowForItem: item]] stringValue];
+    if ([item isKindOfClass: [Torrent class]])
+        return [(Torrent *)item name];
+    else
+        return [[self dataSource] outlineView:outlineView objectValueForTableColumn:[self tableColumnWithIdentifier:@"Group"] byItem:item];
 }
 
 - (NSString *) outlineView: (NSOutlineView *) outlineView toolTipForCell: (NSCell *) cell rect: (NSRectPointer) rect tableColumn: (NSTableColumn *) column item: (id) item mouseLocation: (NSPoint) mouseLocation
@@ -826,7 +828,7 @@
             priority = TR_PRI_LOW;
             break;
         default:
-            NSAssert1(NO, @"Unknown priority: %d", [sender tag]);
+            NSAssert1(NO, @"Unknown priority: %ld", [sender tag]);
     }
     
     [fMenuTorrent setPriority: priority];
@@ -836,14 +838,12 @@
 
 - (void) togglePiecesBar
 {
-    //stop previous animation
-    if (fPiecesBarAnimation)
-        [fPiecesBarAnimation release];
-    
     NSMutableArray * progressMarks = [NSMutableArray arrayWithCapacity: 16];
     for (NSAnimationProgress i = 0.0625; i <= 1.0; i += 0.0625)
         [progressMarks addObject: [NSNumber numberWithFloat: i]];
     
+    //this stops a previous animation
+    [fPiecesBarAnimation release];
     fPiecesBarAnimation = [[NSAnimation alloc] initWithDuration: TOGGLE_PROGRESS_SECONDS animationCurve: NSAnimationEaseIn];
     [fPiecesBarAnimation setAnimationBlockingMode: NSAnimationNonblocking];
     [fPiecesBarAnimation setProgressMarks: progressMarks];

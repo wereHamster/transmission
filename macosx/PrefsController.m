@@ -25,10 +25,12 @@
 #import "PrefsController.h"
 #import "BlocklistDownloaderViewController.h"
 #import "BlocklistScheduler.h"
+#import "Controller.h"
 #import "PortChecker.h"
 #import "BonjourController.h"
+#import "NSApplicationAdditions.h"
 #import "NSStringAdditions.h"
-#import "UKKQueue.h"
+#import "VDKQueue.h"
 
 #import "transmission.h"
 #import "utils.h"
@@ -53,11 +55,13 @@
 #define RPC_KEYCHAIN_SERVICE    "Transmission:Remote"
 #define RPC_KEYCHAIN_NAME       "Remote"
 
-#define WEBUI_URL   @"http://localhost:%d/"
+#define WEBUI_URL   @"http://localhost:%ld/"
 
 @interface PrefsController (Private)
 
 - (void) setPrefView: (id) sender;
+
+- (void) updateGrowlButton;
 
 - (void) setKeychainPassword: (const char *) password forService: (const char *) service username: (const char *) username;
 
@@ -65,21 +69,12 @@
 
 @implementation PrefsController
 
-tr_session * fHandle;
-+ (void) setHandle: (tr_session *) handle
-{
-    fHandle = handle;
-}
-
-+ (tr_session *) handle
-{
-    return fHandle;
-}
-
-- (id) init
+- (id) initWithHandle: (tr_session *) handle
 {
     if ((self = [super initWithWindowNibName: @"PrefsWindow"]))
     {
+        fHandle = handle;
+        
         fDefaults = [NSUserDefaults standardUserDefaults];
         
         //check for old version download location (before 1.1)
@@ -100,10 +95,9 @@ tr_session * fHandle;
             [fDefaults setObject: blocklistDate forKey: @"BlocklistNewLastUpdate"];
             [fDefaults removeObjectForKey: @"BlocklistLastUpdate"];
             
-            NSString * blocklistDir = [NSHomeDirectory() stringByAppendingPathComponent:
-                                        @"/Library/Application Support/Transmission/blocklists/"];
-            [[NSFileManager defaultManager] moveItemAtPath: [blocklistDir stringByAppendingPathComponent: @"level1.bin"]
-                toPath: [blocklistDir stringByAppendingPathComponent: [NSString stringWithUTF8String: DEFAULT_BLOCKLIST_FILENAME]]
+            NSURL * blocklistDir = [[[[NSFileManager defaultManager] URLsForDirectory: NSApplicationDirectory inDomains: NSUserDomainMask] objectAtIndex: 0] URLByAppendingPathComponent: @"Transmission/blocklists/"];
+            [[NSFileManager defaultManager] moveItemAtURL: [blocklistDir URLByAppendingPathComponent: @"level1.bin"]
+                toURL: [blocklistDir URLByAppendingPathComponent: [NSString stringWithUTF8String: DEFAULT_BLOCKLIST_FILENAME]]
                 error: nil];
         }
         
@@ -114,7 +108,7 @@ tr_session * fHandle;
         //set auto import
         NSString * autoPath;
         if ([fDefaults boolForKey: @"AutoImport"] && (autoPath = [fDefaults stringForKey: @"AutoImportDirectory"]))
-            [[UKKQueue sharedFileWatcher] addPath: [autoPath stringByExpandingTildeInPath]];
+            [[(Controller *)[NSApp delegate] fileWatcherQueue] addPath: [autoPath stringByExpandingTildeInPath] notifyingAbout: VDKQueueNotifyAboutWrite];
         
         //set blocklist scheduler
         [[BlocklistScheduler scheduler] updateSchedule];
@@ -139,7 +133,7 @@ tr_session * fHandle;
         }
         
         //set built-in Growl
-        [GrowlApplicationBridge setShouldUseBuiltInNotifications: [fDefaults boolForKey: @"DisplayNotifications"]];
+        [GrowlApplicationBridge setShouldUseBuiltInNotifications: ![NSApp isOnMountainLionOrBetter] && [fDefaults boolForKey: @"DisplayNotifications"]];
         
         [self setAutoUpdateToBeta: nil];
     }
@@ -152,6 +146,7 @@ tr_session * fHandle;
     [[NSNotificationCenter defaultCenter] removeObserver: self];
     
     [fPortStatusTimer invalidate];
+    [fPortStatusTimer release];
     if (fPortChecker)
     {
         [fPortChecker cancelProbe];
@@ -169,6 +164,9 @@ tr_session * fHandle;
 {
     fHasLoaded = YES;
     
+    if ([NSApp isOnLionOrBetter])
+        [[self window] setRestorationClass: [self class]];
+    
     NSToolbar * toolbar = [[NSToolbar alloc] initWithIdentifier: @"Preferences Toolbar"];
     [toolbar setDelegate: self];
     [toolbar setAllowsUserCustomization: NO];
@@ -180,10 +178,8 @@ tr_session * fHandle;
     
     [self setPrefView: nil];
     
-    [fBuiltInGrowlButton setState: [fDefaults boolForKey: @"DisplayNotifications"]];
-    const BOOL growlRunning = [GrowlApplicationBridge isGrowlRunning];
-    [fBuiltInGrowlButton setHidden: growlRunning];
-    [fGrowlInstalledField setHidden: !growlRunning];
+    //make sure proper notification settings are shown
+    [self updateGrowlButton];
     
     //set download folder
     [fFolderPopUp selectItemAtIndex: [fDefaults boolForKey: @"DownloadLocationConstant"] ? DOWNLOAD_FOLDER : DOWNLOAD_TORRENT];
@@ -206,8 +202,7 @@ tr_session * fHandle;
     fNatStatus = -1;
     
     [self updatePortStatus];
-    fPortStatusTimer = [NSTimer scheduledTimerWithTimeInterval: 5.0 target: self
-                        selector: @selector(updatePortStatus) userInfo: nil repeats: YES];
+    fPortStatusTimer = [[NSTimer scheduledTimerWithTimeInterval: 5.0 target: self selector: @selector(updatePortStatus) userInfo: nil repeats: YES] retain];
     
     //set peer connections
     [fPeersGlobalField setIntValue: [fDefaults integerForKey: @"PeersTotal"]];
@@ -264,7 +259,7 @@ tr_session * fHandle;
     else if ([ident isEqualToString: TOOLBAR_TRANSFERS])
     {
         [item setLabel: NSLocalizedString(@"Transfers", "Preferences -> toolbar item title")];
-        [item setImage: [NSImage imageNamed: @"Transfers.png"]];
+        [item setImage: [NSImage imageNamed: @"Transfers"]];
         [item setTarget: self];
         [item setAction: @selector(setPrefView:)];
         [item setAutovalidates: NO];
@@ -272,7 +267,7 @@ tr_session * fHandle;
     else if ([ident isEqualToString: TOOLBAR_GROUPS])
     {
         [item setLabel: NSLocalizedString(@"Groups", "Preferences -> toolbar item title")];
-        [item setImage: [NSImage imageNamed: @"Groups.png"]];
+        [item setImage: [NSImage imageNamed: @"Groups"]];
         [item setTarget: self];
         [item setAction: @selector(setPrefView:)];
         [item setAutovalidates: NO];
@@ -280,7 +275,7 @@ tr_session * fHandle;
     else if ([ident isEqualToString: TOOLBAR_BANDWIDTH])
     {
         [item setLabel: NSLocalizedString(@"Bandwidth", "Preferences -> toolbar item title")];
-        [item setImage: [NSImage imageNamed: @"Bandwidth.png"]];
+        [item setImage: [NSImage imageNamed: @"Bandwidth"]];
         [item setTarget: self];
         [item setAction: @selector(setPrefView:)];
         [item setAutovalidates: NO];
@@ -304,7 +299,7 @@ tr_session * fHandle;
     else if ([ident isEqualToString: TOOLBAR_REMOTE])
     {
         [item setLabel: NSLocalizedString(@"Remote", "Preferences -> toolbar item title")];
-        [item setImage: [NSImage imageNamed: @"Remote.png"]];
+        [item setImage: [NSImage imageNamed: @"Remote"]];
         [item setTarget: self];
         [item setAction: @selector(setPrefView:)];
         [item setAutovalidates: NO];
@@ -332,6 +327,18 @@ tr_session * fHandle;
 - (NSArray *) toolbarDefaultItemIdentifiers: (NSToolbar *) toolbar
 {
     return [self toolbarAllowedItemIdentifiers: toolbar];
+}
+
+- (void) windowDidBecomeMain: (NSNotification *) notification
+{
+    //this is a good place to see if Growl was quit/launched
+    [self updateGrowlButton];
+}
+
++ (void) restoreWindowWithIdentifier: (NSString *) identifier state: (NSCoder *) state completionHandler: (void (^)(NSWindow *, NSError *)) completionHandler
+{
+    NSWindow * window = [[(Controller *)[NSApp delegate] prefsController] window];
+    completionHandler(window, nil);
 }
 
 //for a beta release, always use the beta appcast
@@ -367,7 +374,7 @@ tr_session * fHandle;
 
 - (void) setRandomPortOnStart: (id) sender
 {
-    tr_sessionSetPeerPortRandomOnStart(fHandle, [sender state] == NSOnState);
+    tr_sessionSetPeerPortRandomOnStart(fHandle, [(NSButton *)sender state] == NSOnState);
 }
 
 - (void) setNat: (id) sender
@@ -411,15 +418,15 @@ tr_session * fHandle;
     {
         case PORT_STATUS_OPEN:
             [fPortStatusField setStringValue: NSLocalizedString(@"Port is open", "Preferences -> Network -> port status")];
-            [fPortStatusImage setImage: [NSImage imageNamed: @"GreenDot.png"]];
+            [fPortStatusImage setImage: [NSImage imageNamed: @"GreenDot"]];
             break;
         case PORT_STATUS_CLOSED:
             [fPortStatusField setStringValue: NSLocalizedString(@"Port is closed", "Preferences -> Network -> port status")];
-            [fPortStatusImage setImage: [NSImage imageNamed: @"RedDot.png"]];
+            [fPortStatusImage setImage: [NSImage imageNamed: @"RedDot"]];
             break;
         case PORT_STATUS_ERROR:
             [fPortStatusField setStringValue: NSLocalizedString(@"Port check site is down", "Preferences -> Network -> port status")];
-            [fPortStatusImage setImage: [NSImage imageNamed: @"YellowDot.png"]];
+            [fPortStatusImage setImage: [NSImage imageNamed: @"YellowDot"]];
             break;
         default:
             NSAssert1(NO, @"Port checker returned invalid status: %d", [fPortChecker status]);
@@ -433,8 +440,7 @@ tr_session * fHandle;
 {
     NSMutableArray * sounds = [NSMutableArray array];
     
-    NSArray * directories = NSSearchPathForDirectoriesInDomains(NSAllLibrariesDirectory,
-                                NSUserDomainMask | NSLocalDomainMask | NSSystemDomainMask, YES);
+    NSArray * directories = NSSearchPathForDirectoriesInDomains(NSAllLibrariesDirectory, NSUserDomainMask | NSLocalDomainMask | NSSystemDomainMask, YES);
     
     for (NSString * directory in directories)
     {
@@ -735,9 +741,19 @@ tr_session * fHandle;
 
 - (IBAction) setBuiltInGrowlEnabled: (id) sender
 {
-    const BOOL enable = [sender state] == NSOnState;
+    const BOOL enable = [(NSButton *)sender state] == NSOnState;
     [fDefaults setBool: enable forKey: @"DisplayNotifications"];
     [GrowlApplicationBridge setShouldUseBuiltInNotifications: enable];
+}
+
+- (IBAction) openGrowlApp: (id) sender
+{
+    [GrowlApplicationBridge openGrowlPreferences: YES];
+}
+
+- (void) openNotificationSystemPrefs: (id) sender
+{
+    [[NSWorkspace sharedWorkspace] openURL: [NSURL fileURLWithPath:@"/System/Library/PreferencePanes/Notifications.prefPane"]];
 }
 
 - (void) resetWarnings: (id) sender
@@ -908,11 +924,14 @@ tr_session * fHandle;
     NSString * path;
     if ((path = [fDefaults stringForKey: @"AutoImportDirectory"]))
     {
-        path = [path stringByExpandingTildeInPath];
+        VDKQueue * watcherQueue = [(Controller *)[NSApp delegate] fileWatcherQueue];
         if ([fDefaults boolForKey: @"AutoImport"])
-            [[UKKQueue sharedFileWatcher] addPath: path];
+        {
+            path = [path stringByExpandingTildeInPath];
+            [watcherQueue addPath: path notifyingAbout: VDKQueueNotifyAboutWrite];
+        }
         else
-            [[UKKQueue sharedFileWatcher] removePathFromQueue: path];
+            [watcherQueue removeAllPaths];
         
         [[NSNotificationCenter defaultCenter] postNotificationName: @"AutoImportSettingChange" object: self];
     }
@@ -931,21 +950,23 @@ tr_session * fHandle;
     [panel setCanCreateDirectories: YES];
 
     [panel beginSheetModalForWindow: [self window] completionHandler: ^(NSInteger result) {
-        NSString * path = [fDefaults stringForKey: @"AutoImportDirectory"];
         if (result == NSFileHandlingPanelOKButton)
         {
-            UKKQueue * sharedQueue = [UKKQueue sharedFileWatcher];
-            if (path)
-                [sharedQueue removePathFromQueue: [path stringByExpandingTildeInPath]];
+            VDKQueue * watcherQueue = [(Controller *)[NSApp delegate] fileWatcherQueue];
+            [watcherQueue removeAllPaths];
             
-            path = [[[panel URLs] objectAtIndex: 0] path];
+            NSString * path = [[[panel URLs] objectAtIndex: 0] path];
             [fDefaults setObject: path forKey: @"AutoImportDirectory"];
-            [sharedQueue addPath: [path stringByExpandingTildeInPath]];
+            [watcherQueue addPath: [path stringByExpandingTildeInPath] notifyingAbout: VDKQueueNotifyAboutWrite];
             
             [[NSNotificationCenter defaultCenter] postNotificationName: @"AutoImportSettingChange" object: self];
         }
-        else if (!path)
-            [fDefaults setBool: NO forKey: @"AutoImport"];
+        else
+        {
+            NSString * path = [fDefaults stringForKey: @"AutoImportDirectory"];
+            if (!path)
+                [fDefaults setBool: NO forKey: @"AutoImport"];
+        }
         
         [fImportFolderPopUp selectItemAtIndex: 0];
     }];
@@ -1034,7 +1055,10 @@ tr_session * fHandle;
     if ([fDefaults boolForKey:@"RPC"] && [fDefaults boolForKey: @"RPCWebDiscovery"])
         [[BonjourController defaultController] startWithPort: [fDefaults integerForKey: @"RPCPort"]];
     else
-        [[BonjourController defaultController] stop];
+    {
+        if ([BonjourController defaultControllerExists])
+            [[BonjourController defaultController] stop];
+    }
 }
 
 - (void) updateRPCWhitelist
@@ -1436,6 +1460,42 @@ tr_session * fHandle;
                 [window setTitle: [item label]];
                 break;
             }
+    }
+}
+
+- (void) updateGrowlButton
+{
+    if ([GrowlApplicationBridge isGrowlRunning])
+    {
+        [fBuiltInGrowlButton setHidden: YES];
+        [fGrowlAppButton setHidden: NO];
+        
+#warning remove NO
+        [fGrowlAppButton setEnabled: NO && [GrowlApplicationBridge isGrowlURLSchemeAvailable]];
+        [fGrowlAppButton setTitle: NSLocalizedString(@"Configure In Growl", "Prefs -> Notifications")];
+        [fGrowlAppButton sizeToFit];
+        
+        [fGrowlAppButton setTarget: self];
+        [fGrowlAppButton setAction: @selector(openGrowlApp:)];
+    }
+    else if ([NSApp isOnMountainLionOrBetter])
+    {
+        [fBuiltInGrowlButton setHidden: YES];
+        [fGrowlAppButton setHidden: NO];
+        
+        [fGrowlAppButton setEnabled: YES];
+        [fGrowlAppButton setTitle: NSLocalizedString(@"Configure In System Preferences", "Prefs -> Notifications")];
+        [fGrowlAppButton sizeToFit];
+        
+        [fGrowlAppButton setTarget: self];
+        [fGrowlAppButton setAction: @selector(openNotificationSystemPrefs:)];
+    }
+    else
+    {
+        [fBuiltInGrowlButton setHidden: NO];
+        [fGrowlAppButton setHidden: YES];
+        
+        [fBuiltInGrowlButton setState: [fDefaults boolForKey: @"DisplayNotifications"]];
     }
 }
 

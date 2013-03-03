@@ -47,8 +47,12 @@
 
 - (void) setCheck: (id) sender;
 - (void) setOnlySelectedCheck: (id) sender;
+- (void) checkAll;
+- (void) uncheckAll;
 - (void) setPriority: (id) sender;
 
 - (void) revealFile: (id) sender;
+
+- (void) renameSelected: (id) sender;
 
 @end

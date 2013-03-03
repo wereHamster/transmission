@@ -26,6 +26,7 @@
 #import <transmission.h>
 #import <Quartz/Quartz.h>
 #import <Growl/Growl.h>
+#import "VDKQueue.h"
 
 @class AddMagnetWindowController;
 @class AddWindowController;
@@ -49,7 +50,7 @@ typedef enum
     ADD_CREATED
 } addType;
 
-@interface Controller : NSObject <GrowlApplicationBridgeDelegate, NSURLDownloadDelegate, NSPopoverDelegate, NSSoundDelegate, NSToolbarDelegate, NSWindowDelegate, QLPreviewPanelDataSource, QLPreviewPanelDelegate>
+@interface Controller : NSObject <GrowlApplicationBridgeDelegate, NSURLDownloadDelegate, NSUserNotificationCenterDelegate, NSPopoverDelegate, NSSoundDelegate, NSToolbarDelegate, NSWindowDelegate, QLPreviewPanelDataSource, QLPreviewPanelDelegate, VDKQueueDelegate>
 {
     tr_session                      * fLib;
     
@@ -61,12 +62,16 @@ typedef enum
     
     NSUserDefaults                  * fDefaults;
     
+    NSString                        * fConfigDirectory;
+    
     IBOutlet NSWindow               * fWindow;
     DragOverlayWindow               * fOverlayWindow;
     IBOutlet TorrentTableView       * fTableView;
 
     io_connect_t                    fRootPort;
     NSTimer                         * fTimer;
+    
+    VDKQueue                        * fFileWatcherQueue;
     
     IBOutlet NSMenuItem             * fOpenIgnoreDownloadFolder;
     IBOutlet NSButton               * fActionButton, * fSpeedLimitButton, * fClearCompletedButton;
@@ -106,6 +111,9 @@ typedef enum
     
     NSMutableSet                    * fAddingTransfers;
     
+    NSMutableSet                    * fAddWindows;
+    URLSheetWindowController        * fUrlSheetController;
+    
     BOOL                            fGlobalPopoverShown;
     BOOL                            fSoundPlaying;
 }
@@ -127,9 +135,10 @@ typedef enum
 
 - (void) openURL: (NSString *) urlString;
 - (void) openURLShowSheet: (id) sender;
-- (void) urlSheetDidEnd: (URLSheetWindowController *) controller url: (NSString *) urlString returnCode: (NSInteger) returnCode;
 
 - (void) quitSheetDidEnd: (NSWindow *) sheet returnCode: (NSInteger) returnCode contextInfo: (void *) contextInfo;
+
+- (tr_session *) sessionHandle;
 
 - (void) createFile: (id) sender;
 
@@ -164,11 +173,14 @@ typedef enum
 
 - (void) revealFile: (id) sender;
 
+- (IBAction) renameSelected: (id) sender;
+
 - (void) announceSelectedTorrents: (id) sender;
 
 - (void) verifySelectedTorrents: (id) sender;
 - (void) verifyTorrents: (NSArray *) torrents;
 
+@property (retain, readonly) PrefsController * prefsController;
 - (void) showPreferenceWindow: (id) sender;
 
 - (void) showAboutWindow: (id) sender;
@@ -177,6 +189,7 @@ typedef enum
 - (void) resetInfo;
 - (void) setInfoTab: (id) sender;
 
+@property (retain, readonly) MessageWindowController * messageWindowController;
 - (void) showMessageWindow: (id) sender;
 - (void) showStatsWindow: (id) sender;
 
@@ -184,6 +197,8 @@ typedef enum
 - (void) fullUpdateUI;
 
 - (void) setBottomCountText: (BOOL) filtering;
+
+- (Torrent *) torrentForHash: (NSString *) hash;
 
 - (void) torrentFinishedDownloading: (NSNotification *) notification;
 - (void) torrentRestartedDownloading: (NSNotification *) notification;
@@ -222,6 +237,8 @@ typedef enum
 - (void) beginCreateFile: (NSNotification *) notification;
 
 - (void) sleepCallback: (natural_t) messageType argument: (void *) messageArgument;
+
+@property (retain, readonly) VDKQueue * fileWatcherQueue;
 
 - (void) torrentTableViewSelectionDidChange: (NSNotification *) notification;
 

@@ -47,10 +47,7 @@
 
 - (void) dealloc
 {
-    [[NSNotificationCenter defaultCenter] removeObserver: self];
-    
     [fHashes release];
-    
     [super dealloc];
 }
 
@@ -68,6 +65,8 @@
 
 - (void) addCompletedTorrent: (Torrent *) torrent
 {
+    NSParameterAssert(torrent != nil);
+    
     [fHashes addObject: [torrent hashString]];
     [[NSApp dockTile] setBadgeLabel: [NSString formattedUInteger: [fHashes count]]];
 }

@@ -21,7 +21,7 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QPixmapCache>
-#include <QStyleOptionProgressBarV2>
+#include <QStyleOptionProgressBar>
 
 #include <libtransmission/transmission.h>
 #include <libtransmission/utils.h>
@@ -154,9 +154,21 @@ TorrentDelegateMin :: drawTorrent( QPainter * painter, const QStyleOptionViewIte
     painter->setFont( statusFont );
     painter->drawText( statusArea, 0, statusStr );
     myProgressBarStyle->rect = barArea;
-    myProgressBarStyle->direction = option.direction;
-    myProgressBarStyle->palette = option.palette;
-    myProgressBarStyle->palette.setCurrentColorGroup( cg );
+    if ( tor.isDownloading() ) {
+        myProgressBarStyle->palette.setBrush( QPalette::Highlight, blueBrush );
+        myProgressBarStyle->palette.setColor( QPalette::Base, blueBack );
+        myProgressBarStyle->palette.setColor( QPalette::Window, blueBack );
+    }
+    else if ( tor.isSeeding() ) {
+        myProgressBarStyle->palette.setBrush( QPalette::Highlight, greenBrush );
+        myProgressBarStyle->palette.setColor( QPalette::Base, greenBack );
+        myProgressBarStyle->palette.setColor( QPalette::Window, greenBack );
+    }
+    else {
+        myProgressBarStyle->palette.setBrush( QPalette::Highlight, silverBrush );
+        myProgressBarStyle->palette.setColor( QPalette::Base, silverBack );
+        myProgressBarStyle->palette.setColor( QPalette::Window, silverBack );
+    }
     myProgressBarStyle->state = progressBarState;
     char buf[32];
     tr_snprintf( buf, sizeof( buf ), "%d%%", (int)tr_truncd( 100.0 * tor.percentDone( ), 0 ) );

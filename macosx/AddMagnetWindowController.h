@@ -23,6 +23,7 @@
  *****************************************************************************/
 
 #import <Cocoa/Cocoa.h>
+#import "Torrent.h"
 
 @class Controller;
 @class Torrent;
@@ -34,12 +35,20 @@
     IBOutlet NSButton * fStartCheck;
     IBOutlet NSPopUpButton * fGroupPopUp, * fPriorityPopUp;
     
+    //remove these when switching to auto layout
+    IBOutlet NSTextField * fMagnetLinkLabel;
+    IBOutlet NSTextField * fDownloadToLabel, * fGroupLabel, * fPriorityLabel;
+    IBOutlet NSButton * fChangeDestinationButton;
+    IBOutlet NSBox * fDownloadToBox;
+    IBOutlet NSButton * fAddButton, * fCancelButton;
+    
     Controller * fController;
     
     Torrent * fTorrent;
     NSString * fDestination;
     
     NSInteger fGroupValue;
+    TorrentDeterminationType fGroupDeterminationType;
 }
 
 - (id) initWithTorrent: (Torrent *) torrent destination: (NSString *) path controller: (Controller *) controller;

@@ -65,7 +65,7 @@ function Inspector(controller) {
             name = torrents[0].getName();
         else
             name = '' + torrents.length+' Transfers Selected';
-        setInnerHTML(e.name_lb, name || na);
+        setTextContent(e.name_lb, name || na);
 
         // update the visible page
         if ($(e.info_page).is(':visible'))
@@ -81,14 +81,6 @@ function Inspector(controller) {
     /****
     *****  GENERAL INFO PAGE
     ****/
-
-    accumulateString = function (oldVal, newVal) {
-        if (!oldVal || !oldVal.length)
-            return newVal;
-        if (oldVal === newVal)
-            return newVal;
-        return 'Mixed';
-    },
 
     updateInfoPage = function () {
         var torrents = data.torrents,
@@ -146,7 +138,7 @@ function Inspector(controller) {
             else
                 str = torrents[0].getStateString();
         }
-        setInnerHTML(e.state_lb, str);
+        setTextContent(e.state_lb, str);
         stateString = str;
 
         //
@@ -180,7 +172,7 @@ function Inspector(controller) {
             else
                 str = fmt.size(haveVerified) + ' of ' + fmt.size(sizeWhenDone) + ' (' + str +'%), ' + fmt.size(haveUnverified) + ' Unverified';
         }
-        setInnerHTML(e.have_lb, str);
+        setTextContent(e.have_lb, str);
 
         //
         //  availability_lb
@@ -192,7 +184,7 @@ function Inspector(controller) {
             str = none;
         else
             str = '' + fmt.percentString( ( 100.0 * available ) / sizeWhenDone ) +  '%';
-        setInnerHTML(e.availability_lb, str);
+        setTextContent(e.availability_lb, str);
 
         //
         //  downloaded_lb
@@ -203,15 +195,15 @@ function Inspector(controller) {
         else {
             d = f = 0;
             for(i=0; t=torrents[i]; ++i) {
-                d = t.getDownloadedEver();
-                f = t.getFailedEver();
+                d += t.getDownloadedEver();
+                f += t.getFailedEver();
             }
             if(f)
                 str = fmt.size(d) + ' (' + fmt.size(f) + ' corrupt)';
             else
                 str = fmt.size(d);
         }
-        setInnerHTML(e.downloaded_lb, str);
+        setTextContent(e.downloaded_lb, str);
 
         //
         //  uploaded_lb
@@ -221,13 +213,22 @@ function Inspector(controller) {
             str = none;
         else {
             d = u = 0;
-            for(i=0; t=torrents[i]; ++i) {
-                d = t.getDownloadedEver();
-                u = t.getUploadedEver();
+            if(torrents.length == 1) {
+                d = torrents[0].getDownloadedEver();
+                u = torrents[0].getUploadedEver();
+                                
+                if (d == 0)
+                    d = torrents[0].getHaveValid();
+            }
+            else {
+                for(i=0; t=torrents[i]; ++i) {
+                    d += t.getDownloadedEver();
+                    u += t.getUploadedEver();
+                }
             }
             str = fmt.size(u) + ' (Ratio: ' + fmt.ratioString( Math.ratio(u,d))+')';
         }
-        setInnerHTML(e.uploaded_lb, str);
+        setTextContent(e.uploaded_lb, str);
 
         //
         // running time
@@ -251,7 +252,7 @@ function Inspector(controller) {
             else
                 str = fmt.timeInterval(now/1000 - baseline);
         }
-        setInnerHTML(e.running_time_lb, str);
+        setTextContent(e.running_time_lb, str);
 
         //
         // remaining time
@@ -275,7 +276,7 @@ function Inspector(controller) {
             else
                 str = fmt.timeInterval(baseline);
         }
-        setInnerHTML(e.remaining_time_lb, str);
+        setTextContent(e.remaining_time_lb, str);
 
         //
         // last activity
@@ -299,7 +300,7 @@ function Inspector(controller) {
             else
                 str = fmt.timeInterval(d) + ' ago';
         }
-        setInnerHTML(e.last_activity_lb, str);
+        setTextContent(e.last_activity_lb, str);
 
         //
         // error
@@ -316,7 +317,7 @@ function Inspector(controller) {
                 }
             }
         }
-        setInnerHTML(e.error_lb, str || none);
+        setTextContent(e.error_lb, str || none);
 
         //
         // size
@@ -341,7 +342,7 @@ function Inspector(controller) {
             else
                 str = fmt.size(size) + ' (' + pieces.toStringWithCommas() + ' pieces)';
         }
-        setInnerHTML(e.size_lb, str);
+        setTextContent(e.size_lb, str);
 
         //
         //  hash
@@ -358,7 +359,7 @@ function Inspector(controller) {
                 }
             }
         }
-        setInnerHTML(e.hash_lb, str);
+        setTextContent(e.hash_lb, str);
 
         //
         //  privacy
@@ -376,7 +377,7 @@ function Inspector(controller) {
                 }
             }
         }
-        setInnerHTML(e.privacy_lb, str);
+        setTextContent(e.privacy_lb, str);
 
         //
         //  comment
@@ -395,7 +396,7 @@ function Inspector(controller) {
         }
         if(!str)
             str = none;  
-        setInnerHTML(e.comment_lb, str.replace(/(https?|ftp):\/\/([\w\-]+(\.[\w\-]+)*(\.[a-z]{2,4})?)(\d{1,5})?(\/([^<>\s]*))?/g, '<a target="_blank" href="$&">$&</a>'));
+        setTextContent(e.comment_lb, str);
 
         //
         //  origin
@@ -423,7 +424,7 @@ function Inspector(controller) {
             else
                 str = 'Created by ' + creator + ' on ' + (new Date(date*1000)).toDateString();
         }
-        setInnerHTML(e.origin_lb, str);
+        setTextContent(e.origin_lb, str);
 
         //
         //  foldername
@@ -440,74 +441,134 @@ function Inspector(controller) {
                 }
             }
         }
-        setInnerHTML(e.foldername_lb, str);
+        setTextContent(e.foldername_lb, str);
     },
 
     /****
     *****  FILES PAGE
     ****/
 
-    changeFileCommand = function(rows, command) {
+    changeFileCommand = function(fileIndices, command) {
         var torrentId = data.file_torrent.getId();
-        var rowIndices = $.map(rows.slice(0),function (row) {return row.getIndex();});
-        data.controller.changeFileCommand(torrentId, rowIndices, command);
+        data.controller.changeFileCommand(torrentId, fileIndices, command);
     },
 
-    selectAllFiles = function() {
-        changeFileCommand([], 'files-wanted');
+    onFileWantedToggled = function(ev, fileIndices, want) {
+        changeFileCommand(fileIndices, want?'files-wanted':'files-unwanted');
     },
 
-    deselectAllFiles = function() {
-        changeFileCommand([], 'files-unwanted');
-    },
-
-    onFileWantedToggled = function(ev, row, want) {
-        changeFileCommand([row], want?'files-wanted':'files-unwanted');
-    },
-
-    onFilePriorityToggled = function(ev, row, priority) {
+    onFilePriorityToggled = function(ev, fileIndices, priority) {
         var command;
         switch(priority) {
             case -1: command = 'priority-low'; break;
             case  1: command = 'priority-high'; break;
             default: command = 'priority-normal'; break;
         }
-        changeFileCommand([row], command);
+        changeFileCommand(fileIndices, command);
+    },
+
+    onNameClicked = function(ev, fileRow, fileIndices) {
+        $(fileRow.getElement()).siblings().slideToggle();
     },
 
     clearFileList = function() {
         $(data.elements.file_list).empty();
         delete data.file_torrent;
+        delete data.file_torrent_n;
         delete data.file_rows;
     },
 
+    createFileTreeModel = function (tor) {
+        var i, j, n, name, tokens, walk, tree, token, sub,
+            leaves = [ ],
+            tree = { children: { }, file_indices: [ ] };
+
+        n = tor.getFileCount();
+        for (i=0; i<n; ++i) {
+            name = tor.getFile(i).name;
+            tokens = name.split('/');
+            walk = tree;
+            for (j=0; j<tokens.length; ++j) {
+                token = tokens[j];
+                sub = walk.children[token];
+                if (!sub) {
+                    walk.children[token] = sub = {
+                      name: token,
+                      parent: walk,
+                      children: { },
+                      file_indices: [ ],
+                      depth: j
+                    };
+                }
+                walk = sub;
+            }
+            walk.file_index = i;
+            delete walk.children;
+            leaves.push (walk);
+        }
+
+        for (i=0; i<leaves.length; ++i) {
+            walk = leaves[i];
+            j = walk.file_index;
+            do {
+                walk.file_indices.push (j);
+                walk = walk.parent;
+            } while (walk);
+        }
+
+        return tree;
+    },
+
+    addNodeToView = function (tor, parent, sub, i) {
+        var row;
+        row = new FileRow(tor, sub.depth, sub.name, sub.file_indices, i%2);
+        data.file_rows.push(row);
+        parent.appendChild(row.getElement());
+        $(row).bind('wantedToggled',onFileWantedToggled);
+        $(row).bind('priorityToggled',onFilePriorityToggled);
+        $(row).bind('nameClicked',onNameClicked);
+    },
+
+    addSubtreeToView = function (tor, parent, sub, i) {
+        var key, div;
+        div = document.createElement('div');
+        if (sub.parent)
+            addNodeToView (tor, div, sub, i++);
+        if (sub.children)
+            for (key in sub.children)
+                i = addSubtreeToView (tor, div, sub.children[key]);  
+        parent.appendChild(div);
+        return i;
+    },
+                
     updateFilesPage = function() {
-        var i, n, sel, row, tor, fragment,
+        var i, n, tor, fragment, tree,
             file_list = data.elements.file_list,
             torrents = data.torrents;
 
+        // only show one torrent at a time
         if (torrents.length !== 1) {
             clearFileList();
             return;
         }
 
-        // build the file list
         tor = torrents[0];
-
-        clearFileList();
-        data.file_torrent = tor;
-        n = tor.getFileCount();
-        data.file_rows = [];
-        fragment = document.createDocumentFragment();
-
-        for (i=0; i<n; ++i) {
-            row = data.file_rows[i] = new FileRow(tor, i);
-            fragment.appendChild(row.getElement());
-                    $(row).bind('wantedToggled',onFileWantedToggled);
-                    $(row).bind('priorityToggled',onFilePriorityToggled);
+        n = tor ? tor.getFileCount() : 0;
+        if (tor!=data.file_torrent || n!=data.file_torrent_n) {
+            // rebuild the file list...
+            clearFileList();
+            data.file_torrent = tor;
+            data.file_torrent_n = n;
+            data.file_rows = [ ];
+            fragment = document.createDocumentFragment();
+            tree = createFileTreeModel (tor);
+            addSubtreeToView (tor, fragment, tree, 0);
+            file_list.appendChild (fragment);
+        } else {
+            // ...refresh the already-existing file list
+            for (i=0, n=data.file_rows.length; i<n; ++i)
+                data.file_rows[i].refresh();
         }
-
-        file_list.appendChild(fragment);
     },
 
     /****
@@ -526,7 +587,7 @@ function Inspector(controller) {
             peers = tor.getPeers();
             html.push('<div class="inspector_group">');
             if (torrents.length > 1) {
-                html.push('<div class="inspector_torrent_label">', tor.getName(), '</div>');
+                html.push('<div class="inspector_torrent_label">', sanitizeText(tor.getName()), '</div>');
             }
             if (!peers || !peers.length) {
                 html.push('<br></div>'); // firefox won't paint the top border if the div is empty
@@ -551,8 +612,8 @@ function Inspector(controller) {
                        '<td>', (peer.rateToClient ? fmt.speedBps(peer.rateToClient) : ''), '</td>',
                        '<td class="percentCol">', Math.floor(peer.progress*100), '%', '</td>',
                        '<td>', fmt.peerStatus(peer.flagStr), '</td>',
-                       '<td>', peer.address, '</td>',
-                       '<td class="clientCol">', peer.clientName, '</td>',
+                       '<td>', sanitizeText(peer.address), '</td>',
+                       '<td class="clientCol">', sanitizeText(peer.clientName), '</td>',
                        '</tr>');
             }
             html.push('</table></div>');
@@ -601,7 +662,7 @@ function Inspector(controller) {
         if (tracker.hasAnnounced) {
             lastAnnounceTime = Transmission.fmt.timestamp(tracker.lastAnnounceTime);
             if (tracker.lastAnnounceSucceeded) {
-                lastAnnounce = [ lastAnnounceTime, ' (got ',  Transmission.fmt.plural(tracker.lastAnnouncePeerCount, 'peer'), ')' ];
+                lastAnnounce = [ lastAnnounceTime, ' (got ',  Transmission.fmt.countString('peer','peers',tracker.lastAnnouncePeerCount), ')' ];
             } else {
                 lastAnnounceLabel = 'Announce error';
                 lastAnnounce = [ (tracker.lastAnnounceResult ? (tracker.lastAnnounceResult + ' - ') : ''), lastAnnounceTime ];
@@ -658,7 +719,7 @@ function Inspector(controller) {
                     tier = tracker.tier;
 
                     html.push('<div class="inspector_group_label">',
-                          'Tier ', tier, '</div>',
+                          'Tier ', tier+1, '</div>',
                           '<ul class="tier_list">');
                 }
 
@@ -667,8 +728,8 @@ function Inspector(controller) {
                 announceState = getAnnounceState(tracker);
                 lastScrapeStatusHash = lastScrapeStatus(tracker);
                 parity = (j%2) ? 'odd' : 'even';
-                html.push('<li class="inspector_tracker_entry ', parity, '"><div class="tracker_host" title="', tracker.announce, '">',
-                      tracker.host, '</div>',
+                html.push('<li class="inspector_tracker_entry ', parity, '"><div class="tracker_host" title="', sanitizeText(tracker.announce), '">',
+                      sanitizeText(tracker.host || tracker.announce), '</div>',
                       '<div class="tracker_activity">',
                       '<div>', lastAnnounceStatusHash['label'], ': ', lastAnnounceStatusHash['value'], '</div>',
                       '<div>', announceState, '</div>',
@@ -685,7 +746,7 @@ function Inspector(controller) {
             html.push('</div>'); // inspector_group
         }
 
-        setInnerHTML(trackers_list, html.join(''));
+        setInnerHTML (trackers_list, html.join(''));
     },
 
     initialize = function (controller) {
@@ -705,26 +766,22 @@ function Inspector(controller) {
         data.elements.peers_list     = $('#inspector_peers_list')[0];
         data.elements.trackers_list  = $('#inspector_trackers_list')[0];
 
-	data.elements.have_lb           = $('#inspector-info-have')[0];
-	data.elements.availability_lb   = $('#inspector-info-availability')[0];
-	data.elements.downloaded_lb     = $('#inspector-info-downloaded')[0];
-	data.elements.uploaded_lb       = $('#inspector-info-uploaded')[0];
-	data.elements.state_lb          = $('#inspector-info-state')[0];
-	data.elements.running_time_lb   = $('#inspector-info-running-time')[0];
-	data.elements.remaining_time_lb = $('#inspector-info-remaining-time')[0];
-	data.elements.last_activity_lb  = $('#inspector-info-last-activity')[0];
-	data.elements.error_lb          = $('#inspector-info-error')[0];
-	data.elements.size_lb           = $('#inspector-info-size')[0];
-	data.elements.foldername_lb     = $('#inspector-info-location')[0];
-	data.elements.hash_lb           = $('#inspector-info-hash')[0];
-	data.elements.privacy_lb        = $('#inspector-info-privacy')[0];
-	data.elements.origin_lb         = $('#inspector-info-origin')[0];
-	data.elements.comment_lb        = $('#inspector-info-comment')[0];
+        data.elements.have_lb           = $('#inspector-info-have')[0];
+        data.elements.availability_lb   = $('#inspector-info-availability')[0];
+        data.elements.downloaded_lb     = $('#inspector-info-downloaded')[0];
+        data.elements.uploaded_lb       = $('#inspector-info-uploaded')[0];
+        data.elements.state_lb          = $('#inspector-info-state')[0];
+        data.elements.running_time_lb   = $('#inspector-info-running-time')[0];
+        data.elements.remaining_time_lb = $('#inspector-info-remaining-time')[0];
+        data.elements.last_activity_lb  = $('#inspector-info-last-activity')[0];
+        data.elements.error_lb          = $('#inspector-info-error')[0];
+        data.elements.size_lb           = $('#inspector-info-size')[0];
+        data.elements.foldername_lb     = $('#inspector-info-location')[0];
+        data.elements.hash_lb           = $('#inspector-info-hash')[0];
+        data.elements.privacy_lb        = $('#inspector-info-privacy')[0];
+        data.elements.origin_lb         = $('#inspector-info-origin')[0];
+        data.elements.comment_lb        = $('#inspector-info-comment')[0];
         data.elements.name_lb           = $('#torrent_inspector_name')[0];
-
-        // file page's buttons
-        $('#select-all-files').click(selectAllFiles);
-        $('#deselect-all-files').click(deselectAllFiles);
 
         // force initial 'N/A' updates on all the pages
         updateInspector();

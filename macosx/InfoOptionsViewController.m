@@ -62,6 +62,73 @@
     
     [[NSNotificationCenter defaultCenter] addObserver: self selector: @selector(setGlobalLabels) name: @"UpdateGlobalOptions" object: nil];
     [[NSNotificationCenter defaultCenter] addObserver: self selector: @selector(updateOptionsNotification:) name: @"UpdateOptionsNotification" object: nil];
+    
+    #warning remove when 10.7-only with auto layout
+    const CGFloat padding = 6.0; //this shows as 8 in IB
+    [fPrioritySectionLabel sizeToFit];
+    [fPriorityLabel sizeToFit];
+    NSRect priorityPopUpFrame = [fPriorityPopUp frame];
+    priorityPopUpFrame.origin.x = NSMaxX([fPriorityLabel frame]) + padding;
+    [fPriorityPopUp setFrame: priorityPopUpFrame];
+    
+    [fTransferBandwidthSectionLabel sizeToFit];
+    [fDownloadLimitCheck sizeToFit];
+    [fUploadLimitCheck sizeToFit];
+    NSRect downloadLimitFieldFrame = [fDownloadLimitField frame];
+    NSRect uploadLimitFieldFrame = [fUploadLimitField frame];
+    const CGFloat speedLimitFieldX = MAX(NSMaxX([fDownloadLimitCheck frame]), NSMaxX([fUploadLimitCheck frame])) + padding;
+    downloadLimitFieldFrame.origin.x = speedLimitFieldX;
+    uploadLimitFieldFrame.origin.x = speedLimitFieldX;
+    [fDownloadLimitField setFrame: downloadLimitFieldFrame];
+    [fUploadLimitField setFrame: uploadLimitFieldFrame];
+    [fDownloadLimitLabel sizeToFit];
+    [fUploadLimitLabel sizeToFit];
+    NSRect downloadLimitLabelFrame = [fDownloadLimitLabel frame];
+    NSRect uploadLimitLabelFrame = [fUploadLimitLabel frame];
+    downloadLimitLabelFrame.origin.x = NSMaxX([fDownloadLimitField frame]) + padding;
+    uploadLimitLabelFrame.origin.x = NSMaxX([fUploadLimitField frame]) + padding;
+    [fDownloadLimitLabel setFrame: downloadLimitLabelFrame];
+    [fUploadLimitLabel setFrame: uploadLimitLabelFrame];
+    [fGlobalLimitCheck sizeToFit];
+    
+    [fSeedingLimitsSectionLabel sizeToFit];
+    [fRatioLabel sizeToFit];
+    [fInactivityLabel sizeToFit];
+    NSRect ratioPopUpFrame = [fRatioPopUp frame];
+    NSRect idlePopUpFrame = [fIdlePopUp frame];
+    const CGFloat seedingLimitPopUpX = MAX(NSMaxX([fRatioLabel frame]), NSMaxX([fInactivityLabel frame])) + padding;
+    ratioPopUpFrame.origin.x = seedingLimitPopUpX;
+    idlePopUpFrame.origin.x = seedingLimitPopUpX;
+    [fRatioPopUp setFrame: ratioPopUpFrame];
+    [fIdlePopUp setFrame: idlePopUpFrame];
+    NSRect ratioLimitFieldFrame = [fRatioLimitField frame];
+    NSRect idleLimitFieldFrame = [fIdleLimitField frame];
+    const CGFloat seedingLimitFieldX = NSMaxX(ratioPopUpFrame) + padding;
+    ratioLimitFieldFrame.origin.x = seedingLimitFieldX + 2.0;
+    idleLimitFieldFrame.origin.x = seedingLimitFieldX + 2.0;
+    [fRatioLimitField setFrame: ratioLimitFieldFrame];
+    [fIdleLimitField setFrame: idleLimitFieldFrame];
+    [fIdleLimitLabel sizeToFit];
+    NSRect idleLimitLabelFrame = [fIdleLimitLabel frame];
+    idleLimitLabelFrame.origin.x = NSMaxX(idleLimitFieldFrame) + padding;
+    [fIdleLimitLabel setFrame: idleLimitLabelFrame];
+    NSRect ratioLimitGlobalLabelFrame = [fRatioLimitGlobalLabel frame];
+    NSRect idleLimitGlobalLabelFrame = [fIdleLimitGlobalLabel frame];
+    ratioLimitGlobalLabelFrame.origin.x = seedingLimitFieldX;
+    idleLimitGlobalLabelFrame.origin.x = seedingLimitFieldX;
+    [fRatioLimitGlobalLabel setFrame: ratioLimitGlobalLabelFrame];
+    [fIdleLimitGlobalLabel setFrame: idleLimitGlobalLabelFrame];
+    [fRemoveSeedingCompleteCheck sizeToFit];
+    
+    [fAdvancedSectionLabel sizeToFit];
+    [fMaxConnectionsLabel sizeToFit];
+    NSRect peersConnectFrame = [fPeersConnectField frame];
+    peersConnectFrame.origin.x = NSMaxX([fMaxConnectionsLabel frame]) + padding;
+    [fPeersConnectField setFrame: peersConnectFrame];
+    [fPeersConnectLabel sizeToFit];
+    NSRect peersConnectLabelFrame = [fPeersConnectLabel frame];
+    peersConnectLabelFrame.origin.x = NSMaxX(peersConnectFrame) + padding;
+    [fPeersConnectLabel setFrame: peersConnectLabelFrame];
 }
 
 - (void) dealloc
@@ -156,7 +223,8 @@
     enumerator = [fTorrents objectEnumerator];
     torrent = [enumerator nextObject]; //first torrent
     
-    NSInteger checkRatio = [torrent ratioSetting], checkIdle = [torrent idleSetting];
+    NSInteger checkRatio = [torrent ratioSetting], checkIdle = [torrent idleSetting],
+            removeWhenFinishSeeding = [torrent removeWhenFinishSeeding] ? NSOnState : NSOffState;
     CGFloat ratioLimit = [torrent ratioLimit];
     NSUInteger idleLimit = [torrent idleLimitMinutes];
     
@@ -174,6 +242,9 @@
         
         if (idleLimit != INVALID && idleLimit != [torrent idleLimitMinutes])
             idleLimit = INVALID;
+        
+        if (removeWhenFinishSeeding != NSMixedState && removeWhenFinishSeeding != ([torrent removeWhenFinishSeeding] ? NSOnState : NSOffState))
+            removeWhenFinishSeeding = NSMixedState;
     }
     
     //set ratio view
@@ -217,6 +288,10 @@
     [fIdleLimitLabel setHidden: checkIdle != TR_IDLELIMIT_SINGLE];
     
     [fIdleLimitGlobalLabel setHidden: checkIdle != TR_IDLELIMIT_GLOBAL];
+    
+    //set remove transfer when seeding finishes
+    [fRemoveSeedingCompleteCheck setState: removeWhenFinishSeeding];
+    [fRemoveSeedingCompleteCheck setEnabled: YES];
     
     //get priority info
     enumerator = [fTorrents objectEnumerator];
@@ -331,7 +406,7 @@
             setting = TR_RATIOLIMIT_GLOBAL;
             break;
         default:
-            NSAssert1(NO, @"Unknown option selected in ratio popup: %d", [sender indexOfSelectedItem]);
+            NSAssert1(NO, @"Unknown option selected in ratio popup: %ld", [sender indexOfSelectedItem]);
             return;
     }
     
@@ -377,7 +452,7 @@
             setting = TR_IDLELIMIT_GLOBAL;
             break;
         default:
-            NSAssert1(NO, @"Unknown option selected in idle popup: %d", [sender indexOfSelectedItem]);
+            NSAssert1(NO, @"Unknown option selected in idle popup: %ld", [sender indexOfSelectedItem]);
             return;
     }
     
@@ -407,6 +482,18 @@
     [[NSNotificationCenter defaultCenter] postNotificationName: @"UpdateOptionsNotification" object: self];
 }
 
+- (IBAction) setRemoveWhenSeedingCompletes: (id) sender
+{
+    if ([(NSButton *)sender state] == NSMixedState)
+        [sender setState: NSOnState];
+    const BOOL enable = [(NSButton *)sender state] == NSOnState;
+    
+    for (Torrent * torrent in fTorrents)
+        [torrent setRemoveWhenFinishSeeding: enable];
+    
+    [[NSNotificationCenter defaultCenter] postNotificationName: @"UpdateOptionsNotification" object: self];
+}
+
 - (void) setPriority: (id) sender
 {
     tr_priority_t priority;
@@ -422,7 +509,7 @@
             priority = TR_PRI_LOW;
             break;
         default:
-            NSAssert1(NO, @"Unknown option selected in priority popup: %d", [sender indexOfSelectedItem]);
+            NSAssert1(NO, @"Unknown option selected in priority popup: %ld", [sender indexOfSelectedItem]);
             return;
     }
     
@@ -503,6 +590,9 @@
         [fIdleLimitLabel setHidden: YES];
         [fIdleLimitGlobalLabel setHidden: YES];
         
+        [fRemoveSeedingCompleteCheck setEnabled: NO];
+        [fRemoveSeedingCompleteCheck setState: NSOffState];
+        
         [fPeersConnectField setEnabled: NO];
         [fPeersConnectField setStringValue: @""];
         [fPeersConnectLabel setEnabled: NO];
@@ -524,7 +614,7 @@
     {
         const NSInteger globalMin = [[NSUserDefaults standardUserDefaults] integerForKey: @"IdleLimitMinutes"];
         globalIdle = globalMin == 1 ? NSLocalizedString(@"1 minute", "Info options -> global setting")
-            : [NSString stringWithFormat: NSLocalizedString(@"%d minutes", "Info options -> global setting"), globalMin];
+            : [NSString localizedStringWithFormat: NSLocalizedString(@"%d minutes", "Info options -> global setting"), globalMin];
     }
     else
         globalIdle = NSLocalizedString(@"disabled", "Info options -> global setting");

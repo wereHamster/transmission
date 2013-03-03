@@ -1,6 +1,6 @@
 noinst_LIBRARIES = libminiupnp.a
 
-AM_CFLAGS = @PTHREAD_CFLAGS@ -DNDEBUG
+AM_CFLAGS = @PTHREAD_CFLAGS@ -DNDEBUG -D_GNU_SOURCE
 
 libminiupnp_a_SOURCES = \
     connecthostport.c \
@@ -42,6 +42,6 @@ BUILT_SOURCES = \
     miniupnpcstrings.h
 
 miniupnpcstrings.h: Makefile
-	$(srcdir)/updateminiupnpcstrings.sh $(srcdir)/miniupnpcstrings.h.in $@
+	$(srcdir)/updateminiupnpcstrings.sh $(srcdir)/VERSION $(srcdir)/miniupnpcstrings.h.in $@
 
 DISTCLEANFILES = $(builddir)/miniupnpcstrings.h

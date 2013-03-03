@@ -25,9 +25,6 @@
 #import "PeerProgressIndicatorCell.h"
 #import "NSStringAdditions.h"
 
-#import "transmission.h" // required by utils.h
-#import "utils.h"
-
 @implementation PeerProgressIndicatorCell
 
 - (id) copyWithZone: (NSZone *) zone
@@ -77,7 +74,7 @@
         [super drawWithFrame: cellFrame inView: controlView];
         if (fSeed)
         {
-            NSImage * checkImage = [NSImage imageNamed: @"CompleteCheck.png"];
+            NSImage * checkImage = [NSImage imageNamed: @"CompleteCheck"];
             
             const NSSize imageSize = [checkImage size];
             const NSRect rect = NSMakeRect(floor(NSMidX(cellFrame) - imageSize.width * 0.5),

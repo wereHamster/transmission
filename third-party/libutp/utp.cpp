@@ -92,7 +92,11 @@ char addrbuf[65];
 char addrbuf2[65];
 #define addrfmt(x, s) x.fmt(s, sizeof(s))
 
+#if (defined(__SVR4) && defined(__sun))
+#pragma pack(1)
+#else
 #pragma pack(push,1)
+#endif
 
 struct PACKED_ATTRIBUTE PackedSockAddr {
 
@@ -190,7 +194,7 @@ struct PACKED_ATTRIBUTE PackedSockAddr {
 		snprintf(i, len - (i-s), ":%u", _port);
 		return s;
 	}
-};
+} ALIGNED_ATTRIBUTE(4);
 
 struct PACKED_ATTRIBUTE RST_Info {
 	PackedSockAddr addr;
@@ -280,7 +284,11 @@ struct PACKED_ATTRIBUTE PacketFormatExtensionsV1 {
 	byte extensions[8];
 };
 
+#if (defined(__SVR4) && defined(__sun))
+#pragma pack(0)
+#else
 #pragma pack(pop)
+#endif
 
 enum {
 	ST_DATA = 0,		// Data packet.
@@ -1479,6 +1487,8 @@ size_t UTPSocket::selective_ack_bytes(uint base, const byte* mask, byte len, int
 	return acked_bytes;
 }
 
+enum { MAX_EACK = 128 };
+
 void UTPSocket::selective_ack(uint base, const byte *mask, byte len)
 {
 	if (cur_window_packets == 0) return;
@@ -1491,7 +1501,7 @@ void UTPSocket::selective_ack(uint base, const byte *mask, byte len)
 	// resends is a stack of sequence numbers we need to resend. Since we
 	// iterate in reverse over the acked packets, at the end, the top packets
 	// are the ones we want to resend
-	int resends[32];
+	int resends[MAX_EACK];
 	int nr = 0;
 
 	LOG_UTPV("0x%08x: Got EACK [%032b] base:%u", this, *(uint32*)mask, base);
@@ -1564,6 +1574,12 @@ void UTPSocket::selective_ack(uint base, const byte *mask, byte len)
 		if (((v - fast_resend_seq_nr) & ACK_NR_MASK) <= OUTGOING_BUFFER_MAX_SIZE &&
 			count >= DUPLICATE_ACKS_BEFORE_RESEND &&
 			duplicate_ack < DUPLICATE_ACKS_BEFORE_RESEND) {
+			// resends is a stack, and we're mostly interested in the top of it
+			// if we're full, just throw away the lower half
+			if (nr >= MAX_EACK - 2) {
+				memmove(resends, &resends[MAX_EACK/2], MAX_EACK/2 * sizeof(resends[0]));
+				nr -= MAX_EACK / 2;
+			}
 			resends[nr++] = v;
 			LOG_UTPV("0x%08x: no ack for %u", this, v);
 		} else {
@@ -1572,13 +1588,12 @@ void UTPSocket::selective_ack(uint base, const byte *mask, byte len)
 		}
 	} while (--bits >= -1);
 
-	if (((base - 1 - fast_resend_seq_nr) & ACK_NR_MASK) < 256 &&
-		count >= DUPLICATE_ACKS_BEFORE_RESEND &&
-		duplicate_ack < DUPLICATE_ACKS_BEFORE_RESEND) {
+	if (((base - 1 - fast_resend_seq_nr) & ACK_NR_MASK) <= OUTGOING_BUFFER_MAX_SIZE &&
+		count >= DUPLICATE_ACKS_BEFORE_RESEND) {
 		// if we get enough duplicate acks to start
 		// resending, the first packet we should resend
 		// is base-1
-		resends[nr++] = base - 1;
+		resends[nr++] = (base - 1) & ACK_NR_MASK;
 	} else {
 		LOG_UTPV("0x%08x: not resending %u count:%d dup_ack:%u fast_resend_seq_nr:%u",
 				 this, base - 1, count, duplicate_ack, fast_resend_seq_nr);
