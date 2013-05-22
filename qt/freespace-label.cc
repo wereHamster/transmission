@@ -19,7 +19,7 @@
 
 namespace
 {
-  static const int INTERVAL_MSEC = 5000;
+  static const int INTERVAL_MSEC = 15000;
 }
 
 FreespaceLabel :: FreespaceLabel (Session        & session,
@@ -81,11 +81,10 @@ FreespaceLabel :: onSessionExecuted (int64_t tag, const QString& result, struct 
   // update the label
   int64_t bytes = -1;
   tr_variantDictFindInt (arguments, TR_KEY_size_bytes, &bytes);
-  if (bytes < 0)
-    str = tr("<i>Error: %1</i>").arg(result);
+  if (bytes >= 0)
+    setText (tr("%1 free").arg(Formatter::sizeToString (bytes)));
   else
-    str = tr("%1 free").arg(Formatter::sizeToString (bytes));
-  setText (str);
+    setText ("");
 
   // update the tooltip
   size_t len = 0;
