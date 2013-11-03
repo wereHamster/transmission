@@ -933,7 +933,7 @@ on_torrent_completeness_changed_idle (gpointer gdata)
   gtr_notify_torrent_completed (data->core, data->torrent_id);
   g_object_unref (G_OBJECT (data->core));
   g_free (data);
-  return FALSE;
+  return G_SOURCE_REMOVE;
 }
 
 /* this is called in the libtransmission thread, *NOT* the GTK+ thread,
@@ -1019,7 +1019,7 @@ on_torrent_metadata_changed_idle (gpointer gdata)
   /* cleanup */
   g_object_unref (G_OBJECT (data->core));
   g_free (data);
-  return FALSE;
+  return G_SOURCE_REMOVE;
 }
 
 /* this is called in the libtransmission thread, *NOT* the GTK+ thread,
@@ -1102,7 +1102,6 @@ gtr_core_add_torrent (TrCore * core, tr_torrent * tor, gboolean do_notify)
 static tr_torrent *
 core_create_new_torrent (TrCore * core, tr_ctor * ctor)
 {
-  int errcode = 0;
   tr_torrent * tor;
   bool do_trash = false;
   tr_session * session = gtr_core_session (core);
@@ -1111,7 +1110,7 @@ core_create_new_torrent (TrCore * core, tr_ctor * ctor)
    * doesn't have any concept of the glib trash API */
   tr_ctorGetDeleteSource (ctor, &do_trash);
   tr_ctorSetDeleteSource (ctor, FALSE);
-  tor = tr_torrentNew (ctor, &errcode);
+  tor = tr_torrentNew (ctor, NULL, NULL);
 
   if (tor && do_trash)
     {
@@ -1127,7 +1126,7 @@ core_create_new_torrent (TrCore * core, tr_ctor * ctor)
         }
     }
 
-    return tor;
+  return tor;
 }
 
 static int
@@ -1747,7 +1746,7 @@ core_read_rpc_response_idle (void * vresponse)
 
   tr_variantFree (&top);
   evbuffer_free (response);
-  return FALSE;
+  return G_SOURCE_REMOVE;
 }
 
 static void

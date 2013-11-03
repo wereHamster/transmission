@@ -41,7 +41,7 @@ tr_peerMsgs* tr_peerMsgsCast                 (void                     * msgs);
 
 tr_peerMsgs* tr_peerMsgsNew                  (struct tr_torrent        * torrent,
                                               struct tr_peerIo         * io,
-                                              tr_peer_callback         * callback,
+                                              tr_peer_callback           callback,
                                               void                     * callback_data);
 
 bool         tr_peerMsgsIsPeerChoked         (const tr_peerMsgs        * msgs);
@@ -51,6 +51,12 @@ bool         tr_peerMsgsIsPeerInterested     (const tr_peerMsgs        * msgs);
 bool         tr_peerMsgsIsClientChoked       (const tr_peerMsgs        * msgs);
 
 bool         tr_peerMsgsIsClientInterested   (const tr_peerMsgs        * msgs);
+
+bool         tr_peerMsgsIsActive             (const tr_peerMsgs        * msgs,
+                                              tr_direction               direction);
+
+void         tr_peerMsgsUpdateActive         (tr_peerMsgs              * msgs,
+                                              tr_direction               direction);
 
 time_t       tr_peerMsgsGetConnectionAge     (const tr_peerMsgs        * msgs);
 

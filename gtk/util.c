@@ -12,6 +12,7 @@
 
 #include <ctype.h> /* isxdigit () */
 #include <errno.h>
+#include <limits.h> /* INT_MAX */
 #include <stdarg.h>
 #include <string.h> /* strchr (), strrchr (), strlen (), strstr () */
 
@@ -217,21 +218,21 @@ getWindow (GtkWidget * w)
 }
 
 void
-gtr_add_torrent_error_dialog (GtkWidget * child, int err, const char * file)
+gtr_add_torrent_error_dialog (GtkWidget   * child,
+                              int           err,
+                              tr_torrent  * duplicate_torrent,
+                              const char  * filename)
 {
   char * secondary;
-  const char * fmt;
   GtkWidget * w;
   GtkWindow * win = getWindow (child);
 
-  switch (err)
-    {
-      case TR_PARSE_ERR: fmt = _("The torrent file \"%s\" contains invalid data."); break;
-      case TR_PARSE_DUPLICATE: fmt = _("The torrent file \"%s\" is already in use."); break;
-      default: fmt = _("The torrent file \"%s\" encountered an unknown error."); break;
-    }
-
-  secondary = g_strdup_printf (fmt, file);
+  if (err == TR_PARSE_ERR)
+    secondary = g_strdup_printf (_("The torrent file \"%s\" contains invalid data."), filename);
+  else if (err == TR_PARSE_DUPLICATE)
+    secondary = g_strdup_printf (_("The torrent file \"%s\" is already in use by \"%s.\""), filename, tr_torrentName (duplicate_torrent));
+  else
+    secondary = g_strdup_printf (_("The torrent file \"%s\" encountered an unknown error."), filename);
 
   w = gtk_message_dialog_new (win,
                               GTK_DIALOG_DESTROY_WITH_PARENT,
@@ -361,21 +362,11 @@ gtr_get_help_uri (void)
 void
 gtr_open_file (const char * path)
 {
-  char * uri;
-
-  if (g_path_is_absolute (path))
-    {
-      uri = g_strdup_printf ("file://%s", path);
-    }
-  else
-    {
-      char * cwd = g_get_current_dir ();
-      uri = g_strdup_printf ("file://%s/%s", cwd, path);
-      g_free (cwd);
-    }
-
+  GFile * file = g_file_new_for_path (path);
+  gchar * uri = g_file_get_uri (file);
   gtr_open_uri (uri);
   g_free (uri);
+  g_object_unref (file);
 }
 
 void
@@ -664,16 +655,7 @@ freespace_label_data_free (gpointer gdata)
   g_free (data);
 }
 
-static GQuark
-freespace_label_data_quark (void)
-{
-  static GQuark q = 0;
-
-  if (G_UNLIKELY(!q))
-    q = g_quark_from_static_string ("data");
-
-  return q;
-}
+static TR_DEFINE_QUARK (freespace_label_data, freespace_label_data)
 
 static void
 on_freespace_label_core_destroyed (gpointer gdata, GObject * dead_core G_GNUC_UNUSED)

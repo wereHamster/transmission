@@ -10,6 +10,12 @@
  * $Id$
  */
 
+#include <QAbstractItemView>
+#include <QPushButton>
+#include <QLabel>
+#include <QHBoxLayout>
+#include <QLineEdit>
+#include <QStylePainter>
 #include <QString>
 #include <QtGui>
 
@@ -584,7 +590,7 @@ FilterBar :: recount ()
 {
   QAbstractItemModel * model = myActivityCombo->model ();
 
-  int torrentsPerMode[FilterMode::NUM_MODES] = { };
+  int torrentsPerMode[FilterMode::NUM_MODES] = {};
   myFilter.countTorrentsPerMode (torrentsPerMode);
 
   for (int row=0, n=model->rowCount (); row<n; ++row)

@@ -10,6 +10,8 @@
  * $Id$
  */
 
+#include <algorithm> // std::min()
+
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
@@ -54,7 +56,7 @@ FileAdded :: executed (int64_t tag, const QString& result, struct tr_variant * a
   if (tag != myTag)
     return;
 
-  if ( (result == "success") && !myDelFile.isEmpty ())
+  if ((result == "success") && !myDelFile.isEmpty ())
     {
       QFile file (myDelFile);
       file.setPermissions (QFile::ReadOwner | QFile::WriteOwner);
@@ -124,7 +126,7 @@ Options :: Options (Session& session, const Prefs& prefs, const AddData& addme, 
     {
       p = mySourceButton =  new QPushButton;
       p->setIcon (filePixmap);
-      p->setStyleSheet (QString::fromAscii ("text-align: left; padding-left: 5; padding-right: 5"));
+      p->setStyleSheet (QString::fromUtf8 ("text-align: left; padding-left: 5; padding-right: 5"));
       p->installEventFilter (this);
       w = p;
       connect (p, SIGNAL (clicked (bool)), this, SLOT (onFilenameClicked ()));
@@ -139,7 +141,7 @@ Options :: Options (Session& session, const Prefs& prefs, const AddData& addme, 
       connect (e, SIGNAL(editingFinished()), this, SLOT(onSourceEditingFinished()));
     }
 
-  const int width = fontMetrics.size (0, QString::fromAscii ("This is a pretty long torrent filename indeed.torrent")).width ();
+  const int width = fontMetrics.size (0, QString::fromUtf8 ("This is a pretty long torrent filename indeed.torrent")).width ();
   w->setMinimumWidth (width);
   layout->addWidget (w, row, 1);
   l->setBuddy (w);
@@ -315,7 +317,7 @@ Options :: reload ()
         break;
 
       case AddData::METAINFO:
-        tr_ctorSetMetainfo (ctor, (const uint8_t*)myAdd.metainfo.constData (), myAdd.metainfo.size ());
+        tr_ctorSetMetainfo (ctor, (const quint8*)myAdd.metainfo.constData (), myAdd.metainfo.size ());
         break;
 
       default:
@@ -512,7 +514,7 @@ Options :: onDestinationsSelected (const QStringList& destinations)
 {
   if (destinations.size () == 1)
     {
-      const QString& destination (destinations.first ());
+      QString destination = Utils::removeTrailingDirSeparator (destinations.first ());
       myFreespaceLabel->setPath (destination);
       myLocalDestination.setPath (destination);
       refreshDestinationButton ();

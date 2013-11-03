@@ -354,6 +354,7 @@ enum
   TR_KEY_torrent_complete_notification_enabled,
   TR_KEY_torrent_complete_sound_command,
   TR_KEY_torrent_complete_sound_enabled,
+  TR_KEY_torrent_duplicate,
   TR_KEY_torrent_get,
   TR_KEY_torrent_set,
   TR_KEY_torrent_set_location,
@@ -413,7 +414,7 @@ bool tr_quark_lookup (const void * str, size_t len, tr_quark * setme);
 /**
  * Get the string that corresponds to the specified quark
  */
-const char * tr_quark_get_string (const tr_quark quark, size_t * len);
+const char * tr_quark_get_string (tr_quark quark, size_t * len);
 
 /**
  * Create a new quark for the specified string. If a quark already

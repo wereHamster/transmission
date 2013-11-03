@@ -13,7 +13,6 @@
 #include <assert.h>
 #include <errno.h>
 #include <string.h> /* memcpy */
-#include <limits.h> /* INT_MAX */
 
 #include <unistd.h>    /* close */
 
@@ -388,7 +387,7 @@ add_response (struct evhttp_request * req,
           iovec[0].iov_len -= server->stream.avail_out;
 
 #if 0
-          fprintf (stderr, "compressed response is %.2f of original (raw==%zu bytes; compressed==%zu)\n",
+          fprintf (stderr, "compressed response is %.2f of original (raw==%"TR_PRIuSIZE" bytes; compressed==%"TR_PRIuSIZE")\n",
                    (double)evbuffer_get_length (out)/content_len,
                    content_len, evbuffer_get_length (out));
 #endif
@@ -844,7 +843,9 @@ void
 tr_rpcSetWhitelistEnabled (tr_rpc_server  * server,
                            bool             isEnabled)
 {
-  server->isWhitelistEnabled = isEnabled != 0;
+  assert (tr_isBool (isEnabled));
+
+  server->isWhitelistEnabled = isEnabled;
 }
 
 bool

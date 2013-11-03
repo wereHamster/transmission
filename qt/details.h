@@ -55,6 +55,7 @@ class Details: public QDialog
     Details (Session&, Prefs&, TorrentModel&, QWidget * parent = 0);
     ~Details ();
     void setIds (const QSet<int>& ids);
+    virtual QSize sizeHint () const { return QSize (440, 460); }
 
   private:
     QWidget * createPeersTab ();
@@ -141,6 +142,7 @@ class Details: public QDialog
     void onFilePriorityChanged (const QSet<int>& fileIndices, int);
     void onFileWantedChanged (const QSet<int>& fileIndices, bool);
     void onPathEdited (const QString& oldpath, const QString& newname);
+    void onOpenRequested (const QString& path);
     void onHonorsSessionLimitsToggled (bool);
     void onDownloadLimitedToggled (bool);
     void onSpinBoxEditingFinished ();

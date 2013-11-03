@@ -3,8 +3,8 @@ dnl STATUS: "X" for prerelease beta builds,
 dnl         "Z" for unsupported trunk builds,
 dnl         "0" for stable, supported releases
 dnl these should be the only two lines you need to change
-m4_define([user_agent_prefix],[2.77+])
-m4_define([peer_id_prefix],[-WH277Z-])
+m4_define([user_agent_prefix],[2.82+])
+m4_define([peer_id_prefix],[-WH282Z-])
 
 AC_INIT([transmission],[user_agent_prefix],[http://trac.transmissionbt.com/newticket])
 AC_SUBST(USERAGENT_PREFIX,[user_agent_prefix])
@@ -178,6 +178,25 @@ AC_CHECK_HEADERS([sys/statvfs.h \
 
 dnl ----------------------------------------------------------------------------
 dnl
+dnl file monitoring for the daemon
+
+# Check whether to enable systemd startup notification.
+# This requires libsystemd-daemon.
+AC_ARG_WITH([systemd-daemon], AS_HELP_STRING([--with-systemd-daemon],
+            [Add support for systemd startup notification (default is autodetected)])
+            [USE_SYSTEMD_DAEMON=$withval], [USE_SYSTEMD_DAEMON=auto])
+AS_IF([test "x$USE_SYSTEMD_DAEMON" != "xno"], [
+    PKG_CHECK_MODULES([SYSTEMD_DAEMON], [libsystemd-daemon],
+        [AC_DEFINE(USE_SYSTEMD_DAEMON,1,[Use systemd startup notification])],
+        [AS_IF([test "x$USE_SYSTEMD_DAEMON" = "xyes"],
+            [AC_MSG_ERROR([systemd startup notification support requested, but libsystemd-daemon not found.])]
+        )]
+    )
+])
+
+
+dnl ----------------------------------------------------------------------------
+dnl
 dnl  dht
 
 DHT_CFLAGS="-I\$(top_srcdir)/third-party/dht"
@@ -250,7 +269,7 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
     char intPort[8];
     char intClient[16];
     upnpDiscover( 2000, NULL, NULL, 0 );
-    UPNP_GetValidIGD( devlist, &urls, &data, lanaddr, sizeof( lanaddr ) ); 
+    UPNP_GetValidIGD( devlist, &urls, &data, lanaddr, sizeof( lanaddr ) );
     UPNP_GetSpecificPortMappingEntry( urls.controlURL, data.first.servicetype,
                         portStr, "TCP", intClient, intPort );
 ]])],[
@@ -272,7 +291,7 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
     char intPort[8];
     char intClient[16];
     upnpDiscover( 2000, NULL, NULL, 0, 0, &errno );
-    UPNP_GetValidIGD( devlist, &urls, &data, lanaddr, sizeof( lanaddr ) ); 
+    UPNP_GetValidIGD( devlist, &urls, &data, lanaddr, sizeof( lanaddr ) );
     UPNP_GetSpecificPortMappingEntry( urls.controlURL, data.first.servicetype,
                         portStr, "TCP", intClient, intPort, NULL, NULL, NULL );
 ]])],[
@@ -291,7 +310,7 @@ if test "x$upnp_version" = "xnone" ; then
     AC_DEFINE(HAVE_MINIUPNP_16, 1, [Define to 1 if you have miniupnpc version 1.6])
 else
     AC_DEFINE([SYSTEM_MINIUPNP])
-    LIBUPNP_CFLAGS="" 
+    LIBUPNP_CFLAGS=""
     LIBUPNP_LIBS="-lminiupnpc"
     LIBUPNP_LIBS_QT="-lminiupnpc"
 fi
@@ -300,31 +319,31 @@ AC_SUBST(LIBUPNP_LIBS)
 AC_SUBST(LIBUPNP_LIBS_QT)
 
 
- 
+
 
 dnl ----------------------------------------------------------------------------
 dnl
-dnl  Allow usage of system natpmp library 
+dnl  Allow usage of system natpmp library
 
-LIBNATPMP_CFLAGS="-I\$(top_srcdir)/third-party/libnatpmp/" 
-LIBNATPMP_LIBS="\$(top_builddir)/third-party/libnatpmp/libnatpmp.a" 
-LIBNATPMP_LIBS_QT="\$\${TRANSMISSION_TOP}/third-party/libnatpmp/libnatpmp.a" 
-build_bundled_natpmp="yes" 
-AC_ARG_ENABLE([external-natpmp], 
-              AS_HELP_STRING([--enable-external-natpmp],[Use system external-natpmp]), 
-              [want_external_natpmp=${enableval}], 
-              [want_external_natpmp=no]) 
-if test "x$want_external_natpmp" != "xno" ; then 
-	dnl Would be lovely if it had pkgconfig 
-	LIBNATPMP_CFLAGS=""  
-	LIBNATPMP_LIBS="-lnatpmp" 
-	LIBNATPMP_LIBS_QT="-lnatpmp" 
-	build_bundled_natpmp="no" 
-fi 
-AM_CONDITIONAL([BUILD_NATPMP],[test "x$build_bundled_natpmp" = "xyes"]) 
-AC_SUBST(LIBNATPMP_CFLAGS) 
-AC_SUBST(LIBNATPMP_LIBS) 
-AC_SUBST(LIBNATPMP_LIBS_QT) 
+LIBNATPMP_CFLAGS="-I\$(top_srcdir)/third-party/libnatpmp/"
+LIBNATPMP_LIBS="\$(top_builddir)/third-party/libnatpmp/libnatpmp.a"
+LIBNATPMP_LIBS_QT="\$\${TRANSMISSION_TOP}/third-party/libnatpmp/libnatpmp.a"
+build_bundled_natpmp="yes"
+AC_ARG_ENABLE([external-natpmp],
+              AS_HELP_STRING([--enable-external-natpmp],[Use system external-natpmp]),
+              [want_external_natpmp=${enableval}],
+              [want_external_natpmp=no])
+if test "x$want_external_natpmp" != "xno" ; then
+	dnl Would be lovely if it had pkgconfig
+	LIBNATPMP_CFLAGS=""
+	LIBNATPMP_LIBS="-lnatpmp"
+	LIBNATPMP_LIBS_QT="-lnatpmp"
+	build_bundled_natpmp="no"
+fi
+AM_CONDITIONAL([BUILD_NATPMP],[test "x$build_bundled_natpmp" = "xyes"])
+AC_SUBST(LIBNATPMP_CFLAGS)
+AC_SUBST(LIBNATPMP_LIBS)
+AC_SUBST(LIBNATPMP_LIBS_QT)
 
 
 dnl ----------------------------------------------------------------------------
@@ -455,6 +474,7 @@ AM_CONDITIONAL([BUILD_DAEMON],[test "x$build_daemon" = "xyes"])
 
 
 if test "x$build_mac" = "xyes" ; then
+   AC_DEFINE([BUILD_MAC_CLIENT], 1)
     # Make sure the proper Mac SDK is installed
     if test ! -d /Developer/SDKs/MacOSX10.5.sdk; then
       cat << EOF

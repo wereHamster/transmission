@@ -44,6 +44,11 @@ extern "C" {
 #include <inttypes.h> /* uintN_t */
 #include <time.h> /* time_t */
 
+#ifdef WIN32
+ #define __USE_MINGW_ANSI_STDIO 1
+ #define __STDC_FORMAT_MACROS 1
+#endif
+
 #if !defined (__cplusplus)
  #ifdef HAVE_STDBOOL_H
   #include <stdbool.h>
@@ -55,13 +60,35 @@ extern "C" {
 #endif
 
 #ifndef PRId64
- #define PRId64 "lld"
+ #ifdef WIN32
+  #define PRId64 "I64"
+ #else
+  #define PRId64 "lld"
+ #endif
 #endif
+
 #ifndef PRIu64
- #define PRIu64 "llu"
+ #ifdef WIN32
+  #define PRIu64 "I64u"
+ #else
+  #define PRIu64 "llu"
+ #endif
 #endif
+
 #ifndef PRIu32
- #define PRIu32 "lu"
+ #ifdef WIN32
+  #define PRIu32 "u"
+ #else
+  #define PRIu32 "lu"
+ #endif
+#endif
+
+#ifndef TR_PRIuSIZE
+ #ifdef _MSC_VER
+  #define TR_PRIuSIZE "Iu"
+ #else
+  #define TR_PRIuSIZE "zu"
+ #endif
 #endif
 
 #if defined (WIN32) && defined (_MSC_VER)
@@ -632,13 +659,13 @@ tr_sched_day;
 void         tr_sessionSetAltSpeedDay (tr_session *, tr_sched_day day);
 tr_sched_day tr_sessionGetAltSpeedDay (const tr_session *);
 
-typedef void (tr_altSpeedFunc)(tr_session *,
+typedef void (*tr_altSpeedFunc)(tr_session *,
                                   bool active,
                                   bool userDriven,
                                   void *);
 
 void  tr_sessionClearAltSpeedFunc (tr_session *);
-void  tr_sessionSetAltSpeedFunc  (tr_session *, tr_altSpeedFunc *, void *);
+void  tr_sessionSetAltSpeedFunc  (tr_session *, tr_altSpeedFunc, void *);
 
 
 bool  tr_sessionGetActiveSpeedLimit_KBps (const tr_session  * session,
@@ -1061,12 +1088,21 @@ tr_parse_result  tr_torrentParse (const tr_ctor  * ctor,
 void tr_metainfoFree (tr_info * inf);
 
 
-/** Instantiate a single torrent.
-    @return 0 on success,
-            TR_EINVALID if the torrent couldn't be parsed, or
-            TR_EDUPLICATE if there's already a matching torrent object. */
+/**
+ * Instantiate a single torrent.
+ *
+ * Returns a pointer to the torrent on success, or NULL on failure.
+ *
+ * @param setme_error: TR_PARSE_ERR if the parsing failed;
+ *                     TR_PARSE_OK if parsing succeeded and it's not a duplicate;
+ *                     TR_PARSE_DUPLICATE if parsing succeeded but it's a duplicate.
+ *
+ * @param setme_duplicate_id: when setmeError is TR_PARSE_DUPLICATE,
+ *                            this field is set to the duplicate torrent's id.
+ */
 tr_torrent * tr_torrentNew (const tr_ctor   * ctor,
-                            int             * setmeError);
+                            int             * setme_error,
+                            int             * setme_duplicate_id);
 
 /** @} */
 
@@ -1078,7 +1114,7 @@ tr_torrent * tr_torrentNew (const tr_ctor   * ctor,
 /** @addtogroup tr_torrent Torrents
     @{ */
 
-typedef int tr_fileFunc (const char * filename);
+typedef int (*tr_fileFunc) (const char * filename);
 
 /** @brief Removes our .torrent and .resume files for this torrent */
 void tr_torrentRemove (tr_torrent  * torrent,
@@ -1092,11 +1128,11 @@ void tr_torrentStart (tr_torrent * torrent);
 void tr_torrentStop (tr_torrent * torrent);
 
 
-typedef void (tr_torrent_rename_done_func)(tr_torrent  * torrent,
-                                           const char  * oldpath,
-                                           const char  * newname,
-                                           int           error,
-                                           void        * user_data);
+typedef void (*tr_torrent_rename_done_func)(tr_torrent  * torrent,
+                                            const char  * oldpath,
+                                            const char  * newname,
+                                            int           error,
+                                            void        * user_data);
 
 /**
  * @brief Rename a file or directory in a torrent.
@@ -1404,16 +1440,16 @@ tr_completeness;
  * @param wasRunning whether or not the torrent was running when
  *                   it changed its completeness state
  */
-typedef void (tr_torrent_completeness_func)(tr_torrent       * torrent,
-                                            tr_completeness    completeness,
-                                            bool               wasRunning,
-                                            void             * user_data);
+typedef void (*tr_torrent_completeness_func)(tr_torrent       * torrent,
+                                             tr_completeness    completeness,
+                                             bool               wasRunning,
+                                             void             * user_data);
 
-typedef void (tr_torrent_ratio_limit_hit_func)(tr_torrent   * torrent,
+typedef void (*tr_torrent_ratio_limit_hit_func)(tr_torrent   * torrent,
+                                                void         * user_data);
+
+typedef void (*tr_torrent_idle_limit_hit_func)(tr_torrent   * torrent,
                                                void         * user_data);
-
-typedef void (tr_torrent_idle_limit_hit_func)(tr_torrent   * torrent,
-                                              void         * user_data);
 
 
 /**
@@ -1438,8 +1474,8 @@ void tr_torrentClearCompletenessCallback (tr_torrent * torrent);
 
 
 
-typedef void (tr_torrent_metadata_func)(tr_torrent  * torrent,
-                                        void        * user_data);
+typedef void (*tr_torrent_metadata_func)(tr_torrent  * torrent,
+                                         void        * user_data);
 /**
  * Register to be notified whenever a torrent changes from
  * having incomplete metadata to having complete metadata.

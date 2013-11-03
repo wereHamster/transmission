@@ -10,6 +10,7 @@
  * $Id$
  */
 
+#include <assert.h>
 #include <string.h> /* strlen (), strstr () */
 #include <stdlib.h> /* getenv () */
 
@@ -75,7 +76,7 @@ struct tr_web_task
   char * range;
   char * cookies;
   tr_session * session;
-  tr_web_done_func * done_func;
+  tr_web_done_func done_func;
   void * done_func_user_data;
   CURL * curl_easy;
   struct tr_web_task * next;
@@ -132,7 +133,7 @@ writeFunc (void * ptr, size_t size, size_t nmemb, void * vtask)
     }
 
   evbuffer_add (task->response, ptr, byteCount);
-  dbgmsg ("wrote %zu bytes to task %p's buffer", byteCount, task);
+  dbgmsg ("wrote %"TR_PRIuSIZE" bytes to task %p's buffer", byteCount, (void*)task);
   return byteCount;
 }
 
@@ -182,7 +183,6 @@ createEasy (tr_session * s, struct tr_web * web, struct tr_web_task * task)
   task->timeout_secs = getTimeoutFromURL (task);
 
   curl_easy_setopt (e, CURLOPT_AUTOREFERER, 1L);
-  curl_easy_setopt (e, CURLOPT_COOKIEFILE, web->cookie_filename);
   curl_easy_setopt (e, CURLOPT_ENCODING, "gzip;q=1.0, deflate, identity");
   curl_easy_setopt (e, CURLOPT_FOLLOWLOCATION, 1L);
   curl_easy_setopt (e, CURLOPT_MAXREDIRS, -1L);
@@ -216,6 +216,9 @@ createEasy (tr_session * s, struct tr_web * web, struct tr_web_task * task)
   if (task->cookies != NULL)
     curl_easy_setopt (e, CURLOPT_COOKIE, task->cookies);
 
+  if (web->cookie_filename != NULL)
+    curl_easy_setopt (e, CURLOPT_COOKIEFILE, web->cookie_filename);
+
   if (task->range != NULL)
     {
       curl_easy_setopt (e, CURLOPT_RANGE, task->range);
@@ -234,7 +237,7 @@ static void
 task_finish_func (void * vtask)
 {
   struct tr_web_task * task = vtask;
-  dbgmsg ("finished web task %p; got %ld", task, task->code);
+  dbgmsg ("finished web task %p; got %ld", (void*)task, task->code);
 
   if (task->done_func != NULL)
     task->done_func (task->session,
@@ -370,6 +373,7 @@ tr_select (int nfds,
 static void
 tr_webThreadFunc (void * vsession)
 {
+  char * str;
   CURLM * multi;
   struct tr_web * web;
   int taskCount = 0;
@@ -395,7 +399,11 @@ tr_webThreadFunc (void * vsession)
       tr_logAddNamedInfo ("web", "NB: this only works if you built against libcurl with openssl or gnutls, NOT nss");
       tr_logAddNamedInfo ("web", "NB: invalid certs will show up as 'Could not connect to tracker' like many other errors");
     }
-  web->cookie_filename = tr_buildPath (session->configDir, "cookies.txt", NULL);
+
+  str = tr_buildPath (session->configDir, "cookies.txt", NULL);
+  if (tr_fileExists (str, NULL))
+    web->cookie_filename = tr_strdup (str);
+  tr_free (str);
 
   multi = curl_multi_init ();
   session->web = web;
@@ -487,12 +495,14 @@ tr_webThreadFunc (void * vsession)
               long req_bytes_sent;
               CURL * e = msg->easy_handle;
               curl_easy_getinfo (e, CURLINFO_PRIVATE, (void*)&task);
+              assert (e == task->curl_easy);
               curl_easy_getinfo (e, CURLINFO_RESPONSE_CODE, &task->code);
               curl_easy_getinfo (e, CURLINFO_REQUEST_SIZE, &req_bytes_sent);
               curl_easy_getinfo (e, CURLINFO_TOTAL_TIME, &total_time);
               task->did_connect = task->code>0 || req_bytes_sent>0;
               task->did_timeout = !task->code && (total_time >= task->timeout_secs);
               curl_multi_remove_handle (multi, e);
+              tr_list_remove_data (&paused_easy_handles, e);
               curl_easy_cleanup (e);
               tr_runInEventThread (task->session, task_finish_func, task);
               --taskCount;
@@ -511,6 +521,7 @@ tr_webThreadFunc (void * vsession)
     }
 
   /* cleanup */
+  tr_list_free (&paused_easy_handles, NULL);
   curl_multi_cleanup (multi);
   tr_lockFree (web->taskLock);
   tr_free (web->cookie_filename);

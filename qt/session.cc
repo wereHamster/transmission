@@ -690,17 +690,18 @@ Session :: exec (const char * json)
     {
       QNetworkRequest request;
       request.setUrl (myUrl);
-      request.setRawHeader ("User-Agent", QString (QCoreApplication::instance ()->applicationName () + "/" + LONG_VERSION_STRING).toAscii ());
+      request.setRawHeader ("User-Agent", QString (QCoreApplication::instance ()->applicationName () + "/" + LONG_VERSION_STRING).toUtf8 ());
       request.setRawHeader ("Content-Type", "application/json; charset=UTF-8");
 
       if (!mySessionId.isEmpty ())
-        request.setRawHeader (TR_RPC_SESSION_ID_HEADER, mySessionId.toAscii ());
+        request.setRawHeader (TR_RPC_SESSION_ID_HEADER, mySessionId.toUtf8 ());
 
       const QByteArray requestData (json);
       QNetworkReply * reply = networkAccessManager ()->post (request, requestData);
       reply->setProperty (REQUEST_DATA_PROPERTY_KEY, requestData);
       connect (reply, SIGNAL (downloadProgress (qint64,qint64)), this, SIGNAL (dataReadProgress ()));
       connect (reply, SIGNAL (uploadProgress (qint64,qint64)), this, SIGNAL (dataSendProgress ()));
+      connect (reply, SIGNAL(error(QNetworkReply::NetworkError)), this, SIGNAL(error(QNetworkReply::NetworkError)));
 
 #ifdef DEBUG_HTTP
       std::cerr << "sending " << "POST " << qPrintable (myUrl.path ()) << std::endl;
@@ -737,7 +738,7 @@ Session :: onFinished (QNetworkReply * reply)
     }
     else if (reply->error () != QNetworkReply::NoError)
     {
-        std::cerr << "http error: " << qPrintable (reply->errorString ()) << std::endl;
+        emit (errorMessage(reply->errorString ()));
     }
     else
     {
@@ -746,6 +747,7 @@ Session :: onFinished (QNetworkReply * reply)
         int jsonLength (response.size ());
         if (jsonLength>0 && json[jsonLength-1] == '\n') --jsonLength;
         parseResponse (json, jsonLength);
+        emit (error(QNetworkReply::NoError));
     }
 
     reply->deleteLater ();

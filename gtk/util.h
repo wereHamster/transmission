@@ -37,6 +37,23 @@ extern const char * speed_M_str;
 extern const char * speed_G_str;
 extern const char * speed_T_str;
 
+#if GLIB_CHECK_VERSION(2,33,12)
+ #define TR_DEFINE_QUARK G_DEFINE_QUARK
+#else
+ #define TR_DEFINE_QUARK(QN, q_n)                                        \
+ GQuark                                                                  \
+ q_n##_quark (void)                                                      \
+ {                                                                       \
+   static GQuark q;                                                      \
+                                                                         \
+   if G_UNLIKELY (q == 0)                                                \
+     q = g_quark_from_static_string (#QN);                               \
+                                                                         \
+  return q;                                                             \
+ }
+#endif 
+
+
 /* macro to shut up "unused parameter" warnings */
 #ifndef UNUSED
  #define UNUSED G_GNUC_UNUSED
@@ -125,6 +142,7 @@ void gtr_http_failure_dialog (GtkWidget * parent, const char * url, long respons
 
 void gtr_add_torrent_error_dialog (GtkWidget  * window_or_child,
                                    int          err,
+                                   tr_torrent * duplicate_torrent,
                                    const char * filename);
 
 /* pop up the context menu if a user right-clicks.

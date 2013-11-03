@@ -156,7 +156,7 @@ struct tau_scrape_request
     tau_transaction_t transaction_id;
 
     tr_scrape_response response;
-    tr_scrape_response_func * callback;
+    tr_scrape_response_func callback;
     void * user_data;
 };
 
@@ -286,7 +286,7 @@ struct tau_announce_request
     tau_transaction_t transaction_id;
 
     tr_announce_response response;
-    tr_announce_response_func * callback;
+    tr_announce_response_func callback;
     void * user_data;
 };
 
@@ -547,7 +547,7 @@ tau_tracker_send_reqs (struct tau_tracker * tracker)
     for (i=0, n=tr_ptrArraySize (reqs); i<n; ++i) {
         struct tau_announce_request * req = tr_ptrArrayNth (reqs, i);
         if (!req->sent_at) {
-            dbgmsg (tracker->key, "sending announce req %p", req);
+            dbgmsg (tracker->key, "sending announce req %p", (void*)req);
             req->sent_at = now;
             tau_tracker_send_request (tracker, req->payload, req->payload_len);
             if (req->callback == NULL) {
@@ -563,7 +563,7 @@ tau_tracker_send_reqs (struct tau_tracker * tracker)
     for (i=0, n=tr_ptrArraySize (reqs); i<n; ++i) {
         struct tau_scrape_request * req = tr_ptrArrayNth (reqs, i);
         if (!req->sent_at) {
-            dbgmsg (tracker->key, "sending scrape req %p", req);
+            dbgmsg (tracker->key, "sending scrape req %p", (void*)req);
             req->sent_at = now;
             tau_tracker_send_request (tracker, req->payload, req->payload_len);
             if (req->callback == NULL) {
@@ -628,7 +628,7 @@ tau_tracker_timeout_reqs (struct tau_tracker * tracker)
     for (i=0, n=tr_ptrArraySize (reqs); i<n; ++i) {
         struct tau_announce_request * req = tr_ptrArrayNth (reqs, i);
         if (cancel_all || (req->created_at + TAU_REQUEST_TTL < now)) {
-            dbgmsg (tracker->key, "timeout announce req %p", req);
+            dbgmsg (tracker->key, "timeout announce req %p", (void*)req);
             tau_announce_request_fail (req, false, true, NULL);
             tau_announce_request_free (req);
             tr_ptrArrayRemove (reqs, i);
@@ -641,7 +641,7 @@ tau_tracker_timeout_reqs (struct tau_tracker * tracker)
     for (i=0, n=tr_ptrArraySize (reqs); i<n; ++i) {
         struct tau_scrape_request * req = tr_ptrArrayNth (reqs, i);
         if (cancel_all || (req->created_at + TAU_REQUEST_TTL < now)) {
-            dbgmsg (tracker->key, "timeout scrape req %p", req);
+            dbgmsg (tracker->key, "timeout scrape req %p", (void*)req);
             tau_scrape_request_fail (req, false, true, NULL);
             tau_scrape_request_free (req);
             tr_ptrArrayRemove (reqs, i);
@@ -680,7 +680,6 @@ tau_tracker_upkeep (struct tau_tracker * tracker)
         struct evutil_addrinfo hints;
         memset (&hints, 0, sizeof (hints));
         hints.ai_family = AF_UNSPEC;
-        hints.ai_flags = EVUTIL_AI_CANONNAME;
         hints.ai_socktype = SOCK_DGRAM;
         hints.ai_protocol = IPPROTO_UDP;
         tracker->is_asking_dns = true;
@@ -691,10 +690,12 @@ tau_tracker_upkeep (struct tau_tracker * tracker)
         return;
     }
 
-    dbgmsg (tracker->key, "addr %p -- connected %d (%zu %zu) -- connecting_at %zu",
-            tracker->addr,
-          (int)(tracker->connection_expiration_time > now), (size_t)tracker->connection_expiration_time, (size_t)now,
-          (size_t)tracker->connecting_at);
+    dbgmsg (tracker->key, "addr %p -- connected %d (%"TR_PRIuSIZE" %"TR_PRIuSIZE") -- connecting_at %"TR_PRIuSIZE,
+            (void*)tracker->addr,
+            (int)(tracker->connection_expiration_time > now),
+            (size_t)tracker->connection_expiration_time,
+            (size_t)now,
+            (size_t)tracker->connecting_at);
 
     /* also need a valid connection ID... */
     if (tracker->addr
@@ -872,7 +873,7 @@ tau_handle_message (tr_session * session, const uint8_t * msg, size_t msglen)
     tau_transaction_t transaction_id;
     struct evbuffer * buf;
 
-    /*fprintf (stderr, "got an incoming udp message w/len %zu\n", msglen);*/
+    /*fprintf (stderr, "got an incoming udp message w/len %"TR_PRIuSIZE"\n", msglen);*/
 
     if (!session || !session->announcer_udp)
         return false;

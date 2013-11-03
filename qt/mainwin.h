@@ -14,7 +14,6 @@
 #define MAIN_WINDOW_H
 
 #include <ctime>
-#include <QCheckBox>
 #include <QLineEdit>
 #include <QIcon>
 #include <QMainWindow>
@@ -24,10 +23,12 @@
 #include <QSystemTrayIcon>
 #include <QTimer>
 #include <QWidgetList>
+#include <QNetworkReply>
 
-extern "C" {
-    struct tr_variant;
-};
+extern "C"
+{
+  struct tr_variant;
+}
 
 #include "filters.h"
 #include "torrent-filter.h"
@@ -63,7 +64,6 @@ class TrMainWindow: public QMainWindow
     QDialog * myAboutDialog;
     QDialog * myStatsDialog;
     Details * myDetailsDialog;
-    QCheckBox * myFileDialogOptionsCheck;
     QSystemTrayIcon myTrayIcon;
     TorrentFilter myFilterModel;
     TorrentDelegate * myTorrentDelegate;
@@ -77,6 +77,7 @@ class TrMainWindow: public QMainWindow
     time_t myLastSendTime;
     time_t myLastReadTime;
     QTimer myNetworkTimer;
+    bool myNetworkError;
     QTimer myRefreshTrayIconTimer;
     QTimer myRefreshActionSensitivityTimer;
     QAction * myDlimitOffAction;
@@ -122,6 +123,8 @@ class TrMainWindow: public QMainWindow
     void toggleSpeedMode ();
     void dataReadProgress ();
     void dataSendProgress ();
+    void onError (QNetworkReply::NetworkError);
+    void errorMessage (const QString);
     void toggleWindows (bool doShow);
     void onSetPrefs ();
     void onSetPrefs (bool);
@@ -156,6 +159,7 @@ class TrMainWindow: public QMainWindow
     QLabel * myDownloadSpeedLabel;
     QLabel * myUploadSpeedLabel;
     QLabel * myNetworkLabel;
+    QString myErrorMessage;
 
   public slots:
     void startAll ();
@@ -171,11 +175,11 @@ class TrMainWindow: public QMainWindow
     void queueMoveDown ();
     void queueMoveBottom ();
     void reannounceSelected ();
-    void addTorrent (const AddData& addMe);
     void onNetworkTimer ();
 
   private:
     void clearSelection ();
+    void addTorrent (const AddData& addMe, bool showOptions);
 
   public slots:
     void setToolbarVisible (bool);

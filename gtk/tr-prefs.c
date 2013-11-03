@@ -11,7 +11,7 @@
  */
 
 #include <ctype.h> /* isspace */
-#include <limits.h> /* USHRT_MAX */
+#include <limits.h> /* USHRT_MAX, INT_MAX */
 #include <unistd.h>
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
@@ -462,6 +462,7 @@ onBlocklistUpdateResponse (GtkDialog * dialog, gint response UNUSED, gpointer gd
     gtk_widget_set_sensitive (data->updateBlocklistButton, TRUE);
     data->updateBlocklistDialog = NULL;
     g_signal_handler_disconnect (data->core, data->updateBlocklistTag);
+    data->updateBlocklistTag = 0;
 }
 
 /* core says the blocklist was updated */

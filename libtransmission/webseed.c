@@ -48,7 +48,7 @@ struct tr_webseed
   tr_peer              parent;
   tr_bandwidth         bandwidth;
   tr_session         * session;
-  tr_peer_callback   * callback;
+  tr_peer_callback     callback;
   void               * callback_data;
   tr_list            * tasks;
   struct event       * timer;
@@ -324,7 +324,7 @@ on_idle (tr_webseed * w)
       w->retry_challenge = running_tasks + w->idle_connections + 1;
     }
 
-  if (tor && tor->isRunning && !tr_torrentIsSeed (tor) && want)
+  if (tor && tor->isRunning && !tr_torrentIsSeed (tor) && (want > 0))
     {
       int i;
       int got = 0;
@@ -595,7 +595,7 @@ static const struct tr_peer_virtual_funcs my_funcs =
 tr_webseed*
 tr_webseedNew (struct tr_torrent  * tor,
                const char         * url,
-               tr_peer_callback   * callback,
+               tr_peer_callback     callback,
                void               * callback_data)
 {
   tr_webseed * w = tr_new0 (tr_webseed, 1);

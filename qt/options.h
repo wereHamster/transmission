@@ -40,15 +40,18 @@ class FreespaceLabel;
 class Prefs;
 class Session;
 
-extern "C" { struct tr_variant; };
+extern "C"
+{
+  struct tr_variant;
+}
 
 class FileAdded: public QObject
 {
     Q_OBJECT
 
   public:
-    FileAdded (int tag, const QString& name): myTag (tag), myName (name) { }
-    ~FileAdded () { }
+    FileAdded (int tag, const QString& name): myTag (tag), myName (name) {}
+    ~FileAdded () {}
     void setFileToDelete (const QString& file) { myDelFile = file; }
 
   public slots:

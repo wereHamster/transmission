@@ -14,7 +14,7 @@
  #define _GNU_SOURCE /* glibc's string.h needs this to pick up memmem */
 #endif
 
-#if defined (SYS_DARWIN)
+#if defined (XCODE_BUILD)
  #define HAVE_GETPAGESIZE
  #define HAVE_ICONV_OPEN
  #define HAVE_MKDTEMP
@@ -49,7 +49,7 @@
  #include <w32api.h>
  #define WINVER WindowsXP /* freeaddrinfo (), getaddrinfo (), getnameinfo () */
  #include <direct.h> /* _getcwd () */
- #include <windows.h> /* Sleep () */
+ #include <windows.h> /* Sleep (), GetSystemTimeAsFileTime () */
 #endif
 
 #include "transmission.h"
@@ -59,6 +59,7 @@
 #include "log.h"
 #include "utils.h"
 #include "platform.h" /* tr_lockLock (), TR_PATH_MAX */
+#include "platform-quota.h" /* tr_device_info_create(), tr_device_info_get_free_space(), tr_device_info_free() */
 #include "variant.h"
 #include "version.h"
 
@@ -79,6 +80,41 @@ tr_localtime_r (const time_t *_clock, struct tm *_result)
   if (p)
     * (_result) = *p;
   return p;
+#endif
+}
+
+int
+tr_gettimeofday (struct timeval * tv)
+{
+#ifdef _MSC_VER
+#define DELTA_EPOCH_IN_MICROSECS 11644473600000000Ui64
+
+  FILETIME ft;
+  uint64_t tmp = 0;
+
+  if (tv == NULL)
+    {
+      errno = EINVAL;
+      return -1;
+    }
+
+  GetSystemTimeAsFileTime(&ft);
+  tmp |= ft.dwHighDateTime;
+  tmp <<= 32;
+  tmp |= ft.dwLowDateTime;
+  tmp /= 10; /* to microseconds */
+  tmp -= DELTA_EPOCH_IN_MICROSECS;
+
+  tv->tv_sec = tmp / 1000000UL;
+  tv->tv_usec = tmp % 1000000UL;
+
+  return 0;
+
+#undef DELTA_EPOCH_IN_MICROSECS
+#else
+
+  return gettimeofday (tv, NULL);
+
 #endif
 }
 
@@ -247,19 +283,69 @@ tr_loadFile (const char * path,
 char*
 tr_basename (const char * path)
 {
+#ifdef _MSC_VER
+
+  char fname[_MAX_FNAME], ext[_MAX_EXT];
+  if (_splitpath_s (path, NULL, 0, NULL, 0, fname, sizeof (fname), ext, sizeof (ext)) == 0)
+    {
+      const size_t tmpLen = strlen(fname) + strlen(ext) + 2;
+      char * const tmp = tr_malloc (tmpLen);
+      if (tmp != NULL)
+        {
+          if (_makepath_s (tmp, tmpLen, NULL, NULL, fname, ext) == 0)
+            return tmp;
+
+          tr_free (tmp);
+        }
+    }
+
+  return tr_strdup (".");
+
+#else
+
   char * tmp = tr_strdup (path);
   char * ret = tr_strdup (basename (tmp));
   tr_free (tmp);
   return ret;
+
+#endif
 }
 
 char*
 tr_dirname (const char * path)
 {
+#ifdef _MSC_VER
+
+  char drive[_MAX_DRIVE], dir[_MAX_DIR];
+  if (_splitpath_s (path, drive, sizeof (drive), dir, sizeof (dir), NULL, 0, NULL, 0) == 0)
+    {
+      const size_t tmpLen = strlen(drive) + strlen(dir) + 2;
+      char * const tmp = tr_malloc (tmpLen);
+      if (tmp != NULL)
+        {
+          if (_makepath_s (tmp, tmpLen, drive, dir, NULL, NULL) == 0)
+            {
+              size_t len = strlen(tmp);
+              while (len > 0 && (tmp[len - 1] == '/' || tmp[len - 1] == '\\'))
+                tmp[--len] = '\0';
+
+              return tmp;
+            }
+
+          tr_free (tmp);
+        }
+    }
+
+  return tr_strdup (".");
+
+#else
+
   char * tmp = tr_strdup (path);
   char * ret = tr_strdup (dirname (tmp));
   tr_free (tmp);
   return ret;
+
+#endif
 }
 
 char*
@@ -305,7 +391,15 @@ tr_mkdirp (const char * path_in,
   int tmperr;
   int rv;
   struct stat sb;
-  char * path = tr_strdup (path_in);
+  char * path;
+
+  /* make a temporary copy of path */
+  path = tr_strdup (path_in);
+  if (path == NULL)
+    {
+      errno = ENOMEM;
+      return -1;
+    }
 
   /* walk past the root */
   p = path;
@@ -378,6 +472,8 @@ tr_buildPath (const char *first_element, ...)
     }
   pch = buf = tr_new (char, bufLen);
   va_end (vl);
+  if (buf == NULL)
+    return NULL;
 
   /* pass 2: build the string piece by piece */
   va_start (vl, first_element);
@@ -474,8 +570,12 @@ tr_strndup (const void * in, int len)
   else if (in)
     {
       out = tr_malloc (len + 1);
-      memcpy (out, in, len);
-      out[len] = '\0';
+
+      if (out != NULL)
+        {
+          memcpy (out, in, len);
+          out[len] = '\0';
+        }
     }
 
   return out;
@@ -632,7 +732,7 @@ tr_time_msec (void)
 {
   struct timeval tv;
 
-  gettimeofday (&tv, NULL);
+  tr_gettimeofday (&tv);
   return (uint64_t) tv.tv_sec * 1000 + (tv.tv_usec / 1000);
 }
 
@@ -1343,23 +1443,38 @@ tr_parseNumberRange (const char * str_in, int len, int * setmeCount)
           n += r->high + 1 - r->low;
         }
       sorted = tr_new (int, n);
-      for (l=ranges; l!=NULL; l=l->next)
+      if (sorted == NULL)
         {
-          int i;
-          const struct number_range * r = l->data;
-          for (i=r->low; i<=r->high; ++i)
-            sorted[n2++] = i;
+          n = 0;
+          uniq = NULL;
         }
-      qsort (sorted, n, sizeof (int), compareInt);
-      assert (n == n2);
+      else
+        {
+          for (l=ranges; l!=NULL; l=l->next)
+            {
+              int i;
+              const struct number_range * r = l->data;
+              for (i=r->low; i<=r->high; ++i)
+                sorted[n2++] = i;
+            }
+          qsort (sorted, n, sizeof (int), compareInt);
+          assert (n == n2);
 
-      /* remove duplicates */
-      uniq = tr_new (int, n);
-      for (i=n=0; i<n2; ++i)
-        if (!n || uniq[n-1] != sorted[i])
-          uniq[n++] = sorted[i];
+          /* remove duplicates */
+          uniq = tr_new (int, n);
+          if (uniq == NULL)
+            {
+              n = 0;
+            }
+          else
+            {
+              for (i=n=0; i<n2; ++i)
+                if (!n || uniq[n-1] != sorted[i])
+                  uniq[n++] = sorted[i];
+            }
 
-      tr_free (sorted);
+          tr_free (sorted);
+        }
     }
 
   /* cleanup */

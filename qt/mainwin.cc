@@ -14,6 +14,11 @@
 #include <iostream>
 
 #include <QtGui>
+#include <QCheckBox>
+#include <QProxyStyle>
+#include <QLabel>
+#include <QFileDialog>
+#include <QMessageBox>
 
 #include <libtransmission/transmission.h>
 #include <libtransmission/utils.h>
@@ -102,7 +107,6 @@ TrMainWindow :: TrMainWindow (Session& session, Prefs& prefs, TorrentModel& mode
   myAboutDialog (new AboutDialog (this)),
   myStatsDialog (new StatsDialog (session, this)),
   myDetailsDialog (0),
-  myFileDialogOptionsCheck (0),
   myFilterModel (prefs),
   myTorrentDelegate (new TorrentDelegate (this)),
   myTorrentDelegateMin (new TorrentDelegateMin (this)),
@@ -114,6 +118,7 @@ TrMainWindow :: TrMainWindow (Session& session, Prefs& prefs, TorrentModel& mode
   myLastSendTime (0),
   myLastReadTime (0),
   myNetworkTimer (this),
+  myNetworkError (false),
   myRefreshTrayIconTimer (this),
   myRefreshActionSensitivityTimer (this)
 {
@@ -285,6 +290,8 @@ TrMainWindow :: TrMainWindow (Session& session, Prefs& prefs, TorrentModel& mode
   connect (&mySession, SIGNAL (dataReadProgress ()), this, SLOT (dataReadProgress ()));
   connect (&mySession, SIGNAL (dataSendProgress ()), this, SLOT (dataSendProgress ()));
   connect (&mySession, SIGNAL (httpAuthenticationRequired ()), this, SLOT (wrongAuthentication ()));
+  connect (&mySession, SIGNAL (error (QNetworkReply::NetworkError)), this, SLOT (onError (QNetworkReply::NetworkError)));
+  connect (&mySession, SIGNAL (errorMessage (const QString)), this, SLOT (errorMessage(const QString)));
 
   if (mySession.isServer ())
     {
@@ -1005,7 +1012,8 @@ TrMainWindow :: toggleWindows (bool doShow)
 void
 TrMainWindow :: trayActivated (QSystemTrayIcon::ActivationReason reason)
 {
-  if (reason == QSystemTrayIcon::Trigger)
+  if ((reason == QSystemTrayIcon::Trigger) ||
+      (reason == QSystemTrayIcon::DoubleClick))
     {
       if (isMinimized ())
         toggleWindows (true);
@@ -1149,6 +1157,8 @@ TrMainWindow :: refreshPref (int key)
 ****
 ***/
 
+#define SHOW_OPTIONS_CHECKBOX_NAME "show-options-checkbox"
+
 void
 TrMainWindow :: newTorrent ()
 {
@@ -1159,24 +1169,24 @@ TrMainWindow :: newTorrent ()
 void
 TrMainWindow :: openTorrent ()
 {
-  QFileDialog * myFileDialog;
-  myFileDialog = new QFileDialog (this,
-                                  tr ("Open Torrent"),
-                                  myPrefs.getString (Prefs::OPEN_DIALOG_FOLDER),
-                                  tr ("Torrent Files (*.torrent);;All Files (*.*)"));
-  myFileDialog->setFileMode (QFileDialog::ExistingFiles);
-  myFileDialog->setAttribute (Qt::WA_DeleteOnClose);
+  QFileDialog * d;
+  d = new QFileDialog (this,
+                       tr ("Open Torrent"),
+                       myPrefs.getString (Prefs::OPEN_DIALOG_FOLDER),
+                       tr ("Torrent Files (*.torrent);;All Files (*.*)"));
+  d->setFileMode (QFileDialog::ExistingFiles);
+  d->setAttribute (Qt::WA_DeleteOnClose);
 
-  QCheckBox * button = new QCheckBox (tr ("Show &options dialog"));
-  button->setChecked (myPrefs.getBool (Prefs::OPTIONS_PROMPT));
-  QGridLayout * layout = dynamic_cast<QGridLayout*> (myFileDialog->layout ());
-  layout->addWidget (button, layout->rowCount (), 0, 1, -1, Qt::AlignLeft);
-  myFileDialogOptionsCheck = button;
+  QCheckBox * b = new QCheckBox (tr ("Show &options dialog"));
+  b->setChecked (myPrefs.getBool (Prefs::OPTIONS_PROMPT));
+  b->setObjectName (SHOW_OPTIONS_CHECKBOX_NAME);
+  QGridLayout * l = dynamic_cast<QGridLayout*> (d->layout ());
+  l->addWidget (b, l->rowCount (), 0, 1, -1, Qt::AlignLeft);
 
-  connect (myFileDialog, SIGNAL (filesSelected (const QStringList&)),
+  connect (d, SIGNAL (filesSelected (const QStringList&)),
            this, SLOT (addTorrents (const QStringList&)));
 
-  myFileDialog->show ();
+  d->show ();
 }
 
 void
@@ -1190,27 +1200,30 @@ TrMainWindow :: openURL ()
   if (!AddData::isSupported (str))
     str.clear ();
 
-  addTorrent (str);
+  addTorrent (str, true);
 }
 
 void
 TrMainWindow :: addTorrents (const QStringList& filenames)
 {
+  bool showOptions = myPrefs.getBool (Prefs::OPTIONS_PROMPT);
+
+  const QFileDialog * const fileDialog = qobject_cast<const QFileDialog*> (sender ());
+  if (fileDialog != NULL)
+    {
+      const QCheckBox * const b = fileDialog->findChild<const QCheckBox*> (SHOW_OPTIONS_CHECKBOX_NAME);
+      if (b != NULL)
+        showOptions = b->isChecked ();
+    }
+
   foreach (const QString& filename, filenames)
-    addTorrent (filename);
+    addTorrent (filename, showOptions);
 }
 
 void
-TrMainWindow :: addTorrent (const AddData& addMe)
+TrMainWindow :: addTorrent (const AddData& addMe, bool showOptions)
 {
-  bool show_options_dialog;
-
-  if (myFileDialogOptionsCheck)
-    show_options_dialog = myFileDialogOptionsCheck->isChecked ();
-  else
-    show_options_dialog = myPrefs.getBool (Prefs::OPTIONS_PROMPT);
-
-  if (show_options_dialog)
+  if (showOptions)
     {
       Options * o = new Options (mySession, myPrefs, addMe, this);
       o->show ();
@@ -1336,7 +1349,9 @@ TrMainWindow :: updateNetworkIcon ()
   const bool isReading = secondsSinceLastRead <= period;
   const char * key;
 
-  if (isSending && isReading)
+  if (myNetworkError)
+    key = "network-error";
+  else if (isSending && isReading)
     key = "network-transmit-receive";
   else if (isSending)
     key = "network-transmit";
@@ -1351,9 +1366,11 @@ TrMainWindow :: updateNetworkIcon ()
   const QString url = mySession.getRemoteUrl ().host ();
   if (!myLastReadTime)
     tip = tr ("%1 has not responded yet").arg (url);
-  else if (secondsSinceLastRead < 60)
+  else if (myNetworkError)
+    tip = tr (myErrorMessage.toLatin1 ().constData ());
+  else if (secondsSinceLastRead < 30)
     tip = tr ("%1 is responding").arg (url);
-  else if (secondsSinceLastRead < (60*10))
+  else if (secondsSinceLastRead < (60*2))
     tip = tr ("%1 last responded %2 ago").arg (url).arg (Formatter::timeToString (secondsSinceLastRead));
   else
     tip = tr ("%1 is not responding").arg (url);
@@ -1371,15 +1388,29 @@ TrMainWindow :: onNetworkTimer ()
 void
 TrMainWindow :: dataReadProgress ()
 {
+  if (!myNetworkError)
   myLastReadTime = time (NULL);
-  updateNetworkIcon ();
 }
 
 void
 TrMainWindow :: dataSendProgress ()
 {
   myLastSendTime = time (NULL);
-  updateNetworkIcon ();
+}
+
+void
+TrMainWindow :: onError (QNetworkReply::NetworkError code)
+{
+    if (code != QNetworkReply::NoError)
+        myNetworkError = true;
+    else
+        myNetworkError = false;
+}
+
+void
+TrMainWindow :: errorMessage (const QString msg)
+{
+    myErrorMessage = msg;
 }
 
 void
@@ -1399,6 +1430,7 @@ TrMainWindow :: dragEnterEvent (QDragEnterEvent * event)
   const QMimeData * mime = event->mimeData ();
 
   if (mime->hasFormat ("application/x-bittorrent")
+        || mime->hasUrls()
         || mime->text ().trimmed ().endsWith (".torrent", Qt::CaseInsensitive)
         || mime->text ().startsWith ("magnet:", Qt::CaseInsensitive))
     event->acceptProposedAction ();
@@ -1407,13 +1439,32 @@ TrMainWindow :: dragEnterEvent (QDragEnterEvent * event)
 void
 TrMainWindow :: dropEvent (QDropEvent * event)
 {
-  QString key = event->mimeData ()->text ().trimmed ();
+  QStringList list;
 
-  const QUrl url (key);
-  if (url.scheme () == "file")
-    key = QUrl::fromPercentEncoding (url.path ().toUtf8 ());
+  if (event->mimeData()->hasText())
+    {
+      list = event->mimeData()->text().trimmed().split('\n');
+    }
+  else if (event->mimeData()->hasUrls())
+    {
+      foreach (QUrl url, event->mimeData()->urls())
+        list.append(url.toLocalFile());
+    }
 
-  dynamic_cast<MyApp*> (QApplication::instance ())->addTorrent (key);
+  foreach (QString entry, list)
+    {
+      QString key = entry.trimmed();
+
+      if (!key.isEmpty())
+        {
+          const QUrl url (key);
+
+          if (url.scheme () == "file")
+            key = QUrl::fromPercentEncoding (url.path().toUtf8());
+
+          dynamic_cast<MyApp*> (QApplication::instance ())->addTorrent (key);
+        }
+    }
 }
 
 /***

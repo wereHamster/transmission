@@ -86,16 +86,14 @@ torrentRenameAndWait (tr_torrent * tor,
 static void
 create_file_with_contents (const char * path, const char * str)
 {
-  int rv;
   FILE * fp;
   char * dir;
   const int tmperr = errno;
 
   dir = tr_dirname (path);
   errno = 0;
-  rv = tr_mkdirp (dir, 0700);
+  tr_mkdirp (dir, 0700);
   assert (errno == 0);
-  assert (rv == 0);
   tr_free (dir);
 
   tr_remove (path);
@@ -133,7 +131,7 @@ create_torrent_from_base64_metainfo (tr_ctor * ctor, const char * metainfo_base6
 
   /* create the torrent */
   err = 0;
-  tor = tr_torrentNew (ctor, &err);
+  tor = tr_torrentNew (ctor, &err, NULL);
   assert (!err);
 
   /* cleanup */

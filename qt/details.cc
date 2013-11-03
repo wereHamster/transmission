@@ -11,11 +11,13 @@
  */
 
 #include <cassert>
+#include <climits> /* INT_MAX */
 #include <ctime>
 
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDateTime>
+#include <QDesktopServices>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QEvent>
@@ -867,7 +869,7 @@ Details :: refresh ()
           foreach (QChar ch, code)
             {
               QString txt;
-              switch (ch.toAscii ())
+              switch (ch.unicode ())
                 {
                   case 'O': txt = tr ("Optimistic unchoke"); break;
                   case 'D': txt = tr ("Downloading from this peer"); break;
@@ -1393,6 +1395,9 @@ Details :: createFilesTab ()
   connect (myFileTreeView, SIGNAL (pathEdited (const QString&, const QString&)),
            this,           SLOT (onPathEdited (const QString&, const QString&)));
 
+  connect (myFileTreeView, SIGNAL (openRequested (const QString&)),
+           this,           SLOT (onOpenRequested (const QString&)));
+
   return myFileTreeView;
 }
 
@@ -1432,4 +1437,25 @@ void
 Details :: onPathEdited (const QString& oldpath, const QString& newname)
 {
   mySession.torrentRenamePath (myIds, oldpath, newname);
+}
+
+void
+Details :: onOpenRequested (const QString& path)
+{
+  if (!mySession.isLocal ())
+    return;
+
+  foreach (const int id, myIds)
+    {
+      const Torrent * const tor = myModel.getTorrentFromId (id);
+      if (tor == NULL)
+        continue;
+
+      const QString localFilePath = tor->getPath () + "/" + path;
+      if (!QFile::exists (localFilePath))
+        continue;
+
+      if (QDesktopServices::openUrl (QUrl::fromLocalFile (localFilePath)))
+        break;
+    }
 }

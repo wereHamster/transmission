@@ -16,82 +16,82 @@
 #include <QDialog>
 #include <QTimer>
 
-struct QAbstractButton;
-struct QPlainTextEdit;
-struct QLineEdit;
-struct QCheckBox;
-struct QLabel;
-struct QPushButton;
-struct QRadioButton;
-struct Session;
-struct QProgressBar;
-struct QDialogButtonBox;
+class QAbstractButton;
+class QPlainTextEdit;
+class QLineEdit;
+class QCheckBox;
+class QLabel;
+class QPushButton;
+class QRadioButton;
+class Session;
+class QProgressBar;
+class QDialogButtonBox;
 
 extern "C"
 {
-    struct tr_metainfo_builder;
+  struct tr_metainfo_builder;
 }
 
 class MakeDialog: public QDialog
 {
-        Q_OBJECT
+    Q_OBJECT
 
-    private slots:
-        void onSourceChanged( );
-        void onButtonBoxClicked( QAbstractButton* );
-        void onNewButtonBoxClicked( QAbstractButton* );
-        void onNewDialogDestroyed( QObject* );
-        void onProgress( );
+  private slots:
+    void onSourceChanged ();
+    void onButtonBoxClicked (QAbstractButton*);
+    void onNewButtonBoxClicked (QAbstractButton*);
+    void onNewDialogDestroyed (QObject*);
+    void onProgress ();
 
-        void onFolderClicked( );
-        void onFolderSelected( const QString& );
-        void onFolderSelected( const QStringList& );
+    void onFolderClicked ();
+    void onFolderSelected (const QString&);
+    void onFolderSelected (const QStringList&);
 
-        void onFileClicked( );
-        void onFileSelected( const QString& );
-        void onFileSelected( const QStringList& );
+    void onFileClicked ();
+    void onFileSelected (const QString&);
+    void onFileSelected (const QStringList&);
 
-        void onDestinationClicked( );
-        void onDestinationSelected( const QString& );
-        void onDestinationSelected( const QStringList& );
+    void onDestinationClicked ();
+    void onDestinationSelected (const QString&);
+    void onDestinationSelected (const QStringList&);
 
-    private:
-        void makeTorrent( );
-        QString getSource( ) const;
-        void enableBuddyWhenChecked( QCheckBox *, QWidget * );
-        void enableBuddyWhenChecked( QRadioButton *, QWidget * );
+  private:
+    void makeTorrent ();
+    QString getSource () const;
+    void enableBuddyWhenChecked (QCheckBox *, QWidget *);
+    void enableBuddyWhenChecked (QRadioButton *, QWidget *);
 
-    private:
-        Session& mySession;
-        QString myDestination;
-        QString myTarget;
-        QString myFile;
-        QString myFolder;
-        QTimer myTimer;
-        QRadioButton * myFolderRadio;
-        QRadioButton * myFileRadio;
-        QPushButton * myDestinationButton;
-        QPushButton * myFileButton;
-        QPushButton * myFolderButton;
-        QPlainTextEdit * myTrackerEdit;
-        QCheckBox * myCommentCheck;
-        QLineEdit * myCommentEdit;
-        QCheckBox * myPrivateCheck;
-        QLabel * mySourceLabel;
-        QDialogButtonBox * myButtonBox;
-        QProgressBar * myNewProgress;
-        QLabel * myNewLabel;
-        QDialogButtonBox * myNewButtonBox;
-        QDialog * myNewDialog;
-        struct tr_metainfo_builder * myBuilder;
+  private:
+    Session& mySession;
+    QString myDestination;
+    QString myTarget;
+    QString myFile;
+    QString myFolder;
+    QTimer myTimer;
+    QRadioButton * myFolderRadio;
+    QRadioButton * myFileRadio;
+    QPushButton * myDestinationButton;
+    QPushButton * myFileButton;
+    QPushButton * myFolderButton;
+    QPlainTextEdit * myTrackerEdit;
+    QCheckBox * myCommentCheck;
+    QLineEdit * myCommentEdit;
+    QCheckBox * myPrivateCheck;
+    QLabel * mySourceLabel;
+    QDialogButtonBox * myButtonBox;
+    QProgressBar * myNewProgress;
+    QLabel * myNewLabel;
+    QDialogButtonBox * myNewButtonBox;
+    QDialog * myNewDialog;
+    struct tr_metainfo_builder * myBuilder;
 
-    protected:
-        virtual void dragEnterEvent( QDragEnterEvent * );
-        virtual void dropEvent( QDropEvent * );
+  protected:
+    virtual void dragEnterEvent (QDragEnterEvent *);
+    virtual void dropEvent (QDropEvent *);
 
-    public:
-        MakeDialog( Session&, QWidget * parent = 0 );
-        ~MakeDialog( );
+  public:
+    MakeDialog (Session&, QWidget * parent = 0);
+    ~MakeDialog ();
 };
 
 #endif

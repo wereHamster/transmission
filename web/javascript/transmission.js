@@ -41,7 +41,6 @@ Transmission.prototype =
 		Prefs.getClutchPrefs(this);
 
 		// Set up user events
-		$(".numberinput").forceNumeric();
 		$('#toolbar-pause').click($.proxy(this.stopSelectedClicked,this));
 		$('#toolbar-start').click($.proxy(this.startSelectedClicked,this));
 		$('#toolbar-pause-all').click($.proxy(this.stopAllClicked,this));
@@ -53,6 +52,10 @@ Transmission.prototype =
 
 		$('#upload_confirm_button').click($.proxy(this.confirmUploadClicked,this));
 		$('#upload_cancel_button').click($.proxy(this.hideUploadDialog,this));
+
+		$('#rename_confirm_button').click($.proxy(this.confirmRenameClicked,this));
+		$('#rename_cancel_button').click($.proxy(this.hideRenameDialog,this));
+
 
 		$('#move_confirm_button').click($.proxy(this.confirmMoveClicked,this));
 		$('#move_cancel_button').click($.proxy(this.hideMoveDialog,this));
@@ -184,6 +187,7 @@ Transmission.prototype =
 			context_remove:               function() { tr.removeSelectedTorrents(); },
 			context_removedata:           function() { tr.removeSelectedTorrentsAndData(); },
 			context_verify:               function() { tr.verifySelectedTorrents(); },
+			context_rename:               function() { tr.renameSelectedTorrents(); },
 			context_reannounce:           function() { tr.reannounceSelectedTorrents(); },
 			context_move_top:             function() { tr.moveTop(); },
 			context_move_up:              function() { tr.moveUp(); },
@@ -571,6 +575,17 @@ Transmission.prototype =
 	confirmMoveClicked: function() {
 		this.moveSelectedTorrents(true);
 		this.hideUploadDialog();
+	},
+
+	hideRenameDialog: function() {
+		$('body.open_showing').removeClass('open_showing');
+		$('#rename_container').hide();
+	},
+
+	confirmRenameClicked: function() {
+		var torrents = this.getSelectedTorrents();
+		this.renameTorrent(torrents[0], $('input#torrent_rename_name').attr('value'));
+		this.hideRenameDialog();
 	},
 
 	removeClicked: function(ev) {
@@ -1053,6 +1068,36 @@ Transmission.prototype =
 
 	removeTorrentsAndData: function(torrents) {
 		this.remote.removeTorrentsAndData(torrents);
+	},
+
+	promptToRenameTorrent: function(torrent) {
+		$('body').addClass('open_showing');
+		$('input#torrent_rename_name').attr('value', torrent.getName());
+		$('#rename_container').show();
+		$('#torrent_rename_name').focus();
+	},
+
+	renameSelectedTorrents: function() {
+		var torrents = this.getSelectedTorrents();
+		if (torrents.length != 1)
+			dialog.alert("Renaming", "You can rename only one torrent at a time.", "Ok");
+		else
+			this.promptToRenameTorrent(torrents[0]);
+	},
+
+	onTorrentRenamed: function(response) {
+		var torrent;
+		if ((response.result === 'success') &&
+		    (response.arguments) &&
+		    ((torrent = this._torrents[response.arguments.id])))
+		{
+			torrent.refresh(response.arguments);
+		}
+	},
+
+	renameTorrent: function (torrent, newname) {
+		var oldpath = torrent.getName();
+		this.remote.renameTorrent([torrent.getId()], oldpath, newname, this.onTorrentRenamed, this);
 	},
 
 	verifySelectedTorrents: function() {
