@@ -1,3 +1,12 @@
+/*
+ * This file Copyright (C) 2010-2014 Mnemosyne LLC
+ *
+ * It may be used under the GNU GPL versions 2 or 3
+ * or any future license endorsed by Mnemosyne LLC.
+ *
+ * $Id$
+ */
+
 #include "transmission.h"
 #include "magnet.h"
 #include "utils.h"

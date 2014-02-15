@@ -1,11 +1,8 @@
 /*
- * This file Copyright (C) Mnemosyne LLC
+ * This file Copyright (C) 2009-2014 Mnemosyne LLC
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2
- * as published by the Free Software Foundation.
- *
- * http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+ * It may be used under the GNU Public License v2 or v3 licenses,
+ * or any future license endorsed by Mnemosyne LLC.
  *
  * $Id$
  */
@@ -945,8 +942,8 @@ Details :: createInfoTab ()
   hig->addSectionTitle (tr ("Activity"));
   hig->addRow (tr ("Have:"), myHaveLabel = new SqueezeLabel);
   hig->addRow (tr ("Availability:"), myAvailabilityLabel = new SqueezeLabel);
-  hig->addRow (tr ("Downloaded:"), myDownloadedLabel = new SqueezeLabel);
   hig->addRow (tr ("Uploaded:"), myUploadedLabel = new SqueezeLabel);
+  hig->addRow (tr ("Downloaded:"), myDownloadedLabel = new SqueezeLabel);
   hig->addRow (tr ("State:"), myStateLabel = new SqueezeLabel);
   hig->addRow (tr ("Running time:"), myRunTimeLabel = new SqueezeLabel);
   hig->addRow (tr ("Remaining time:"), myETALabel = new SqueezeLabel);

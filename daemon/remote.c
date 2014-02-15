@@ -1,11 +1,8 @@
 /*
- * This file Copyright (C) Mnemosyne LLC
+ * This file Copyright (C) 2008-2014 Mnemosyne LLC
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2
- * as published by the Free Software Foundation.
- *
- * http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+ * It may be used under the GNU GPL versions 2 or 3
+ * or any future license endorsed by Mnemosyne LLC.
  *
  * $Id$
  */
@@ -1772,7 +1769,10 @@ tr_curl_easy_init (struct evbuffer * writebuf)
     if (auth)
         curl_easy_setopt (curl, CURLOPT_USERPWD, auth);
     if (UseSSL)
+    {
+        curl_easy_setopt (curl, CURLOPT_SSL_VERIFYHOST, 0); /* do not verify subject/hostname */
         curl_easy_setopt (curl, CURLOPT_SSL_VERIFYPEER, 0); /* since most certs will be self-signed, do not verify against CA */		
+    }
     if (sessionId) {
         char * h = tr_strdup_printf ("%s: %s", TR_RPC_SESSION_ID_HEADER, sessionId);
         struct curl_slist * custom_headers = curl_slist_append (NULL, h);

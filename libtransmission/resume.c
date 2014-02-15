@@ -1,11 +1,8 @@
 /*
- * This file Copyright (C) Mnemosyne LLC
+ * This file Copyright (C) 2008-2014 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2. Works owned by the
- * Transmission project are granted a special exemption to clause 2 (b)
- * so that the bulk of its code can remain under the MIT license.
- * This exemption does not extend to derived works not owned by
- * the Transmission project.
+ * It may be used under the GNU GPL versions 2 or 3
+ * or any future license endorsed by Mnemosyne LLC.
  *
  * $Id$
  */
@@ -89,14 +86,14 @@ loadPeers (tr_variant * dict, tr_torrent * tor)
   size_t len;
   uint64_t ret = 0;
 
-  if (tr_variantDictFindRaw (dict, TR_KEY_peers, &str, &len))
+  if (tr_variantDictFindRaw (dict, TR_KEY_peers2, &str, &len))
     {
       const int numAdded = addPeers (tor, str, len);
       tr_logAddTorDbg (tor, "Loaded %d IPv4 peers from resume file", numAdded);
       ret = TR_FR_PEERS;
     }
 
-  if (tr_variantDictFindRaw (dict, TR_KEY_peers6, &str, &len))
+  if (tr_variantDictFindRaw (dict, TR_KEY_peers2_6, &str, &len))
     {
       const int numAdded = addPeers (tor, str, len);
       tr_logAddTorDbg (tor, "Loaded %d IPv6 peers from resume file", numAdded);

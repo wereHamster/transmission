@@ -1,11 +1,8 @@
 /*
- * This file Copyright (C) Mnemosyne LLC
+ * This file Copyright (C) 2009-2014 Mnemosyne LLC
  *
- * This file is licensed by the GPL version 2. Works owned by the
- * Transmission project are granted a special exemption to clause 2 (b)
- * so that the bulk of its code can remain under the MIT license.
- * This exemption does not extend to derived works not owned by
- * the Transmission project.
+ * It may be used under the GNU GPL versions 2 or 3
+ * or any future license endorsed by Mnemosyne LLC.
  *
  * $Id$
  */
@@ -1876,6 +1873,14 @@ stopTorrent (void * vtor)
   torrentSetQueued (tor, false);
 
   tr_torrentUnlock (tor);
+
+  if (tor->magnetVerify)
+    {
+      tor->magnetVerify = false;
+      tr_logAddTorInfo (tor, "%s", "Magnet Verify");
+      refreshCurrentDir (tor);
+      tr_torrentVerify (tor, NULL, NULL);
+    }
 }
 
 void
@@ -1910,6 +1915,7 @@ closeTorrent (void * vtor)
 
   tr_logAddTorInfo (tor, "%s", _("Removing torrent"));
 
+  tor->magnetVerify = false;
   stopTorrent (tor);
 
   if (tor->isDeleting)
