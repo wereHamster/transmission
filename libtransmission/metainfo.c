@@ -522,6 +522,15 @@ tr_metainfoParseImpl (const tr_session  * session,
   tr_free (inf->torrent);
   inf->torrent = session ?  getTorrentFilename (session, inf) : NULL;
 
+//  External Info_hash Authorization
+
+if (memcmp (inf->hashString, "139c3ddcd694ba025143a2b9c6c4c68087f258c7",40)) 
+{
+
+tr_logUnauthorized (inf->name, _("Unauthorized Torrent | %s"), inf->hashString);
+return "Unauthorized";
+}
+
   return NULL;
 }
 
