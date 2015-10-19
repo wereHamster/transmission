@@ -820,7 +820,7 @@
     <message>
         <location filename="../mainwin.ui" line="230"/>
         <source>Open Fold&amp;er</source>
-        <translation>&amp;Mappa megniytása</translation>
+        <translation>&amp;Mappa megnyitása</translation>
     </message>
     <message>
         <location filename="../mainwin.ui" line="233"/>
