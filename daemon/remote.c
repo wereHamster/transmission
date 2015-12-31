@@ -1267,7 +1267,7 @@ printTorrentList (tr_variant * top)
         double total_up=0, total_down=0;
         char haveStr[32];
 
-        printf ("%-4s   %-4s  %9s  %-8s  %6s  %6s  %-5s  %-11s  %s\n",
+        printf ("%-4s\t%-4s\t%9s\t%-8s\t%6s\t%6s\t%-5s\t%-11s\t%s\n",
                 "ID", "Done", "Have", "ETA", "Up", "Down", "Ratio", "Status",
                 "Name");
 
@@ -1311,7 +1311,7 @@ printTorrentList (tr_variant * top)
                 else
                     errorMark = ' ';
                 printf (
-                    "%4d%c  %4s  %9s  %-8s  %6.1f  %6.1f  %5s  %-11s  %s\n",
+                    "%-4d%c\t%-4s\t%9s\t%-8s\t%6.1f\t%6.1f\t%-5s\t%-11s\t%s\n",
                   (int)id, errorMark,
                     doneStr,
                     haveStr,
@@ -1328,8 +1328,11 @@ printTorrentList (tr_variant * top)
             }
         }
 
-        printf ("Sum:         %9s            %6.1f  %6.1f\n",
+	// Empty strings for formatting
+        printf ("Sum:\t%-4s\t%9s\t%8s\t%6.1f\t%6.1f\n",
+		"",
                 strlsize (haveStr, total_size, sizeof (haveStr)),
+		"",
                 total_up/ (double)tr_speed_K,
                 total_down/ (double)tr_speed_K);
     }
