@@ -1,3 +1,13 @@
+### --list patch ###
+The only difference between this version of Transmission and the upstream is a small patch which delineates columns in 
+`transmission-remote --list` by tab instead of by spaces, making it easier to use in conjunction with tools such as GNU
+`cut`. 
+
+After some discussion on #transmission@freenode.net, we decided that using Transmission's RPC would probably be a better way to 
+retrieve any data that would otherwise be gained using `transmission-remote`. Thus, this patch will probably never be merged
+with upstream, but exists here for anyones' hacking needs.
+
+
 ABOUT
 
   Transmission is a fast, easy, and free BitTorrent client.
